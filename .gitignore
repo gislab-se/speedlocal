@@ -1,0 +1,11 @@
+﻿.venv/
+__pycache__/
+*.pyc
+.Rhistory
+.Rproj.user/
+.env
+.env.*
+logs/
+out/
+*.qgz
+*.gpkg
