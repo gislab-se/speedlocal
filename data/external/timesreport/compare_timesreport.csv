@@ -1,0 +1,49 @@
+﻿filename,timesmodel,scen,sow,sector,subsector,service,techgroup,comgroup,topic,attr,prc,com,timeslice,regionFrom,regionTo,year,vntg,units,cur,value
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELEWIN,NRG_RNW,energy,f_out,ELEWIN,ELC,annual,REG1,REG1,2030,2030,PJ,NA,300
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELESOL,NRG_RNW,energy,f_out,ELESOL,ELC,annual,REG1,REG1,2030,2030,PJ,NA,120
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELEHYD,NRG_RNW,energy,f_out,ELEHYD,ELC,annual,REG1,REG1,2030,2030,PJ,NA,80
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELENUC,NRG_NUK,energy,f_out,ELENUC,ELC,annual,REG1,REG1,2030,2030,PJ,NA,150
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELEBIO,NRG_BIO,energy,f_out,ELEBIO,ELC,annual,REG1,REG1,2030,2030,PJ,NA,60
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELEGAS,NRG_GAS,energy,f_out,ELEGAS,ELC,annual,REG1,REG1,2030,2030,PJ,NA,110
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELEOIL,NRG_OIL,energy,f_out,ELEOIL,ELC,annual,REG1,REG1,2030,2030,PJ,NA,40
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELECOA,NRG_COA,energy,f_out,ELECOA,ELC,annual,REG1,REG1,2030,2030,PJ,NA,70
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELEWIN,NRG_RNW,energy,f_out,ELEWIN,ELC,annual,REG1,REG1,2040,2040,PJ,NA,420
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELESOL,NRG_RNW,energy,f_out,ELESOL,ELC,annual,REG1,REG1,2040,2040,PJ,NA,180
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELEHYD,NRG_RNW,energy,f_out,ELEHYD,ELC,annual,REG1,REG1,2040,2040,PJ,NA,95
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELENUC,NRG_NUK,energy,f_out,ELENUC,ELC,annual,REG1,REG1,2040,2040,PJ,NA,210
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELEBIO,NRG_BIO,energy,f_out,ELEBIO,ELC,annual,REG1,REG1,2040,2040,PJ,NA,85
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELEGAS,NRG_GAS,energy,f_out,ELEGAS,ELC,annual,REG1,REG1,2040,2040,PJ,NA,140
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELEOIL,NRG_OIL,energy,f_out,ELEOIL,ELC,annual,REG1,REG1,2040,2040,PJ,NA,35
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELECOA,NRG_COA,energy,f_out,ELECOA,ELC,annual,REG1,REG1,2040,2040,PJ,NA,60
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELEWIN,NRG_RNW,energy,f_out,ELEWIN,ELC,annual,REG1,REG1,2050,2050,PJ,NA,520
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELESOL,NRG_RNW,energy,f_out,ELESOL,ELC,annual,REG1,REG1,2050,2050,PJ,NA,240
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELEHYD,NRG_RNW,energy,f_out,ELEHYD,ELC,annual,REG1,REG1,2050,2050,PJ,NA,110
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELENUC,NRG_NUK,energy,f_out,ELENUC,ELC,annual,REG1,REG1,2050,2050,PJ,NA,250
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELEBIO,NRG_BIO,energy,f_out,ELEBIO,ELC,annual,REG1,REG1,2050,2050,PJ,NA,95
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELEGAS,NRG_GAS,energy,f_out,ELEGAS,ELC,annual,REG1,REG1,2050,2050,PJ,NA,120
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELEOIL,NRG_OIL,energy,f_out,ELEOIL,ELC,annual,REG1,REG1,2050,2050,PJ,NA,20
+mock_timesreport.gdx,DemoS_012,Teknologioptimist,1,SC_ELE,NA,NA,ELECOA,NRG_COA,energy,f_out,ELECOA,ELC,annual,REG1,REG1,2050,2050,PJ,NA,30
+mock_timesreport.gdx,DemoS_012,Gjennomgripende omstilling,1,SC_ELE,NA,NA,ELEWIN,NRG_RNW,energy,f_out,ELEWIN,ELC,annual,REG1,REG1,2050,2050,PJ,NA,430
+mock_timesreport.gdx,DemoS_012,Gjennomgripende omstilling,1,SC_ELE,NA,NA,ELESOL,NRG_RNW,energy,f_out,ELESOL,ELC,annual,REG1,REG1,2050,2050,PJ,NA,290
+mock_timesreport.gdx,DemoS_012,Gjennomgripende omstilling,1,SC_ELE,NA,NA,ELEHYD,NRG_RNW,energy,f_out,ELEHYD,ELC,annual,REG1,REG1,2050,2050,PJ,NA,125
+mock_timesreport.gdx,DemoS_012,Gjennomgripende omstilling,1,SC_ELE,NA,NA,ELENUC,NRG_NUK,energy,f_out,ELENUC,ELC,annual,REG1,REG1,2050,2050,PJ,NA,120
+mock_timesreport.gdx,DemoS_012,Gjennomgripende omstilling,1,SC_ELE,NA,NA,ELEBIO,NRG_BIO,energy,f_out,ELEBIO,ELC,annual,REG1,REG1,2050,2050,PJ,NA,140
+mock_timesreport.gdx,DemoS_012,Gjennomgripende omstilling,1,SC_ELE,NA,NA,ELEGAS,NRG_GAS,energy,f_out,ELEGAS,ELC,annual,REG1,REG1,2050,2050,PJ,NA,90
+mock_timesreport.gdx,DemoS_012,Gjennomgripende omstilling,1,SC_ELE,NA,NA,ELEOIL,NRG_OIL,energy,f_out,ELEOIL,ELC,annual,REG1,REG1,2050,2050,PJ,NA,10
+mock_timesreport.gdx,DemoS_012,Gjennomgripende omstilling,1,SC_ELE,NA,NA,ELECOA,NRG_COA,energy,f_out,ELECOA,ELC,annual,REG1,REG1,2050,2050,PJ,NA,15
+mock_timesreport.gdx,DemoS_012,Litt her og der,1,SC_ELE,NA,NA,ELEWIN,NRG_RNW,energy,f_out,ELEWIN,ELC,annual,REG1,REG1,2050,2050,PJ,NA,310
+mock_timesreport.gdx,DemoS_012,Litt her og der,1,SC_ELE,NA,NA,ELESOL,NRG_RNW,energy,f_out,ELESOL,ELC,annual,REG1,REG1,2050,2050,PJ,NA,160
+mock_timesreport.gdx,DemoS_012,Litt her og der,1,SC_ELE,NA,NA,ELEHYD,NRG_RNW,energy,f_out,ELEHYD,ELC,annual,REG1,REG1,2050,2050,PJ,NA,90
+mock_timesreport.gdx,DemoS_012,Litt her og der,1,SC_ELE,NA,NA,ELENUC,NRG_NUK,energy,f_out,ELENUC,ELC,annual,REG1,REG1,2050,2050,PJ,NA,80
+mock_timesreport.gdx,DemoS_012,Litt her og der,1,SC_ELE,NA,NA,ELEBIO,NRG_BIO,energy,f_out,ELEBIO,ELC,annual,REG1,REG1,2050,2050,PJ,NA,120
+mock_timesreport.gdx,DemoS_012,Litt her og der,1,SC_ELE,NA,NA,ELEGAS,NRG_GAS,energy,f_out,ELEGAS,ELC,annual,REG1,REG1,2050,2050,PJ,NA,130
+mock_timesreport.gdx,DemoS_012,Litt her og der,1,SC_ELE,NA,NA,ELEOIL,NRG_OIL,energy,f_out,ELEOIL,ELC,annual,REG1,REG1,2050,2050,PJ,NA,35
+mock_timesreport.gdx,DemoS_012,Litt her og der,1,SC_ELE,NA,NA,ELECOA,NRG_COA,energy,f_out,ELECOA,ELC,annual,REG1,REG1,2050,2050,PJ,NA,55
+mock_timesreport.gdx,DemoS_012,Ny hverdag,1,SC_ELE,NA,NA,ELEWIN,NRG_RNW,energy,f_out,ELEWIN,ELC,annual,REG1,REG1,2050,2050,PJ,NA,240
+mock_timesreport.gdx,DemoS_012,Ny hverdag,1,SC_ELE,NA,NA,ELESOL,NRG_RNW,energy,f_out,ELESOL,ELC,annual,REG1,REG1,2050,2050,PJ,NA,120
+mock_timesreport.gdx,DemoS_012,Ny hverdag,1,SC_ELE,NA,NA,ELEHYD,NRG_RNW,energy,f_out,ELEHYD,ELC,annual,REG1,REG1,2050,2050,PJ,NA,85
+mock_timesreport.gdx,DemoS_012,Ny hverdag,1,SC_ELE,NA,NA,ELENUC,NRG_NUK,energy,f_out,ELENUC,ELC,annual,REG1,REG1,2050,2050,PJ,NA,70
+mock_timesreport.gdx,DemoS_012,Ny hverdag,1,SC_ELE,NA,NA,ELEBIO,NRG_BIO,energy,f_out,ELEBIO,ELC,annual,REG1,REG1,2050,2050,PJ,NA,100
+mock_timesreport.gdx,DemoS_012,Ny hverdag,1,SC_ELE,NA,NA,ELEGAS,NRG_GAS,energy,f_out,ELEGAS,ELC,annual,REG1,REG1,2050,2050,PJ,NA,110
+mock_timesreport.gdx,DemoS_012,Ny hverdag,1,SC_ELE,NA,NA,ELEOIL,NRG_OIL,energy,f_out,ELEOIL,ELC,annual,REG1,REG1,2050,2050,PJ,NA,45
+mock_timesreport.gdx,DemoS_012,Ny hverdag,1,SC_ELE,NA,NA,ELECOA,NRG_COA,energy,f_out,ELECOA,ELC,annual,REG1,REG1,2050,2050,PJ,NA,65

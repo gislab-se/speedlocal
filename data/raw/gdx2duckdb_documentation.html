@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TIMES Report DuckDB Import System - Documentation</title>
+    <style>
+        @media print {
+            @page {
+                size: A4;
+                margin: 2cm;
+            }
+            body {
+                font-size: 10pt;
+            }
+            h1 {
+                page-break-before: always;
+            }
+            h1:first-of-type {
+                page-break-before: avoid;
+            }
+            pre, code {
+                page-break-inside: avoid;
+            }
+            table {
+                page-break-inside: avoid;
+            }
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 20px;
+            background: white;
+        }
+        
+        .cover-page {
+            text-align: center;
+            padding: 100px 20px;
+            page-break-after: always;
+        }
+        
+        .cover-page h1 {
+            font-size: 36pt;
+            color: #0066CC;
+            margin-bottom: 20px;
+        }
+        
+        .cover-page .subtitle {
+            font-size: 18pt;
+            color: #666;
+            margin-bottom: 40px;
+        }
+        
+        .cover-page .meta {
+            font-size: 12pt;
+            color: #999;
+            margin-top: 60px;
+        }
+        
+        .toc {
+            page-break-after: always;
+        }
+        
+        .toc h2 {
+            color: #0066CC;
+            border-bottom: 2px solid #0066CC;
+            padding-bottom: 10px;
+        }
+        
+        .toc ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        
+        .toc li {
+            padding: 5px 0;
+            border-bottom: 1px dotted #ddd;
+        }
+        
+        .toc a {
+            text-decoration: none;
+            color: #333;
+        }
+        
+        .toc a:hover {
+            color: #0066CC;
+        }
+        
+        h1 {
+            color: #0066CC;
+            border-bottom: 3px solid #0066CC;
+            padding-bottom: 10px;
+            margin-top: 40px;
+        }
+        
+        h2 {
+            color: #0066CC;
+            margin-top: 30px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 5px;
+        }
+        
+        h3 {
+            color: #333;
+            margin-top: 20px;
+        }
+        
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+        
+        pre {
+            background: #f4f4f4;
+            padding: 15px;
+            border-left: 4px solid #0066CC;
+            overflow-x: auto;
+            border-radius: 3px;
+        }
+        
+        pre code {
+            background: none;
+            padding: 0;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+        
+        th {
+            background: #0066CC;
+            color: white;
+            font-weight: bold;
+        }
+        
+        tr:nth-child(even) {
+            background: #f9f9f9;
+        }
+        
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #0066CC;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 3px;
+        }
+        
+        .warning-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 3px;
+        }
+        
+        .code-header {
+            background: #0066CC;
+            color: white;
+            padding: 8px 15px;
+            border-radius: 3px 3px 0 0;
+            font-weight: bold;
+            margin-bottom: -15px;
+        }
+        
+        .footer {
+            text-align: center;
+            color: #999;
+            font-size: 0.9em;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+        }
+        
+        ul, ol {
+            margin: 15px 0;
+        }
+        
+        li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+
+<div class="cover-page">
+    <h1>TIMES DuckDB Import System</h1>
+    <div class="subtitle">Complete Documentation</div>
+    <div class="subtitle">Version 1.0</div>
+    
+    <div class="meta">
+        <p><strong>Author:</strong> Kristoffer Steen Andersen<br>
+        Energy Modelling Lab</p>
+        <p><strong>Date:</strong> October 2025</p>
+        <p><strong>Document Type:</strong> Technical Documentation</p>
+    </div>
+</div>
+
+<div class="toc">
+    <h2>Table of Contents</h2>
+    <ul>
+        <li><a href="#overview">1. Overview</a></li>
+        <li><a href="#architecture">2. System Architecture</a></li>
+        <li><a href="#database-creation">3. Database Creation Script (R)</a></li>
+        <li><a href="#query-examples">4. Query Examples</a></li>
+        <li><a href="#dependencies">5. Dependencies</a></li>
+        <li><a href="#troubleshooting">6. Troubleshooting</a></li>
+        <li><a href="#best-practices">7. Best Practices</a></li>
+    </ul>
+</div>
+
+<h1 id="overview">1. Overview</h1>
+
+<p>This system provides tools for importing TIMES (The Integrated MARKAL-EFOM System) energy model outputs into a DuckDB database for analysis and visualization. It consists of three main components:</p>
+
+<ol>
+    <li><strong>Database Creation Script (R)</strong> - Imports GDX files into DuckDB</li>
+    <li><strong>Visualization Application (Python/Streamlit)</strong> - Interactive web-based data explorer</li>
+    <li><strong>Legacy Shiny Application (R)</strong> - Previous CSV-based visualization tool</li>
+</ol>
+
+<div class="info-box">
+    <strong>Purpose:</strong> The system converts complex TIMES model outputs from GDX format into an accessible, queryable database format with accompanying visualization tools for energy system analysis.
+</div>
+
+<h1 id="architecture">2. System Architecture</h1>
+
+<pre>
+┌─────────────┐      ┌──────────────────┐     ┌─────────────────┐      ┌──────────────────────┐
+│  GDX Files  │ ──▶ │  R Import Script │ ──▶ │ DuckDB Database │ ──▶ │ Visualization Tools  │
+└─────────────┘      └──────────────────┘     └─────────────────┘      │ ├─ Streamlit App     │
+                                                                       │ └─ Shiny App (Legacy)│
+                                                                       └──────────────────────┘
+</pre>
+
+<h2>Data Flow</h2>
+
+<ol>
+    <li><strong>Input:</strong> Multiple TIMES model GDX files</li>
+    <li><strong>Processing:</strong> R script extracts data and metadata</li>
+    <li><strong>Storage:</strong> Data organized in DuckDB relational database</li>
+    <li><strong>Analysis:</strong> Query via SQL or visualization tools</li>
+</ol>
+
+<h1 id="database-creation">3. Database Creation Script (R)</h1>
+
+<p><strong>File:</strong> <code>create_times_db_multiple_scenarios.R</code></p>
+
+<h2>3.1 Purpose</h2>
+
+<p>Converts multiple TIMES model GDX output files into a structured DuckDB database with proper relationships and metadata.</p>
+
+<h2>3.2 Key Features</h2>
+
+<ul>
+    <li>Processes multiple GDX files in batch</li>
+    <li>Extracts descriptive metadata (sectors, commodities, processes, etc.)</li>
+    <li>Creates relational database structure with foreign keys</li>
+    <li>Tracks data provenance (source files, timestamps)</li>
+    <li>Supports scenario-model relationships via <code>modelname</code> set</li>
+    <li>Includes automated testing functionality</li>
+</ul>
+
+<h2>3.3 Database Schema</h2>
+
+<h3>Core Tables</h3>
+
+<table>
+    <thead>
+        <tr>
+            <th>Table Name</th>
+            <th>Description</th>
+            <th>Key Columns</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>source_files</code></td>
+            <td>Tracks input file metadata</td>
+            <td>file_id (PK), filename, load_timestamp</td>
+        </tr>
+        <tr>
+            <td><code>timesreport</code></td>
+            <td>Main facts table with model outputs</td>
+            <td>scen, sector, year, value, file_id (FK)</td>
+        </tr>
+        <tr>
+            <td><code>scenario_model</code></td>
+            <td>Links scenarios to TIMES models</td>
+            <td>scen (PK), timesmodel (PK), file_id (FK)</td>
+        </tr>
+    </tbody>
+</table>
+
+<h3>timesreport Table Structure</h3>
+
+<table>
+    <thead>
+        <tr>
+            <th>Column</th>
+            <th>Type</th>
+            <th>Description</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr><td>scen</td><td>VARCHAR</td><td>Scenario name</td></tr>
+        <tr><td>sector</td><td>VARCHAR</td><td>Energy sector</td></tr>
+        <tr><td>subsector</td><td>VARCHAR</td><td>Subsector classification</td></tr>
+        <tr><td>service</td><td>VARCHAR</td><td>Energy service</td></tr>
+        <tr><td>techgroup</td><td>VARCHAR</td><td>Technology group</td></tr>
+        <tr><td>comgroup</td><td>VARCHAR</td><td>Commodity group</td></tr>
+        <tr><td>topic</td><td>VARCHAR</td><td>Data topic (energy, capacity, emissions)</td></tr>
+        <tr><td>attr</td><td>VARCHAR</td><td>Attribute type (e.g., f_in, f_out)</td></tr>
+        <tr><td>prc</td><td>VARCHAR</td><td>Process identifier</td></tr>
+        <tr><td>com</td><td>VARCHAR</td><td>Commodity identifier</td></tr>
+        <tr><td>all_ts</td><td>VARCHAR</td><td>Timeslice</td></tr>
+        <tr><td>regfrom</td><td>VARCHAR</td><td>Source region</td></tr>
+        <tr><td>regto</td><td>VARCHAR</td><td>Destination region</td></tr>
+        <tr><td>year</td><td>VARCHAR</td><td>Model year</td></tr>
+        <tr><td>vntg</td><td>VARCHAR</td><td>Vintage year</td></tr>
+        <tr><td>unit</td><td>VARCHAR</td><td>Unit of measurement</td></tr>
+        <tr><td>cur</td><td>VARCHAR</td><td>Currency</td></tr>
+        <tr><td>value</td><td>DOUBLE</td><td>Numeric value</td></tr>
+        <tr><td>file_id</td><td>INTEGER</td><td>Reference to source file (FK)</td></tr>
+    </tbody>
+</table>
+
+<h3>Description Tables</h3>
+
+<p>These tables provide human-readable descriptions for coded identifiers:</p>
+
+<ul>
+    <li><code>sector_desc</code> - Sector descriptions</li>
+    <li><code>subsector_desc</code> - Subsector descriptions</li>
+    <li><code>service_desc</code> - Service descriptions</li>
+    <li><code>techgroup_desc</code> - Technology group descriptions</li>
+    <li><code>comgroup_desc</code> - Commodity group descriptions</li>
+    <li><code>topic_desc</code> - Topic descriptions</li>
+    <li><code>prc_desc</code> - Process descriptions</li>
+    <li><code>com_desc</code> - Commodity descriptions</li>
+    <li><code>attr_desc</code> - Attribute descriptions</li>
+</ul>
+
+<p>Each description table has: <code>id</code> (VARCHAR, PK), <code>description</code> (VARCHAR), <code>scen</code> (VARCHAR, PK)</p>
+
+<h2>3.4 Configuration</h2>
+
+<div class="code-header">R Configuration</div>
+<pre><code class="language-r"># Database configuration
+db_name <- "speedlocal_times_db_bornholm.duckdb"
+db_folder <- "./duckDB"
+
+# Input files
+gdx_files <- c(
+    "./GDX/bornholmbase2050_TIMESreport.gdx",
+    "./GDX/bornholmscena2050_TIMESreport.gdx"
+)</code></pre>
+
+<h2>3.5 Key Functions</h2>
+
+<h3>read_gdx_set(container, set_name, scen)</h3>
+
+<p>Extracts a set from a GDX container and converts it to a dataframe.</p>
+
+<p><strong>Parameters:</strong></p>
+<ul>
+    <li><code>container</code> - GAMS container object</li>
+    <li><code>set_name</code> - Name of the set to extract</li>
+    <li><code>scen</code> - Scenario identifier</li>
+</ul>
+
+<p><strong>Returns:</strong> Dataframe with id, description, and scen columns</p>
+
+<p><strong>Special Handling:</strong></p>
+<ul>
+    <li><code>prc_desc</code> and <code>com_desc</code> - Removes first column (region) and deduplicates</li>
+    <li>Single-column sets - Creates id-only dataframe</li>
+    <li>Multi-column sets - Creates id and description columns</li>
+</ul>
+
+<h3>read_modelname_set(container)</h3>
+
+<p>Extracts scenario-to-TIMES-model relationships.</p>
+
+<p><strong>Returns:</strong> Dataframe with scen and timesmodel columns</p>
+
+<h3>load_gdx_files(gdx_files, db_path)</h3>
+
+<p>Main function that processes all GDX files and creates the database.</p>
+
+<p><strong>Process:</strong></p>
+<ol>
+    <li>Remove existing database</li>
+    <li>Create new database with schema</li>
+    <li>For each GDX file:
+        <ul>
+            <li>Read container</li>
+            <li>Extract scenario name</li>
+            <li>Log file metadata</li>
+            <li>Process modelname set (if present)</li>
+            <li>Process description sets</li>
+            <li>Import timesreport data</li>
+        </ul>
+    </li>
+    <li>Return connection</li>
+</ol>
+
+<h2>3.6 Usage Example</h2>
+
+<div class="code-header">R Usage</div>
+<pre><code class="language-r"># Load required libraries
+library(gamstransfer)
+library(dplyr)
+library(DBI)
+library(duckdb)
+
+# Configure paths
+gdx_files <- c(
+    "./GDX/scenario1_TIMESreport.gdx",
+    "./GDX/scenario2_TIMESreport.gdx"
+)
+
+db_path <- "./duckDB/times_db.duckdb"
+
+# Create database
+con <- load_gdx_files(gdx_files, db_path)
+
+# Query example
+results <- dbGetQuery(con, "
+    SELECT 
+        f.scen,
+        f.sector,
+        s.description as sector_desc,
+        f.year,
+        SUM(f.value) as total_value
+    FROM timesreport f
+    LEFT JOIN sector_desc s ON f.sector = s.id AND f.scen = s.scen
+    WHERE f.topic = 'energy'
+    GROUP BY f.scen, f.sector, s.description, f.year
+")
+
+# Close connection
+dbDisconnect(con, shutdown = TRUE)</code></pre>
+
+
+<h1 id="query-examples">4.Query Examples</h1>
+
+<h2>4.1 Basic Data Retrieval</h2>
+
+<div class="code-header">SQL Query</div>
+<pre><code class="language-sql">SELECT * 
+FROM timesreport 
+WHERE scen = 'BASE' 
+  AND topic = 'energy' 
+  AND year = '2030'
+LIMIT 10;</code></pre>
+
+<h2>4.2 Energy by Sector with Descriptions</h2>
+
+<div class="code-header">SQL Query</div>
+<pre><code class="language-sql">SELECT 
+    f.scen,
+    f.sector,
+    s.description as sector_name,
+    f.year,
+    SUM(f.value) as total_energy,
+    f.unit
+FROM timesreport f
+LEFT JOIN sector_desc s 
+    ON f.sector = s.id AND f.scen = s.scen
+WHERE f.topic = 'energy'
+  AND f.attr = 'f_in'
+GROUP BY f.scen, f.sector, s.description, f.year, f.unit
+ORDER BY f.year, f.sector;</code></pre>
+
+<h2>4.3 Scenario Comparison</h2>
+
+<div class="code-header">SQL Query</div>
+<pre><code class="language-sql">SELECT 
+    f.scen,
+    f.year,
+    f.comgroup,
+    c.description as commodity,
+    SUM(f.value) as value,
+    f.unit
+FROM timesreport f
+LEFT JOIN comgroup_desc c 
+    ON f.comgroup = c.id AND f.scen = c.scen
+WHERE f.topic = 'energy'
+  AND f.sector = 'ELC'
+  AND f.scen IN ('BASE', 'SCENARIO_A')
+GROUP BY f.scen, f.year, f.comgroup, c.description, f.unit
+ORDER BY f.year, f.scen;</code></pre>
+
+<h2>4.4 Model-Scenario Relationships</h2>
+
+<div class="code-header">SQL Query</div>
+<pre><code class="language-sql">SELECT 
+    sm.scen,
+    sm.timesmodel,
+    sf.filename,
+    sf.load_timestamp
+FROM scenario_model sm
+JOIN source_files sf ON sm.file_id = sf.file_id
+ORDER BY sm.timesmodel, sm.scen;</code></pre>
+
+<h1 id="dependencies">5. Dependencies</h1>
+
+<h2>5.1 R Packages</h2>
+
+<table>
+    <thead>
+        <tr>
+            <th>Package</th>
+            <th>Purpose</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr><td>gamstransfer</td><td>Read GDX files</td></tr>
+        <tr><td>dplyr</td><td>Data manipulation</td></tr>
+        <tr><td>DBI</td><td>Database interface</td></tr>
+        <tr><td>duckdb</td><td>DuckDB driver</td></tr>
+    </tbody>
+</table>
+
+<h1 id="troubleshooting">6.Troubleshooting</h1>
+
+<h2>6.1 Common Issues</h2>
+
+<h3>"Could not remove existing database file"</h3>
+<ul>
+    <li>Close all connections to the database</li>
+    <li>Check if other processes are using the file</li>
+    <li>Ensure you have write permissions</li>
+</ul>
+
+<h3>"No data matches the selected filters"</h3>
+<ul>
+    <li>Verify scenario names match exactly</li>
+    <li>Check that topics and attributes exist in data</li>
+    <li>Review excluded sectors list</li>
+</ul>
+
+<h3>Empty visualizations</h3>
+<ul>
+    <li>Confirm database connection is successful</li>
+    <li>Verify GDX files contain expected data structure</li>
+    <li>Check that timesreport table has data</li>
+</ul>
+
+<h2>6.2 File Paths</h2>
+<ul>
+    <li>Use forward slashes (/) or double backslashes (\\) in Windows</li>
+    <li>Relative paths are relative to script location</li>
+    <li>Ensure GDX files are accessible</li>
+</ul>
+
+<h1 id="best-practices">7. Best Practices</h1>
+
+<h2>7.1 Database Management</h2>
+<ul>
+    <li>Keep backups of original GDX files</li>
+    <li>Document scenario names and purposes</li>
+    <li>Use descriptive database names with dates</li>
+</ul>
+
+<h2>7.2 Performance</h2>
+<ul>
+    <li>Index frequently queried columns</li>
+    <li>Use specific queries instead of SELECT *</li>
+    <li>Close connections when finished</li>
+</ul>
+
+<h2>7.3 Data Quality</h2>
+<ul>
+    <li>Validate GDX files before import </li>
+    <li>Review test output after database creation</li>
+    <li>Check for missing descriptions</li>
+</ul>
+
+<h2>7.4 Version Control</h2>
+<ul>
+    <li>Track configuration changes</li>
+    <li>Document GDX file versions</li>
+    <li>Maintain changelog for database updates</li>
+</ul>
+
+<div class="footer">
+    <p>TIMES DuckDB Import System Documentation</p>
+    <p>Energy Modelling Lab | October 2025</p>
+    <p>For questions or support, contact: Kristoffer Steen Andersen</p>
+</div>
+
+<script>
+    // Add print button functionality
+    window.onload = function() {
+        // You can add a print button if desired
+        // This script runs when the page loads
+    }
+</script>
+
+</body>
+</html>
