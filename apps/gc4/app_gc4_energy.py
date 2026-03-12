@@ -1,4 +1,9 @@
+import hashlib
 import math
+import os
+import shutil
+import tempfile
+import urllib.request
 from pathlib import Path
 
 import numpy as np
@@ -78,6 +83,20 @@ CLUSTER_COLORS = {
     6: [171, 217, 233, 90],
     7: [197, 176, 213, 90],
 }
+
+
+def _get_config_value(name: str) -> str:
+    value = os.getenv(name, "").strip()
+    if value:
+        return value
+    try:
+        secret_value = st.secrets.get(name, "")
+    except Exception:
+        secret_value = ""
+    return str(secret_value).strip()
+
+
+GEOCONTEXT_APP_URL = _get_config_value("GEOCONTEXT_APP_URL")
 
 
 def _find_first_col(columns: list[str], tokens: list[str]) -> str | None:
@@ -170,6 +189,181 @@ def _find_duckdb(project_root: Path) -> Path | None:
         project_root / "duckdb" / "speedlocal_times.duckdb",
     ]
     return next((p for p in candidates if p.exists()), None)
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def _download_duckdb_share(share_url: str) -> tuple[str | None, str]:
+    url = str(share_url).strip()
+    if not url:
+        return None, "duckdb share-url saknas"
+
+    target_dir = Path(tempfile.gettempdir()) / "speedlocal_duckdb"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_path = target_dir / f"{hashlib.sha256(url.encode('utf-8')).hexdigest()[:16]}.duckdb"
+
+    try:
+        request = urllib.request.Request(url, headers={"User-Agent": "speedlocal-streamlit"})
+        with urllib.request.urlopen(request, timeout=120) as response, target_path.open("wb") as handle:
+            shutil.copyfileobj(response, handle)
+    except Exception as exc:
+        return None, f"duckdb share-download misslyckades ({exc})"
+
+    return str(target_path), f"downloaded duckdb share: {target_path}"
+
+
+def _resolve_duckdb(project_root: Path) -> tuple[Path | None, str]:
+    env_path = _get_config_value("DUCKDB_PATH")
+    if env_path:
+        p = Path(env_path)
+        if p.exists():
+            return p, f"loaded duckdb env path: {p}"
+
+    local_path = _find_duckdb(project_root)
+    if local_path is not None:
+        return local_path, f"loaded duckdb: {local_path}"
+
+    share_url = _get_config_value("DUCKDB_SHARE_URL")
+    if share_url:
+        downloaded_path, status = _download_duckdb_share(share_url)
+        if downloaded_path:
+            return Path(downloaded_path), status
+        return None, status
+
+    return None, "duckdb-fil saknas"
+
+
+def _duckdb_has_object(con, name: str) -> bool:
+    row = con.execute(
+        """
+        SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
+          AND lower(table_name) = lower(?)
+        LIMIT 1
+        """,
+        [name],
+    ).fetchone()
+    return row is not None
+
+
+def _duckdb_columns(con, name: str) -> list[str]:
+    rows = con.execute(
+        """
+        SELECT lower(column_name)
+        FROM information_schema.columns
+        WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
+          AND lower(table_name) = lower(?)
+        ORDER BY ordinal_position
+        """,
+        [name],
+    ).fetchall()
+    return [str(r[0]) for r in rows]
+
+
+def _load_energy_mix_frame_duckdb(con) -> tuple[pd.DataFrame | None, str]:
+    if _duckdb_has_object(con, "v_energy_mix"):
+        mix = con.execute(
+            """
+            SELECT
+                scen,
+                CAST(year AS INTEGER) AS year,
+                COALESCE(energy_key, 'other') AS energy_key,
+                value_twh
+            FROM v_energy_mix
+            WHERE CAST(year AS INTEGER) IN (2030, 2040, 2050)
+            """
+        ).df()
+        return mix, "loaded duckdb view: v_energy_mix"
+
+    source_table = next((name for name in ["timesreport_raw", "timesreport"] if _duckdb_has_object(con, name)), None)
+    if source_table is None:
+        return None, "duckdb saknar timesreport_raw/timesreport"
+
+    cols = set(_duckdb_columns(con, source_table))
+    required = {"scen", "year", "value", "topic", "attr"}
+    missing = sorted(required - cols)
+    if missing:
+        return None, f"duckdb-tabell {source_table} saknar kolumner: {', '.join(missing)}"
+
+    unit_col = "units" if "units" in cols else ("unit" if "unit" in cols else None)
+    if unit_col is None:
+        return None, f"duckdb-tabell {source_table} saknar units/unit"
+
+    ts_col = "timeslice" if "timeslice" in cols else ("all_ts" if "all_ts" in cols else None)
+    select_cols = ["scen", "year", "value", f"{unit_col} AS units"]
+    for name in ["techgroup", "comgroup", "prc", "com"]:
+        if name in cols:
+            select_cols.append(name)
+
+    where_clauses = [
+        "lower(topic) = 'energy'",
+        "lower(attr) IN ('f_out', 'comnet')",
+        "TRY_CAST(year AS INTEGER) IN (2030, 2040, 2050)",
+    ]
+    if ts_col is not None:
+        where_clauses.append(f"upper(coalesce({ts_col}, '')) = 'ANNUAL'")
+
+    raw = con.execute(
+        f"""
+        SELECT {", ".join(select_cols)}
+        FROM {source_table}
+        WHERE {" AND ".join(where_clauses)}
+        """
+    ).df()
+    if raw.empty:
+        return raw, f"duckdb-tabell {source_table} gav tomt resultat"
+
+    source_cols = [c for c in ["techgroup", "comgroup", "prc", "com"] if c in raw.columns]
+    if source_cols:
+        merged_source = raw[source_cols].fillna("").astype(str).agg(" ".join, axis=1)
+        raw["energy_key"] = merged_source.apply(_tech_from_text)
+    else:
+        raw["energy_key"] = "other"
+
+    raw["year"] = pd.to_numeric(raw["year"], errors="coerce")
+    raw["value_twh"] = _as_twh(raw["value"], raw["units"])
+    raw = raw.dropna(subset=["year", "value_twh"])
+    if raw.empty:
+        return None, f"duckdb-tabell {source_table} saknar giltiga year/value"
+
+    raw["year"] = raw["year"].astype(int)
+    mix = (
+        raw.groupby(["scen", "year", "energy_key"], as_index=False)["value_twh"]
+        .sum()
+        .sort_values(["scen", "year", "energy_key"])
+    )
+    return mix, f"loaded duckdb raw: {source_table}"
+
+
+def _load_preview_frame_duckdb(con) -> tuple[pd.DataFrame | None, dict[str, list[str]] | None, str]:
+    source_table = next((name for name in ["timesreport_raw", "timesreport"] if _duckdb_has_object(con, name)), None)
+    if source_table is None:
+        return None, None, "duckdb preview: timesreport_raw/timesreport saknas"
+
+    cols = _duckdb_columns(con, source_table)
+    summary: dict[str, list[str]] = {}
+    for key in ["scen", "techgroup", "comgroup", "topic", "attr"]:
+        if key in cols:
+            vals = con.execute(
+                f"SELECT DISTINCT {key} AS value FROM {source_table} WHERE {key} IS NOT NULL ORDER BY 1 LIMIT 80"
+            ).df()["value"].astype(str).tolist()
+            summary[key] = vals
+
+    unit_col = "units" if "units" in cols else ("unit" if "unit" in cols else None)
+    if unit_col is not None:
+        vals = con.execute(
+            f"SELECT DISTINCT {unit_col} AS value FROM {source_table} WHERE {unit_col} IS NOT NULL ORDER BY 1 LIMIT 80"
+        ).df()["value"].astype(str).tolist()
+        summary["units"] = vals
+
+    if "year" in cols:
+        vals = con.execute(
+            f"SELECT DISTINCT year AS value FROM {source_table} WHERE year IS NOT NULL ORDER BY 1 LIMIT 80"
+        ).df()["value"].astype(str).tolist()
+        summary["year"] = vals
+
+    preview = con.execute(f"SELECT * FROM {source_table} LIMIT 25").df()
+    return preview, summary, f"loaded duckdb preview: {source_table}"
 
 
 def load_timesreport_scenarios(
@@ -272,9 +466,9 @@ def load_timesreport_scenarios_duckdb(
 ) -> tuple[dict[str, dict[int, float]] | None, dict[str, dict[str, float]] | None, str]:
     if duckdb is None:
         return None, None, "duckdb package saknas"
-    db_path = _find_duckdb(project_root)
+    db_path, db_status = _resolve_duckdb(project_root)
     if db_path is None:
-        return None, None, "duckdb-fil saknas"
+        return None, None, db_status
 
     try:
         con = duckdb.connect(str(db_path), read_only=True)
@@ -282,31 +476,7 @@ def load_timesreport_scenarios_duckdb(
         return None, None, f"duckdb kunde inte oppnas ({exc})"
 
     try:
-        try:
-            mix = con.execute(
-                """
-                SELECT scen, year, energy_key, value_twh
-                FROM v_energy_mix
-                WHERE year IN (2030, 2040, 2050)
-                """
-            ).df()
-        except Exception:
-            mix = con.execute(
-                """
-                SELECT
-                    scen,
-                    CAST(year AS INTEGER) AS year,
-                    COALESCE(energy_key, 'other') AS energy_key,
-                    SUM(value_twh) AS value_twh
-                FROM timesreport_raw
-                WHERE topic = 'energy'
-                  AND attr IN ('f_out', 'comnet')
-                  AND lower(timeslice) = 'annual'
-                  AND year IS NOT NULL
-                GROUP BY 1,2,3
-                HAVING year IN (2030, 2040, 2050)
-                """
-            ).df()
+        mix, mix_status = _load_energy_mix_frame_duckdb(con)
     except Exception as exc:
         con.close()
         return None, None, f"duckdb-fraga misslyckades ({exc})"
@@ -316,8 +486,10 @@ def load_timesreport_scenarios_duckdb(
         except Exception:
             pass
 
+    if mix is None:
+        return None, None, mix_status
     if mix.empty:
-        return None, None, "duckdb gav tomt resultat"
+        return None, None, mix_status
 
     mix["scen"] = mix["scen"].astype(str)
     mix["year"] = pd.to_numeric(mix["year"], errors="coerce").astype("Int64")
@@ -357,17 +529,20 @@ def load_timesreport_scenarios_duckdb(
             all_techs = ["other"]
         base_mix[scen] = _normalize_mix_100({k: float(mix_sc.get(k, 0.0)) for k in all_techs})
 
-    return scenario_totals, base_mix, f"loaded duckdb: {db_path}"
+    return scenario_totals, base_mix, f"{db_status}; {mix_status}"
 
 
 def load_area_factors_duckdb(project_root: Path) -> tuple[dict[str, float] | None, str]:
     if duckdb is None:
         return None, "duckdb package saknas"
-    db_path = _find_duckdb(project_root)
+    db_path, db_status = _resolve_duckdb(project_root)
     if db_path is None:
-        return None, "duckdb-fil saknas"
+        return None, db_status
     try:
         con = duckdb.connect(str(db_path), read_only=True)
+        if not _duckdb_has_object(con, "area_factors"):
+            con.close()
+            return None, f"{db_status}; area_factors saknas i duckdb"
         rows = con.execute("SELECT energy_key, km2_per_twh FROM area_factors").df()
         con.close()
     except Exception as exc:
@@ -379,12 +554,24 @@ def load_area_factors_duckdb(project_root: Path) -> tuple[dict[str, float] | Non
         for _, r in rows.iterrows()
         if pd.notna(r["energy_key"]) and pd.notna(r["km2_per_twh"])
     }
-    return (out if out else None), f"loaded duckdb: {db_path}"
+    return (out if out else None), f"{db_status}; loaded area_factors"
 
 
 def load_timesreport_preview(
     project_root: Path,
 ) -> tuple[pd.DataFrame | None, dict[str, list[str]] | None, str]:
+    if duckdb is not None:
+        db_path, db_status = _resolve_duckdb(project_root)
+        if db_path is not None:
+            try:
+                con = duckdb.connect(str(db_path), read_only=True)
+                preview, summary, preview_status = _load_preview_frame_duckdb(con)
+                con.close()
+                if preview is not None:
+                    return preview, summary, f"{db_status}; {preview_status}"
+            except Exception:
+                pass
+
     csv_path = _find_timesreport_csv(project_root)
     if csv_path is None:
         return None, None, "no file"
@@ -577,6 +764,11 @@ times_preview_df, times_preview_summary, times_preview_status = load_timesreport
 
 st.sidebar.header("Scenario")
 scenario = st.sidebar.selectbox("Valj framtidsbild", list(scenario_totals.keys()), index=0)
+st.sidebar.subheader("Landskapsanalys")
+if GEOCONTEXT_APP_URL:
+    st.sidebar.link_button("Oppna fristaende geocontext-app", GEOCONTEXT_APP_URL, use_container_width=True)
+else:
+    st.sidebar.caption("Satt GEOCONTEXT_APP_URL for lank till fristaende geocontext-app.")
 scenario_years = sorted([int(y) for y in scenario_totals.get(scenario, {}).keys()])
 preferred_years = [y for y in [2030, 2040, 2050] if y in scenario_years]
 year_options = preferred_years if preferred_years else (scenario_years if scenario_years else [2050])
@@ -752,9 +944,6 @@ left, right = st.columns([1.0, 2.0], gap="large")
 with left:
     st.subheader("Berakning")
     st.dataframe(mix_df.round(2), use_container_width=True, height=180)
-    st.subheader("Kluster")
-    cc = gc4["class_km"].value_counts().sort_index().rename_axis("class_km").reset_index(name="n_hex")
-    st.bar_chart(cc, x="class_km", y="n_hex", use_container_width=True)
     st.caption("Toggle styr om utbyggnad ar endast class 0 eller class 0 + valda kluster.")
 
 with right:

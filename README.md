@@ -31,4 +31,9 @@ Open: http://127.0.0.1:8502
 ## Notes
 
 - `app_gc4_energy.py` uses fallback area factors when `data/raw/AreaDemand.xlsx` is missing.
+- DuckDB source can be provided in three ways:
+  - local file at `data/processed/speedlocal_times.duckdb`
+  - env var or Streamlit secret `DUCKDB_PATH` pointing at a `.duckdb` file
+  - env var or Streamlit secret `DUCKDB_SHARE_URL` pointing at a download link for a DuckDB file
+- The app supports both the repo-built DuckDB schema (`timesreport_raw` / `v_energy_mix`) and the shared schema (`timesreport`, `unit`, `all_ts`).
 - `script/config/bornholm_r8_geocontext_layers.csv` is not yet included (to be reconstructed from 37-layer spec).
