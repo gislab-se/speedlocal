@@ -1,6 +1,7 @@
 import hashlib
 import math
 import os
+import re
 import shutil
 import tempfile
 import urllib.request
@@ -72,6 +73,21 @@ UNIT_TO_TWH = {
     "pj": 1.0 / 3.6,
     "tj": 1.0 / 3600.0,
 }
+HOURS_PER_YEAR = 8760.0
+SUITABILITY_TECHS = (
+    "wind",
+    "solar",
+    "nuclear",
+    "hydro",
+    "bio",
+    "coal",
+    "gas",
+    "oil",
+    "renewables",
+    "electricity",
+    "demand",
+    "other",
+)
 
 CLUSTER_COLORS = {
     0: [166, 219, 210, 90],
@@ -107,8 +123,32 @@ def _find_first_col(columns: list[str], tokens: list[str]) -> str | None:
     return None
 
 
+def _default_area_factors() -> dict[str, float]:
+    return {
+        "wind": DEFAULT_AREA_FACTORS["wind"],
+        "solar": DEFAULT_AREA_FACTORS["solar"],
+        "nuclear": DEFAULT_AREA_FACTORS["nuclear"],
+        "hydro": 1.20,
+        "bio": 1.40,
+        "coal": 0.90,
+        "gas": 0.60,
+        "oil": 0.70,
+        "renewables": 1.30,
+        "electricity": 1.00,
+        "demand": 1.00,
+        "other": DEFAULT_AREA_FACTOR_GENERIC,
+    }
+
+
 def _human_tech_name(tech: str) -> str:
     return ENERGY_LABELS.get(tech, tech.replace("_", " ").title())
+
+
+def _scenario_display_label(scen: str, descriptions: dict[str, str]) -> str:
+    desc = str(descriptions.get(scen, "")).strip()
+    if not desc or desc == scen:
+        return scen
+    return f"{desc} [{scen}]"
 
 
 def _tech_from_text(text: str) -> str:
@@ -131,6 +171,79 @@ def _normalize_mix_100(values: dict[str, float]) -> dict[str, float]:
         eq = 100.0 / len(keys)
         return {k: eq for k in keys}
     return {k: clean[k] * 100.0 / s for k in keys}
+
+
+def _build_base_mix_by_year(
+    mix_rows: pd.DataFrame, scenario_totals: dict[str, dict[int, float]]
+) -> dict[str, dict[int, dict[str, float]]]:
+    if mix_rows.empty:
+        return {}
+
+    work = mix_rows.copy()
+    work["scen"] = work["scen"].astype(str)
+    work["year"] = pd.to_numeric(work["year"], errors="coerce")
+    work["energy_key"] = work["energy_key"].astype(str)
+    work["value_twh"] = pd.to_numeric(work["value_twh"], errors="coerce")
+    work = work.dropna(subset=["year", "value_twh"])
+    if work.empty:
+        return {}
+    work["year"] = work["year"].astype(int)
+
+    all_techs = sorted({str(v) for v in work["energy_key"].dropna().tolist() if str(v).strip()})
+    if not all_techs:
+        all_techs = ["other"]
+
+    available_mix_lookup: dict[str, dict[int, dict[str, float]]] = {}
+    for (scen, year), y_block in work.groupby(["scen", "year"]):
+        by_tech = (
+            y_block.groupby("energy_key", as_index=False)["value_twh"]
+            .sum()
+            .set_index("energy_key")["value_twh"]
+            .to_dict()
+        )
+        available_mix_lookup.setdefault(str(scen), {})[int(year)] = _normalize_mix_100(
+            {k: float(by_tech.get(k, 0.0)) for k in all_techs}
+        )
+
+    base_mix: dict[str, dict[int, dict[str, float]]] = {}
+    for scen, year_totals in scenario_totals.items():
+        yearly_mix: dict[int, dict[str, float]] = {}
+        available_years = sorted(available_mix_lookup.get(str(scen), {}).keys())
+        for year in sorted(int(y) for y in year_totals.keys()):
+            if int(year) in available_mix_lookup.get(str(scen), {}):
+                yearly_mix[int(year)] = dict(available_mix_lookup[str(scen)][int(year)])
+                continue
+            if available_years:
+                fallback_year = min(available_years, key=lambda available: abs(available - int(year)))
+                yearly_mix[int(year)] = dict(available_mix_lookup[str(scen)][fallback_year])
+                continue
+            yearly_mix[int(year)] = {"other": 100.0}
+        if yearly_mix:
+            base_mix[str(scen)] = yearly_mix
+    return base_mix
+
+
+def _resolve_base_mix_for_year(
+    base_mix_map: dict[str, object], scenario: str, year: int
+) -> dict[str, float]:
+    scenario_mix = base_mix_map.get(str(scenario), {"other": 100.0})
+    if not isinstance(scenario_mix, dict) or not scenario_mix:
+        return {"other": 100.0}
+
+    sample_value = next(iter(scenario_mix.values()))
+    if isinstance(sample_value, dict):
+        year_mix = scenario_mix.get(int(year))
+        if isinstance(year_mix, dict) and year_mix:
+            return dict(year_mix)
+        available_years = sorted(int(y) for y in scenario_mix.keys())
+        if available_years:
+            fallback_year = min(available_years, key=lambda available: abs(available - int(year)))
+            fallback_mix = scenario_mix.get(fallback_year, {})
+            if isinstance(fallback_mix, dict) and fallback_mix:
+                return dict(fallback_mix)
+        return {"other": 100.0}
+
+    return {str(k): float(v) for k, v in scenario_mix.items()}
 
 
 def _rebalance_slider(changed_key: str, slider_keys: list[str]) -> None:
@@ -156,7 +269,6 @@ def _rebalance_slider(changed_key: str, slider_keys: list[str]) -> None:
             weight = max(0.0, vals[k]) / other_sum
             st.session_state[k] = max(0.0, vals[k] + delta * weight)
 
-    # Final numerical cleanup to guarantee exact 100.
     total2 = float(sum(float(st.session_state.get(k, 0.0)) for k in slider_keys))
     if abs(total2 - target) > 1e-6:
         st.session_state[changed_key] = max(
@@ -187,6 +299,23 @@ def _find_duckdb(project_root: Path) -> Path | None:
     candidates = [
         project_root / "data" / "processed" / "speedlocal_times.duckdb",
         project_root / "duckdb" / "speedlocal_times.duckdb",
+    ]
+    return next((p for p in candidates if p.exists()), None)
+
+
+def _find_area_demand_xlsx(project_root: Path) -> Path | None:
+    candidates = [
+        project_root.parent / "eml" / "data" / "raw" / "AreaDemand.xlsx",
+        project_root / "data" / "raw" / "AreaDemand.xlsx",
+        Path.cwd() / "data" / "raw" / "AreaDemand.xlsx",
+    ]
+    return next((p for p in candidates if p.exists()), None)
+
+
+def _find_area_profile_duckdb(project_root: Path) -> Path | None:
+    candidates = [
+        project_root / "data" / "processed" / "area_demand_profiles.duckdb",
+        project_root / "data" / "processed" / "speedlocal_area_profiles.duckdb",
     ]
     return next((p for p in candidates if p.exists()), None)
 
@@ -368,7 +497,7 @@ def _load_preview_frame_duckdb(con) -> tuple[pd.DataFrame | None, dict[str, list
 
 def load_timesreport_scenarios(
     project_root: Path,
-) -> tuple[dict[str, dict[int, float]] | None, dict[str, dict[str, float]] | None, str]:
+) -> tuple[dict[str, dict[int, float]] | None, dict[str, dict[int, dict[str, float]]] | None, str]:
     csv_path = _find_timesreport_csv(project_root)
     if csv_path is None:
         return None, None, "fallback: compare_timesreport.csv saknas"
@@ -435,35 +564,24 @@ def load_timesreport_scenarios(
     for _, r in totals.iterrows():
         scenario_totals.setdefault(str(r["scen"]), {})[int(r["year"])] = float(r["twh"])
 
-    base_mix: dict[str, dict[str, float]] = {}
-    for scen, block in agg.groupby("scen"):
-        y2050 = block[block["year"] == 2050]
-        y_block = y2050 if not y2050.empty else block
-        total = float(y_block["twh"].sum())
-        if total <= 0 or y_block.empty:
-            continue
-        mix = {str(t): float(v) * 100.0 / total for t, v in y_block.groupby("tech")["twh"].sum().items()}
-        base_mix[str(scen)] = _normalize_mix_100(mix)
-
     if not scenario_totals:
         return None, None, "fallback: kunde inte bygga scenarios fran TIMESreport csv"
 
-    for scen in list(scenario_totals.keys()):
+    mix_rows = agg.rename(columns={"tech": "energy_key", "twh": "value_twh"})
+    base_mix = _build_base_mix_by_year(mix_rows, scenario_totals)
+    for scen, year_totals in scenario_totals.items():
         if scen not in base_mix:
-            base_mix[scen] = {"other": 100.0}
-
-    # Ensure all scenarios share the same tech key-space for UI consistency.
-    all_techs = sorted({k for v in base_mix.values() for k in v.keys()})
-    for scen in list(base_mix.keys()):
-        mixed = {k: float(base_mix[scen].get(k, 0.0)) for k in all_techs}
-        base_mix[scen] = _normalize_mix_100(mixed)
+            base_mix[scen] = {}
+        for year in year_totals.keys():
+            if int(year) not in base_mix[scen]:
+                base_mix[scen][int(year)] = {"other": 100.0}
 
     return scenario_totals, base_mix, f"loaded: {csv_path}"
 
 
 def load_timesreport_scenarios_duckdb(
     project_root: Path,
-) -> tuple[dict[str, dict[int, float]] | None, dict[str, dict[str, float]] | None, str]:
+) -> tuple[dict[str, dict[int, float]] | None, dict[str, dict[int, dict[str, float]]] | None, str]:
     if duckdb is None:
         return None, None, "duckdb package saknas"
     db_path, db_status = _resolve_duckdb(project_root)
@@ -504,30 +622,16 @@ def load_timesreport_scenarios_duckdb(
     for _, r in totals.iterrows():
         scenario_totals.setdefault(str(r["scen"]), {})[int(r["year"])] = float(r["value_twh"])
 
-    base_mix: dict[str, dict[str, float]] = {}
-    for scen, block in mix.groupby("scen"):
-        y2050 = block[block["year"] == 2050]
-        y_block = y2050 if not y2050.empty else block
-        total = float(y_block["value_twh"].sum())
-        if total <= 0:
-            continue
-        tmp = (
-            y_block.groupby("energy_key", as_index=False)["value_twh"]
-            .sum()
-            .set_index("energy_key")["value_twh"]
-            .to_dict()
-        )
-        base_mix[str(scen)] = _normalize_mix_100({k: (float(v) * 100.0 / total) for k, v in tmp.items()})
-
     if not scenario_totals:
         return None, None, "duckdb innehaller inga scenariototaler"
 
-    all_techs = sorted({k for v in base_mix.values() for k in v.keys()})
-    for scen in list(scenario_totals.keys()):
-        mix_sc = base_mix.get(scen, {"other": 100.0})
-        if not all_techs:
-            all_techs = ["other"]
-        base_mix[scen] = _normalize_mix_100({k: float(mix_sc.get(k, 0.0)) for k in all_techs})
+    base_mix = _build_base_mix_by_year(mix, scenario_totals)
+    for scen, year_totals in scenario_totals.items():
+        if scen not in base_mix:
+            base_mix[scen] = {}
+        for year in year_totals.keys():
+            if int(year) not in base_mix[scen]:
+                base_mix[scen][int(year)] = {"other": 100.0}
 
     return scenario_totals, base_mix, f"{db_status}; {mix_status}"
 
@@ -555,6 +659,239 @@ def load_area_factors_duckdb(project_root: Path) -> tuple[dict[str, float] | Non
         if pd.notna(r["energy_key"]) and pd.notna(r["km2_per_twh"])
     }
     return (out if out else None), f"{db_status}; loaded area_factors"
+
+
+def _area_metric_kind(metric: str) -> str | None:
+    metric_low = str(metric).lower()
+    if "gwh/km2" in metric_low:
+        return "gwh_per_km2"
+    if "w/m2" in metric_low:
+        return "w_per_m2"
+    return None
+
+
+def _area_metric_label(metric: str) -> str:
+    kind = _area_metric_kind(metric)
+    if kind == "gwh_per_km2":
+        return "Production density"
+    if kind == "w_per_m2":
+        return "Power density"
+    return str(metric).strip()
+
+
+def _area_profile_source_name(header: str, previous_header: str) -> str:
+    clean = str(header).strip()
+    if clean and not clean.lower().startswith("unnamed:"):
+        return clean
+    return previous_header.strip()
+
+
+def _area_tech_from_text(text: str) -> str | None:
+    low = str(text).lower().strip()
+    if not low or low.startswith("sources:"):
+        return None
+    if any(token in low for token in ["hydro", "hyrdo", "hyrd", "run-of-river", "reservoir"]):
+        return "hydro"
+    if "wind" in low:
+        return "wind"
+    if "solar" in low:
+        return "solar"
+    if "smr" in low or "nuclear" in low:
+        return "nuclear"
+    if "biomass" in low or low.startswith("bio"):
+        return "bio"
+    if "gas" in low:
+        return "gas"
+    if "coal" in low:
+        return "coal"
+    if "oil" in low:
+        return "oil"
+    return None
+
+
+def _extract_area_numbers(text: str) -> list[float]:
+    cleaned = str(text).replace(",", ".")
+    return [float(token) for token in re.findall(r"\d+(?:\.\d+)?", cleaned)]
+
+
+def _representative_area_value(value: object) -> float | None:
+    text = str(value).strip()
+    if not text or text.lower() == "nan":
+        return None
+    nums = _extract_area_numbers(text)
+    if not nums:
+        return None
+    if "±" in text:
+        return nums[0]
+    if ("-" in text or "–" in text) and len(nums) >= 2:
+        lo = min(nums[0], nums[1])
+        hi = max(nums[0], nums[1])
+        if lo > 0 and hi > 0:
+            return math.sqrt(lo * hi)
+        return (lo + hi) / 2.0
+    return nums[0]
+
+
+def _area_value_to_km2_per_twh(value: object, metric: str) -> float | None:
+    rep = _representative_area_value(value)
+    if rep is None or rep <= 0:
+        return None
+    kind = _area_metric_kind(metric)
+    if kind == "gwh_per_km2":
+        return 1000.0 / rep
+    if kind == "w_per_m2":
+        return 1000.0 / (rep * (HOURS_PER_YEAR / 1000.0))
+    return None
+
+
+def _recommended_area_profile_id(area_profiles: dict[str, dict[str, object]]) -> str | None:
+    for profile_id, profile in area_profiles.items():
+        if "norway specific" in str(profile.get("label", "")).lower():
+            return profile_id
+    return next(iter(area_profiles.keys()), None)
+
+
+def _area_factor_source_label(source_key: str, profile_label: str) -> str:
+    if source_key == "profile":
+        return profile_label
+    if source_key == "duckdb":
+        return "DuckDB area_factors"
+    if source_key == "fallback_default":
+        return "Intern standard-fallback"
+    if source_key == "missing_generic":
+        return "Generisk fallback (1.0 km2/TWh)"
+    return "Okand proveniens"
+
+
+@st.cache_data(show_spinner=False)
+def load_area_factor_profiles_xlsx(project_root: Path) -> tuple[dict[str, dict[str, object]], str]:
+    xlsx_path = _find_area_demand_xlsx(project_root)
+    if xlsx_path is None:
+        return {}, "AreaDemand.xlsx saknas"
+
+    try:
+        raw = pd.read_excel(xlsx_path, sheet_name=0)
+    except Exception as exc:
+        return {}, f"kunde inte lasa AreaDemand.xlsx ({exc})"
+    if raw.empty or raw.shape[0] < 2 or raw.shape[1] < 3:
+        return {}, "AreaDemand.xlsx saknar profiler"
+
+    columns = [str(c).strip() for c in raw.columns]
+    metric_row = raw.iloc[0]
+    data = raw.iloc[1:].copy()
+    profiles: dict[str, dict[str, object]] = {}
+    previous_source = ""
+
+    for idx in range(2, len(columns)):
+        metric = str(metric_row.iloc[idx]).strip()
+        kind = _area_metric_kind(metric)
+        if kind is None:
+            continue
+
+        source_name = _area_profile_source_name(columns[idx], previous_source)
+        if source_name:
+            previous_source = source_name
+        label = source_name or f"AreaDemand kolumn {idx + 1}"
+        label = f"{label} [{_area_metric_label(metric)}]"
+
+        factors = _default_area_factors()
+        factor_sources = {energy_key: "fallback_default" for energy_key in factors}
+        coverage: list[str] = []
+        for _, row in data.iterrows():
+            tech = _area_tech_from_text(row.iloc[0])
+            if tech is None:
+                first_cell = str(row.iloc[0]).strip().lower()
+                if first_cell.startswith("sources:"):
+                    break
+                continue
+            if tech in coverage:
+                continue
+            km2_per_twh = _area_value_to_km2_per_twh(row.iloc[idx], metric)
+            if km2_per_twh is None:
+                continue
+            factors[tech] = float(km2_per_twh)
+            factor_sources[tech] = "profile"
+            coverage.append(tech)
+
+        if coverage:
+            profiles[f"xlsx_{idx}"] = {
+                "label": label,
+                "source_name": source_name or f"AreaDemand kolumn {idx + 1}",
+                "metric": metric,
+                "factors": factors,
+                "factor_sources": factor_sources,
+                "coverage": coverage,
+                "path": str(xlsx_path),
+            }
+
+    if not profiles:
+        return {}, "AreaDemand.xlsx kunde inte tolkas till profiler"
+    return profiles, f"loaded AreaDemand-profiler: {len(profiles)} från {xlsx_path}"
+
+
+@st.cache_data(show_spinner=False)
+def load_area_factor_profiles_sidecar(project_root: Path) -> tuple[dict[str, dict[str, object]], str]:
+    if duckdb is None:
+        return {}, "duckdb package saknas"
+    db_path = _find_area_profile_duckdb(project_root)
+    if db_path is None:
+        return {}, "area profile duckdb saknas"
+
+    try:
+        con = duckdb.connect(str(db_path), read_only=True)
+        if not _duckdb_has_object(con, "area_profiles") or not _duckdb_has_object(con, "area_factor_profiles"):
+            con.close()
+            return {}, f"area profile duckdb saknar tabeller ({db_path})"
+
+        factor_cols = set(_duckdb_columns(con, "area_factor_profiles"))
+        value_source_sql = "value_source" if "value_source" in factor_cols else "'profile_unknown' AS value_source"
+
+        profiles_df = con.execute(
+            """
+            SELECT profile_id, label, source_name, metric, source_path
+            FROM area_profiles
+            ORDER BY sort_order, profile_id
+            """
+        ).df()
+        factors_df = con.execute(
+            f"""
+            SELECT profile_id, energy_key, km2_per_twh, {value_source_sql}
+            FROM area_factor_profiles
+            ORDER BY profile_id, energy_key
+            """
+        ).df()
+        con.close()
+    except Exception as exc:
+        return {}, f"kunde inte lasa area profile duckdb ({exc})"
+
+    profiles: dict[str, dict[str, object]] = {}
+    for _, row in profiles_df.iterrows():
+        profile_id = str(row["profile_id"]).strip()
+        if not profile_id:
+            continue
+        profiles[profile_id] = {
+            "label": str(row["label"]).strip(),
+            "source_name": str(row["source_name"]).strip(),
+            "metric": str(row["metric"]).strip(),
+            "factors": _default_area_factors(),
+            "factor_sources": {},
+            "coverage": [],
+            "path": str(row["source_path"]).strip(),
+        }
+    for _, row in factors_df.iterrows():
+        profile_id = str(row["profile_id"]).strip()
+        energy_key = str(row["energy_key"]).strip()
+        if profile_id not in profiles or not energy_key:
+            continue
+        profiles[profile_id]["factors"][energy_key] = float(row["km2_per_twh"])
+        source_key = str(row["value_source"]).strip() or "profile_unknown"
+        profiles[profile_id]["factor_sources"][energy_key] = source_key
+        if source_key == "profile":
+            profiles[profile_id]["coverage"].append(energy_key)
+
+    if not profiles:
+        return {}, f"area profile duckdb tom ({db_path})"
+    return profiles, f"loaded area profile duckdb: {db_path}"
 
 
 def load_timesreport_preview(
@@ -596,6 +933,77 @@ def load_timesreport_preview(
 
 
 @st.cache_data(show_spinner=False)
+def load_scenario_metadata_duckdb(project_root: Path) -> tuple[dict[str, str], dict[str, str], str]:
+    if duckdb is None:
+        return {}, {}, "duckdb package saknas"
+    db_path, db_status = _resolve_duckdb(project_root)
+    if db_path is None:
+        return {}, {}, db_status
+
+    descriptions: dict[str, str] = {}
+    source_details: dict[str, str] = {}
+    loaded_parts: list[str] = []
+    try:
+        con = duckdb.connect(str(db_path), read_only=True)
+
+        if _duckdb_has_object(con, "scen_desc"):
+            rows = con.execute(
+                """
+                SELECT scen, description
+                FROM scen_desc
+                WHERE scen IS NOT NULL
+                """
+            ).df()
+            descriptions = {
+                str(r["scen"]): str(r["description"]).strip()
+                for _, r in rows.iterrows()
+                if pd.notna(r["scen"]) and pd.notna(r["description"]) and str(r["description"]).strip()
+            }
+            if descriptions:
+                loaded_parts.append("loaded scen_desc")
+
+        if _duckdb_has_object(con, "scenario_model") and _duckdb_has_object(con, "source_files"):
+            rows = con.execute(
+                """
+                SELECT
+                    sm.scen,
+                    sf.filename,
+                    sf.load_timestamp
+                FROM scenario_model AS sm
+                LEFT JOIN source_files AS sf
+                  ON sm.file_id = sf.file_id
+                WHERE sm.scen IS NOT NULL
+                """
+            ).df()
+            for _, r in rows.iterrows():
+                scen = str(r["scen"]).strip()
+                if not scen:
+                    continue
+                parts: list[str] = []
+                if pd.notna(r["filename"]) and str(r["filename"]).strip():
+                    parts.append(str(r["filename"]).strip())
+                ts = r["load_timestamp"]
+                if pd.notna(ts):
+                    ts_str = ts.strftime("%Y-%m-%d %H:%M") if hasattr(ts, "strftime") else str(ts)
+                    parts.append(ts_str)
+                if parts:
+                    source_details[scen] = " | ".join(parts)
+            if source_details:
+                loaded_parts.append("loaded source_files")
+    except Exception as exc:
+        return {}, {}, f"{db_status}; scenario metadata misslyckades ({exc})"
+    finally:
+        try:
+            con.close()
+        except Exception:
+            pass
+
+    if not loaded_parts:
+        return descriptions, source_details, f"{db_status}; scenario metadata saknas"
+    return descriptions, source_details, f"{db_status}; {'; '.join(loaded_parts)}"
+
+
+@st.cache_data(show_spinner=False)
 def load_gc4(base_dir: Path) -> pd.DataFrame:
     pts = pd.read_csv(base_dir / "bornholm_points_with_context_gc4.csv")
     scores = pd.read_csv(base_dir / "bornholm_r8_factor_scores_gc4.csv")
@@ -606,54 +1014,19 @@ def load_gc4(base_dir: Path) -> pd.DataFrame:
 
 @st.cache_data(show_spinner=False)
 def load_area_factors(project_root: Path) -> tuple[dict[str, float], str]:
-    candidates = [
-        project_root.parent / "eml" / "data" / "raw" / "AreaDemand.xlsx",
-        project_root / "data" / "raw" / "AreaDemand.xlsx",
-        Path.cwd() / "data" / "raw" / "AreaDemand.xlsx",
-    ]
-    xlsx_path = next((p for p in candidates if p.exists()), None)
-    base = {
-        "wind": DEFAULT_AREA_FACTORS["wind"],
-        "solar": DEFAULT_AREA_FACTORS["solar"],
-        "nuclear": DEFAULT_AREA_FACTORS["nuclear"],
-        "hydro": 1.20,
-        "bio": 1.40,
-        "coal": 0.90,
-        "gas": 0.60,
-        "oil": 0.70,
-        "renewables": 1.30,
-        "electricity": 1.00,
-        "demand": 1.00,
-        "other": DEFAULT_AREA_FACTOR_GENERIC,
-    }
-    if xlsx_path is None:
-        return base, "fallback: AreaDemand.xlsx saknas"
-    try:
-        raw = pd.read_excel(xlsx_path, sheet_name=0)
-    except Exception as exc:
-        return base, f"fallback: kunde inte lasa excel ({exc})"
-    if raw.empty:
-        return base, "fallback: excel tom"
-
-    df = raw.copy()
-    df.columns = [str(c).strip() for c in df.columns]
-    cols = list(df.columns)
-    tech_col = _find_first_col(cols, ["tech", "technology", "energi", "energy", "type", "slag"])
-    area_col = _find_first_col(cols, ["area", "land", "km2", "km^2", "demand", "factor"])
-    if tech_col is None or area_col is None:
-        return base, "fallback: kunde inte identifiera teknik-/areakolumn"
-
-    work = df[[tech_col, area_col]].copy()
-    work[tech_col] = work[tech_col].astype(str).str.lower().str.strip()
-    work[area_col] = pd.to_numeric(work[area_col], errors="coerce")
-    work = work.dropna(subset=[area_col])
-
-    factors = base.copy()
-    for target, aliases in ENERGY_ALIASES.items():
-        match = work[work[tech_col].apply(lambda v: any(a in v for a in aliases))]
-        if not match.empty:
-            factors[target] = float(match[area_col].iloc[0])
-    return factors, "loaded"
+    profiles, status = load_area_factor_profiles_sidecar(project_root)
+    if profiles:
+        profile_id = _recommended_area_profile_id(profiles)
+        if profile_id is not None:
+            profile = profiles[profile_id]
+            return dict(profile["factors"]), f"{status}; rekommenderad profil: {profile['label']}"
+    profiles, status = load_area_factor_profiles_xlsx(project_root)
+    if profiles:
+        profile_id = _recommended_area_profile_id(profiles)
+        if profile_id is not None:
+            profile = profiles[profile_id]
+            return dict(profile["factors"]), f"{status}; rekommenderad profil: {profile['label']}"
+    return {}, f"inga AreaDemand-profiler hittades ({status})"
 
 
 def _hex_polygon(hex_id: str):
@@ -698,6 +1071,15 @@ def build_map_frame(df: pd.DataFrame) -> pd.DataFrame:
     work["polygon"] = polys
     work["hex_area_km2"] = areas
     return work
+
+
+@st.cache_data(show_spinner=False)
+def build_suitability_frame(df: pd.DataFrame) -> pd.DataFrame:
+    work = df[["hex_id", "F1", "F2", "F3", "F4", "F5"]].copy()
+    for tech in SUITABILITY_TECHS:
+        work[f"s_{tech}"] = suitability(work, tech)
+    keep_cols = ["hex_id"] + [f"s_{tech}" for tech in SUITABILITY_TECHS]
+    return work[keep_cols]
 
 
 def _norm(s: pd.Series) -> pd.Series:
@@ -747,6 +1129,8 @@ if h3 is None:
 
 gc4 = load_gc4(gc4_base)
 map_df = build_map_frame(gc4).dropna(subset=["lat", "lon", "polygon"]).copy()
+suitability_scores = build_suitability_frame(gc4)
+analysis_df = map_df.merge(suitability_scores, on="hex_id", how="left")
 times_totals_db, times_mix_db, times_status_db = load_timesreport_scenarios_duckdb(project_root)
 times_totals_csv, times_mix_csv, times_status_csv = load_timesreport_scenarios(project_root)
 times_totals = times_totals_db if times_totals_db is not None else times_totals_csv
@@ -754,16 +1138,46 @@ times_mix = times_mix_db if times_mix_db is not None else times_mix_csv
 times_status = times_status_db if times_totals_db is not None else times_status_csv
 
 area_factors_db, area_status_db = load_area_factors_duckdb(project_root)
-area_factors_csv, area_status_csv = load_area_factors(project_root)
-area_factors = area_factors_db if area_factors_db is not None else area_factors_csv
-area_status = area_status_db if area_factors_db is not None else area_status_csv
+area_profiles_sidecar, area_profiles_sidecar_status = load_area_factor_profiles_sidecar(project_root)
+area_profiles_xlsx, area_profiles_xlsx_status = load_area_factor_profiles_xlsx(project_root)
+area_profiles_source = area_profiles_sidecar if area_profiles_sidecar else area_profiles_xlsx
+area_profiles_status = area_profiles_sidecar_status if area_profiles_sidecar else area_profiles_xlsx_status
+
+area_profile_catalog: dict[str, dict[str, object]] = {}
+if area_factors_db is not None:
+    area_profile_catalog["duckdb"] = {
+        "label": "DuckDB area_factors",
+        "factors": area_factors_db,
+        "status": area_status_db,
+        "factor_sources": {energy_key: "duckdb" for energy_key in area_factors_db.keys()},
+        "coverage": sorted(area_factors_db.keys()),
+    }
+for profile_id, profile in area_profiles_source.items():
+    area_profile_catalog[profile_id] = {
+        "label": str(profile["label"]),
+        "factors": dict(profile["factors"]),
+        "status": f"{area_profiles_status}; {profile['metric']}",
+        "factor_sources": dict(profile.get("factor_sources", {})),
+        "coverage": list(profile["coverage"]),
+    }
+if not area_profile_catalog:
+    st.error("Inga AreaDemand-profiler hittades. Bygg eller peka ut AreaDemand-profiler innan appen startar.")
+    st.stop()
 
 scenario_totals = times_totals if times_totals is not None else SCENARIO_TOTALS_TWH
 base_mix_map = times_mix if times_mix is not None else BASE_MIX_PCT
 times_preview_df, times_preview_summary, times_preview_status = load_timesreport_preview(project_root)
+scenario_desc_map, scenario_source_map, scenario_meta_status = load_scenario_metadata_duckdb(project_root)
 
 st.sidebar.header("Scenario")
-scenario = st.sidebar.selectbox("Valj framtidsbild", list(scenario_totals.keys()), index=0)
+scenario_options = list(scenario_totals.keys())
+scenario = st.sidebar.selectbox(
+    "Valj framtidsbild",
+    scenario_options,
+    index=0,
+    format_func=lambda scen: _scenario_display_label(str(scen), scenario_desc_map),
+)
+scenario_label = _scenario_display_label(str(scenario), scenario_desc_map)
 st.sidebar.subheader("Landskapsanalys")
 if GEOCONTEXT_APP_URL:
     st.sidebar.link_button("Oppna fristaende geocontext-app", GEOCONTEXT_APP_URL, use_container_width=True)
@@ -774,11 +1188,43 @@ preferred_years = [y for y in [2030, 2040, 2050] if y in scenario_years]
 year_options = preferred_years if preferred_years else (scenario_years if scenario_years else [2050])
 default_year = 2050 if 2050 in year_options else year_options[-1]
 if len(year_options) <= 1:
-    year = st.sidebar.selectbox("Ar", options=year_options, index=0)
+    year = st.sidebar.selectbox(
+        "Scenarioar (TIMES)",
+        options=year_options,
+        index=0,
+        help="Valet styr vilket ar i TIMES-scenariot som används for total TWh, basmix och markansprak.",
+    )
 else:
-    year = st.sidebar.select_slider("Ar", options=year_options, value=default_year)
+    year = st.sidebar.select_slider(
+        "Scenarioar (TIMES)",
+        options=year_options,
+        value=default_year,
+        help="Valet styr vilket ar i TIMES-scenariot som används for total TWh, basmix och markansprak.",
+    )
+st.sidebar.caption("Detta ar inte kalenderaret i kartan, utan vilket scenarioar fran TIMES-data som driver analysen.")
 base_total = float(scenario_totals.get(scenario, {}).get(year, 0.0))
-base_mix = base_mix_map.get(scenario, {"other": 100.0})
+base_mix = _resolve_base_mix_for_year(base_mix_map, str(scenario), int(year))
+
+st.sidebar.subheader("Markintensitet")
+area_profile_options = list(area_profile_catalog.keys())
+default_area_profile = _recommended_area_profile_id(area_profiles_source) or (
+    "duckdb" if "duckdb" in area_profile_catalog else area_profile_options[0]
+)
+default_area_profile_index = (
+    area_profile_options.index(default_area_profile) if default_area_profile in area_profile_options else 0
+)
+area_profile_id = st.sidebar.selectbox(
+    "AreaDemand-kalla",
+    options=area_profile_options,
+    index=default_area_profile_index,
+    format_func=lambda profile_id: str(area_profile_catalog[profile_id]["label"]),
+)
+st.sidebar.caption("Production density = arsproduktion per area. Power density = medeleffekt per area, omraknad till arsproduktion.")
+area_profile = area_profile_catalog[area_profile_id]
+area_factors = dict(area_profile["factors"])
+area_status = str(area_profile["status"])
+area_profile_label = str(area_profile["label"])
+area_factor_sources = dict(area_profile.get("factor_sources", {}))
 
 st.sidebar.subheader("Utbyggnadszon")
 zone_mode = st.sidebar.toggle("Tillat class_km 1-7 ocksa", value=False)
@@ -805,27 +1251,77 @@ if st.session_state.get(ctx_key) != mix_ctx:
     st.session_state[ctx_key] = mix_ctx
     for tech in tech_keys:
         st.session_state[f"mix_{tech}"] = float(base_mix.get(tech, 0.0))
-
+slider_state_keys = [f"mix_{tech}" for tech in tech_keys]
+st.sidebar.caption("Sliders ar lankade och halls ihop till totalt 100%. Startvarden kommer fran valt scenarioar.")
 for tech in tech_keys:
     key = f"mix_{tech}"
-    st.sidebar.slider(
-        _human_tech_name(tech),
-        0.0,
-        100.0,
-        float(st.session_state.get(key, base_mix.get(tech, 0.0))),
-        0.1,
-        key=key,
-        on_change=_rebalance_slider,
-        args=(key, [f"mix_{t}" for t in tech_keys]),
-    )
+    slider_kwargs = {
+        "min_value": 0.0,
+        "max_value": 100.0,
+        "step": 0.1,
+        "key": key,
+        "on_change": _rebalance_slider,
+        "args": (key, slider_state_keys),
+    }
+    if key not in st.session_state:
+        slider_kwargs["value"] = float(base_mix.get(tech, 0.0))
+    st.sidebar.slider(_human_tech_name(tech), **slider_kwargs)
 
-mix_pct = {tech: float(st.session_state.get(f"mix_{tech}", 0.0)) for tech in tech_keys}
+mix_raw = {tech: float(st.session_state.get(f"mix_{tech}", 0.0)) for tech in tech_keys}
+mix_pct = _normalize_mix_100(mix_raw)
+st.sidebar.caption(f"Summa elmix: {sum(mix_raw.values()):.1f}%")
 twh = {tech: base_total * mix_pct[tech] / 100.0 for tech in tech_keys}
 area_need = {tech: twh[tech] * float(area_factors.get(tech, DEFAULT_AREA_FACTOR_GENERIC)) for tech in tech_keys}
 total_area_need = float(sum(area_need.values()))
+area_factor_detail_rows: list[dict[str, float | str]] = []
+selected_profile_fallback_techs: list[str] = []
+selected_profile_direct_techs: list[str] = []
+for tech in tech_keys:
+    source_key = str(area_factor_sources.get(tech, "missing_generic"))
+    if source_key in {"fallback_default", "missing_generic"}:
+        selected_profile_fallback_techs.append(tech)
+    else:
+        selected_profile_direct_techs.append(tech)
+    area_factor_detail_rows.append(
+        {
+            "energy_key": tech,
+            "Energislag": _human_tech_name(tech),
+            "km2_per_twh": float(area_factors.get(tech, DEFAULT_AREA_FACTOR_GENERIC)),
+            "Kalla": _area_factor_source_label(source_key, area_profile_label),
+        }
+    )
+area_factor_detail_df = pd.DataFrame(area_factor_detail_rows)
+area_sensitivity_rows: list[dict[str, float | str]] = []
+for profile_id, profile in area_profile_catalog.items():
+    profile_factors = dict(profile["factors"])
+    profile_sources = dict(profile.get("factor_sources", {}))
+    profile_total = float(
+        sum(twh[tech] * float(profile_factors.get(tech, DEFAULT_AREA_FACTOR_GENERIC)) for tech in tech_keys)
+    )
+    fallback_techs = [
+        _human_tech_name(tech)
+        for tech in tech_keys
+        if str(profile_sources.get(tech, "missing_generic")) in {"fallback_default", "missing_generic"}
+    ]
+    area_sensitivity_rows.append(
+        {
+            "profile_id": profile_id,
+            "profile": str(profile["label"]),
+            "total_km2": profile_total,
+            "fallback_count": len(fallback_techs),
+            "fallback_techs": ", ".join(fallback_techs) if fallback_techs else "",
+        }
+    )
+area_sensitivity_df = pd.DataFrame(area_sensitivity_rows).sort_values("total_km2").reset_index(drop=True)
+if not area_sensitivity_df.empty:
+    area_sensitivity_df["delta_vs_selected_pct"] = np.where(
+        total_area_need > 0,
+        100.0 * (area_sensitivity_df["total_km2"] / total_area_need - 1.0),
+        0.0,
+    )
 
 allowed_clusters = [0] + selected_extra_clusters
-build = map_df[map_df["class_km"].isin(allowed_clusters)].copy()
+build = analysis_df[analysis_df["class_km"].isin(allowed_clusters)].copy()
 if build.empty:
     st.error("Inga hexagons hittades i vald utbyggnadszon.")
     st.stop()
@@ -838,7 +1334,6 @@ selection_mode = st.sidebar.radio("Urvalsmetod for hexagoner", options=["Auto", 
 alloc_parts = []
 for tech in tech_keys:
     tmp = build.copy()
-    tmp[f"s_{tech}"] = suitability(tmp, tech)
     n = int(math.ceil(area_need[tech] / max(1e-9, hex_area)))
     if n <= 0:
         continue
@@ -865,7 +1360,6 @@ if selection_mode == "Manuellt":
     weighted = pd.Series(np.zeros(len(manual_df)), index=manual_df.index)
     for tech in tech_keys:
         s_col = f"s_{tech}"
-        manual_df[s_col] = suitability(manual_df, tech)
         weighted += manual_df[s_col] * (float(twh.get(tech, 0.0)) / total_twh)
     manual_df["s_total"] = weighted
     manual_df = manual_df.sort_values("s_total", ascending=False)
@@ -904,22 +1398,41 @@ if selected_mask.any():
     )
 
 c1, c2, c3, c4 = st.columns(4)
-c1.metric("Scenario", scenario)
+c1.metric("Scenario", scenario_label)
 c2.metric("Ar", str(year))
 c3.metric("Markansprak (km2)", f"{total_area_need:.1f}")
 c4.metric("Hex behov (vald zon)", f"{hex_need_total}")
 st.caption(
-    "AreaDemand-status: "
+    f"AreaDemand-profil: `{area_profile_label}`. AreaDemand-status: "
     f"`{area_status}`. Faktorer km2/TWh -> "
     + ", ".join([f"{_human_tech_name(k)}={float(area_factors.get(k, DEFAULT_AREA_FACTOR_GENERIC)):.3f}" for k in tech_keys])
 )
+st.info(
+    "AreaDemand-transparens: "
+    f"{len(selected_profile_direct_techs)} av {len(tech_keys)} aktiva energislag har direkta kallvarden i vald profil. "
+    f"{len(selected_profile_fallback_techs)} anvander fallback."
+)
+if selected_profile_fallback_techs:
+    st.warning(
+        "Vald AreaDemand-profil saknar direkta kallvarden for: "
+        + ", ".join(_human_tech_name(tech) for tech in selected_profile_fallback_techs)
+        + ". Dessa rader anvander fallback-varden i berakningen."
+    )
 st.caption(f"TIMESreport-status: `{times_status}`.")
+if scenario in scenario_desc_map or scenario in scenario_source_map:
+    meta_parts = [f"Kod: {scenario}"]
+    if scenario in scenario_source_map:
+        meta_parts.append(f"Kalldata: {scenario_source_map[scenario]}")
+    st.caption("DuckDB-scenariometadata: " + ". ".join(meta_parts) + f". (`{scenario_meta_status}`)")
 st.caption(f"Utbyggnadszon: class_km {sorted(allowed_clusters)}. Urvalsmetod: {selection_mode}.")
 with st.expander("TIMESreport output preview", expanded=False):
     st.caption(f"Preview-status: `{times_preview_status}`")
     if times_preview_summary:
         if "scen" in times_preview_summary:
-            st.write("Scenarier:", ", ".join(times_preview_summary["scen"]))
+            scen_labels = [
+                _scenario_display_label(str(scen), scenario_desc_map) for scen in times_preview_summary["scen"]
+            ]
+            st.write("Scenarier:", ", ".join(scen_labels))
         if "techgroup" in times_preview_summary:
             st.write("Techgroup (unika):", ", ".join(times_preview_summary["techgroup"]))
         if "comgroup" in times_preview_summary:
@@ -928,6 +1441,24 @@ with st.expander("TIMESreport output preview", expanded=False):
             st.write("Units (unika):", ", ".join(times_preview_summary["units"]))
     if times_preview_df is not None:
         st.dataframe(times_preview_df, use_container_width=True, height=260)
+with st.expander("AreaDemand sensitivity", expanded=False):
+    if area_sensitivity_df.empty:
+        st.caption("Inga alternativa AreaDemand-profiler hittades.")
+    else:
+        st.caption("Jämför totalt markanspråk för vald scenario/mix över alla tillgängliga AreaDemand-antaganden.")
+        st.dataframe(
+            area_sensitivity_df[["profile", "total_km2", "delta_vs_selected_pct", "fallback_count", "fallback_techs"]]
+            .round(2),
+            use_container_width=True,
+            height=260,
+        )
+with st.expander("AreaDemand transparens", expanded=False):
+    st.caption("Visar exakt vilka faktorer som kommer fran vald kalla och vilka som kommer fran fallback.")
+    st.dataframe(
+        area_factor_detail_df[["Energislag", "km2_per_twh", "Kalla"]].round(3),
+        use_container_width=True,
+        height=220,
+    )
 if selection_mode == "Manuellt":
     covered_area = manual_selected_count * hex_area
     st.caption(
@@ -981,5 +1512,8 @@ baseline_df = (
     .rename_axis("year")
     .reset_index()
     .melt(id_vars="year", var_name="scenario", value_name="total_twh")
+)
+baseline_df["scenario"] = baseline_df["scenario"].astype(str).map(
+    lambda scen: _scenario_display_label(scen, scenario_desc_map)
 )
 st.line_chart(baseline_df, x="year", y="total_twh", color="scenario", use_container_width=True)

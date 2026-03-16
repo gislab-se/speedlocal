@@ -63,8 +63,50 @@ Move from file-based integration to database-backed integration using DuckDB:
   - Fall back to CSV/existing logic if DB unavailable
 - Keep UI behavior unchanged for users (same controls, better data source).
 
+4. **Future UX step: Geocontext companion app**
+- Build a separate Streamlit app focused on geocontext (cluster definitions, factor logic, geospatial context).
+- Add a clear link/button in the energy app to open the geocontext app.
+- Purpose: when users have questions about clusters/geocontext assumptions, they can jump to a dedicated explainer/analysis view without leaving the workflow.
+
 ## Notes / Risks
 
 - `duckdb` Python package is currently missing in `.venv`.
 - ETL and app code can be added now, but runtime DB steps require installing `duckdb`.
 
+## Session Continuity Note (Short)
+
+Use this section if we need to resume quickly in a later session.
+
+1. Technical summary
+- Current operational flow in this repo is primarily:
+  - `TIMESreport CSV -> Python ETL -> DuckDB -> Streamlit`
+- App supports dynamic energy categories, linked sliders, and DB-first data loading with CSV fallback.
+
+2. Integration spec (minimum)
+- Input:
+  - `timesreport_raw` (from `compare_timesreport.csv`)
+  - `area_factors` (from `AreaDemand.xlsx`)
+- Core filters:
+  - `topic = 'energy'`
+  - `attr IN ('f_out', 'comnet')`
+  - `timeslice = 'annual'`
+- Core outputs:
+  - `v_energy_mix(scen, year, energy_key, value_twh)`
+  - `v_energy_totals(scen, year, total_twh)`
+
+3. Most relevant TIMES columns for landscape allocation
+- Core:
+  - `scen, year, topic, attr, value, units`
+  - `techgroup, comgroup, prc, com` (for technology mapping)
+- Context:
+  - `timeslice` (annual selection)
+  - `sector` (sector-specific analyses)
+- Usually secondary:
+  - `regfrom, regto, vntg`
+
+4. Practical status
+- If `filename` in source data is `mock_timesreport.gdx`, we are still on enhanced dummy data.
+- To switch to real data:
+  - Replace `data/external/timesreport/compare_timesreport.csv`
+  - Rebuild DB: `.\.venv\Scripts\python script\build_times_duckdb.py`
+  - Restart Streamlit app.
