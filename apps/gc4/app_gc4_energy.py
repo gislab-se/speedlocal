@@ -890,7 +890,7 @@ def _find_hex_points(project_root: Path) -> Path | None:
         project_root / "jyp_note_book_geocontext" / "bornholm_points_with_context_gc4.csv",
         project_root / "data" / "gc4" / "bornholm_points_with_context_gc4.csv",
     ]
-    return next((p for p in candidates if p.exists()), None)
+    return next((p for p in candidates if p is not None and p.exists()), None)
 
 
 def _find_hex_scores(project_root: Path) -> Path | None:
