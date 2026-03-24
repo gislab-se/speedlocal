@@ -2115,6 +2115,7 @@ st.sidebar.caption(
         "Literature sources are only shown in the fact box below.",
     )
 )
+area_mode_box = st.sidebar.container()
 
 if wind_placement_options:
     st.sidebar.subheader(_tr("Vindplacering", "Wind placement"))
@@ -2267,7 +2268,91 @@ active_times_tech_df = selected_times_raw_mix_df[selected_times_raw_mix_df["sele
 strict_missing_active_df = active_times_tech_df[active_times_tech_df["selected_km2_per_twh"].isna()].copy()
 strict_supported_active_df = active_times_tech_df[active_times_tech_df["selected_km2_per_twh"].notna()].copy()
 strict_ready = strict_missing_active_df.empty
-total_area_need = float(strict_supported_active_df["area_need_km2"].sum()) if strict_ready else float("nan")
+strict_total_area_need = float(strict_supported_active_df["area_need_km2"].sum()) if strict_ready else float("nan")
+
+supported_twh = float(strict_supported_active_df["selected_twh"].sum()) if not strict_supported_active_df.empty else 0.0
+unsupported_twh = float(strict_missing_active_df["selected_twh"].sum()) if not strict_missing_active_df.empty else 0.0
+active_total_twh = float(active_times_tech_df["selected_twh"].sum()) if not active_times_tech_df.empty else 0.0
+supported_share_pct = 100.0 * supported_twh / max(active_total_twh, 1e-9) if active_total_twh > 0 else 0.0
+unsupported_share_pct = 100.0 * unsupported_twh / max(active_total_twh, 1e-9) if active_total_twh > 0 else 0.0
+
+blocking_times_df = (
+    strict_missing_active_df[
+        [
+            "times_tech_display",
+            "times_tech",
+            "energy_key",
+            "selected_twh",
+            "Status",
+            "Motivering",
+        ]
+    ]
+    .rename(
+        columns={
+            "times_tech_display": "TIMES-teknik",
+            "energy_key": "Appkategori",
+            "selected_twh": "TWh",
+        }
+    )
+    .copy()
+)
+if not blocking_times_df.empty:
+    blocking_times_df["Andel %"] = 100.0 * blocking_times_df["TWh"] / max(active_total_twh, 1e-9)
+blocking_labels = sorted(
+    set(
+        strict_missing_active_df["times_tech_display"].fillna("").astype(str).str.strip().replace("", np.nan).dropna().tolist()
+    )
+)
+blocking_label_text = ", ".join(blocking_labels)
+
+with area_mode_box:
+    if strict_ready:
+        st.caption(
+            _tr(
+                "Nuvarande mix har fullt workbook-stöd för markintensitet.",
+                "The current mix has full workbook support for land intensity.",
+            )
+        )
+        supported_only_test_mode = False
+    else:
+        st.caption(
+            _tr(
+                f"{supported_share_pct:.0f}% av nuvarande TWh har workbook-stöd. Resten saknar ännu tydlig markintensitet.",
+                f"{supported_share_pct:.0f}% of the current TWh has workbook support. The rest still lacks clear land intensity.",
+            )
+        )
+        supported_only_test_mode = st.toggle(
+            _tr(
+                "Testläge: använd bara stödda TIMES-tekniker",
+                "Test mode: use supported TIMES technologies only",
+            ),
+            value=False,
+            disabled=strict_supported_active_df.empty,
+            key="supported_times_only_test_mode",
+            help=_tr(
+                "Kartan och markanspråket beräknas då bara på den del av mixen som har stöd i AreaDemand.xlsx. "
+                "Bra för test och mötesdemo, men inte som slutligt resultat.",
+                "The map and land demand are then calculated only from the part of the mix that is supported in AreaDemand.xlsx. "
+                "Useful for testing and meetings, but not as a final result.",
+            ),
+        )
+        st.caption(
+            _tr(
+                "Testläget påverkar bara geografi och markanspråk. Scenario, år och elmix ändras inte.",
+                "Test mode only affects geography and land demand. Scenario, year, and electricity mix do not change.",
+            )
+        )
+
+geometry_test_mode = bool((not strict_ready) and supported_only_test_mode and not strict_supported_active_df.empty)
+geometry_ready = bool(strict_ready or geometry_test_mode)
+geometry_times_tech_df = (
+    active_times_tech_df.copy()
+    if strict_ready
+    else strict_supported_active_df.copy()
+    if geometry_test_mode
+    else active_times_tech_df.iloc[0:0].copy()
+)
+total_area_need = float(geometry_times_tech_df["area_need_km2"].sum()) if geometry_ready else float("nan")
 
 area_factor_detail_df = (
     active_times_tech_df[
@@ -2294,12 +2379,22 @@ area_factor_detail_df = (
     .reset_index(drop=True)
 )
 
+sensitivity_times_tech_df = (
+    strict_supported_active_df.copy() if geometry_test_mode and not strict_supported_active_df.empty else active_times_tech_df.copy()
+)
 area_sensitivity_rows: list[dict[str, object]] = []
 for scenario_option in AREA_SCENARIO_ORDER:
     scenario_factor_map = dict(area_demand_bundle.get("factors_by_scenario", {}).get(str(scenario_option), {}))
-    missing_df = active_times_tech_df[~active_times_tech_df["times_tech"].isin(list(scenario_factor_map.keys()))].copy()
+    missing_df = sensitivity_times_tech_df[
+        ~sensitivity_times_tech_df["times_tech"].isin(list(scenario_factor_map.keys()))
+    ].copy()
     total_km2 = (
-        float(sum(float(row["selected_twh"]) * float(scenario_factor_map[str(row["times_tech"])]) for _, row in active_times_tech_df.iterrows()))
+        float(
+            sum(
+                float(row["selected_twh"]) * float(scenario_factor_map[str(row["times_tech"])])
+                for _, row in sensitivity_times_tech_df.iterrows()
+            )
+        )
         if missing_df.empty
         else np.nan
     )
@@ -2313,7 +2408,7 @@ for scenario_option in AREA_SCENARIO_ORDER:
         }
     )
 area_sensitivity_df = pd.DataFrame(area_sensitivity_rows)
-if not area_sensitivity_df.empty and strict_ready and total_area_need > 0:
+if not area_sensitivity_df.empty and geometry_ready and total_area_need > 0:
     area_sensitivity_df["Delta vs vald %"] = np.where(
         area_sensitivity_df["Total km2"].notna(),
         100.0 * (area_sensitivity_df["Total km2"] / total_area_need - 1.0),
@@ -2391,7 +2486,7 @@ if build.empty:
     st.stop()
 
 hex_area = float(build["hex_area_km2"].median())
-hex_need_total = int(math.ceil(total_area_need / max(1e-9, hex_area))) if strict_ready and pd.notna(total_area_need) else 0
+hex_need_total = int(math.ceil(total_area_need / max(1e-9, hex_area))) if geometry_ready and pd.notna(total_area_need) else 0
 
 selection_mode = st.sidebar.radio(
     _tr("Urvalsmetod för hexagoner", "Hexagon selection mode"),
@@ -2401,8 +2496,8 @@ selection_mode = st.sidebar.radio(
 )
 
 alloc_parts = []
-if strict_ready:
-    for _, row in strict_supported_active_df.iterrows():
+if geometry_ready:
+    for _, row in geometry_times_tech_df.iterrows():
         tech_family = str(row["energy_key"])
         suitability_col = f"s_{tech_family}"
         candidate_frame = build.copy()
@@ -2432,11 +2527,11 @@ else:
 
 alloc = alloc_auto.copy()
 manual_selected_count = 0
-if selection_mode == "manual" and strict_ready:
+if selection_mode == "manual" and geometry_ready:
     manual_df = build.copy()
-    total_twh = max(1e-9, float(strict_supported_active_df["selected_twh"].sum()))
+    total_twh = max(1e-9, float(geometry_times_tech_df["selected_twh"].sum()))
     weighted = pd.Series(np.zeros(len(manual_df)), index=manual_df.index)
-    for _, row in strict_supported_active_df.iterrows():
+    for _, row in geometry_times_tech_df.iterrows():
         tech_family = str(row["energy_key"])
         if tech_family == "wind" and wind_acceptance_available:
             wind_component = (
@@ -2486,14 +2581,14 @@ if selection_mode == "manual" and strict_ready:
     chosen_hex = editor.loc[editor["use"] == True, "hex_id"].astype(str).tolist()
     manual_selected_count = len(chosen_hex)
     alloc = pd.DataFrame({"hex_id": chosen_hex, "selected": 1, "selected_for": _tr("Manuellt", "Manual")})
-elif selection_mode == "manual" and not strict_ready:
+elif selection_mode == "manual" and not geometry_ready:
     st.subheader(_tr("Manuellt urval av utbyggnadshexagoner", "Manual selection of development hexagons"))
     st.warning(
         _tr(
-            "Manuellt urval är avstängt i strikt läge tills den aktiva mixen bara innehåller TIMES-tekniker med "
-            "stödd markintensitet i AreaDemand.xlsx.",
-            "Manual selection is disabled in strict mode until the active mix only contains TIMES technologies with "
-            "supported land intensity in AreaDemand.xlsx.",
+            "Manuellt urval är avstängt tills du antingen kompletterar AreaDemand.xlsx eller slår på testläget "
+            "'använd bara stödda TIMES-tekniker'.",
+            "Manual selection is disabled until you either complete AreaDemand.xlsx or turn on the "
+            "'use supported TIMES technologies only' test mode.",
         )
     )
 
@@ -2501,21 +2596,72 @@ view = map_df.merge(alloc, on="hex_id", how="left")
 view["selected"] = view["selected"].fillna(0).astype(int)
 view["selected_for"] = view["selected_for"].fillna("")
 
+land_demand_metric_label = _tr("Markanspråk (km2)", "Land demand (km2)")
+hex_demand_metric_label = _tr("Hexbehov", "Hex demand")
+if geometry_test_mode:
+    land_demand_metric_label = _tr("Markanspråk testläge (km2)", "Test-mode land demand (km2)")
+    hex_demand_metric_label = _tr("Hexbehov testläge", "Test-mode hex demand")
+
 c1, c2, c3, c4 = st.columns(4)
 c1.metric(_tr("Scenario", "Scenario"), scenario_label)
 c2.metric(_tr("År", "Year"), str(year))
-c3.metric(_tr("Markanspråk (km2)", "Land demand (km2)"), f"{total_area_need:.1f}" if strict_ready else _tr("Ej tillgängligt", "Not available"))
-c4.metric(_tr("Hexbehov", "Hex demand"), f"{hex_need_total}" if strict_ready else _tr("Ej tillgängligt", "Not available"))
+c3.metric(land_demand_metric_label, f"{total_area_need:.1f}" if geometry_ready else _tr("Ej tillgängligt", "Not available"))
+c4.metric(hex_demand_metric_label, f"{hex_need_total}" if geometry_ready else _tr("Ej tillgängligt", "Not available"))
 if not strict_ready:
-    st.error(
-        _tr(
-            "Strikt markintensitetsläge kan inte beräkna geografin för nuvarande mix. "
-            "Aktiva TIMES-tekniker utan workbook-stöd: ",
-            "Strict land-intensity mode cannot calculate geography for the current mix. "
-            "Active TIMES technologies without workbook support: ",
+    if geometry_test_mode:
+        st.info(
+            _tr(
+                "Testläget är aktivt. Kartan och markanspråket beräknas nu bara på den del av mixen som har stöd i AreaDemand.xlsx.",
+                "Test mode is active. The map and land demand are now calculated only from the part of the mix that is supported in AreaDemand.xlsx.",
+            )
         )
-        + ", ".join(sorted(set(selected_unsupported_times_techs)))
+    else:
+        st.warning(
+            _tr(
+                "Geografin är pausad för nuvarande mix eftersom vissa aktiva TIMES-tekniker ännu saknar markintensitet i AreaDemand.xlsx.",
+                "Geography is paused for the current mix because some active TIMES technologies still lack land intensity in AreaDemand.xlsx.",
+            )
+        )
+    d1, d2, d3 = st.columns(3)
+    d1.metric(_tr("Stödd TWh", "Supported TWh"), f"{supported_twh:.2f}")
+    d2.metric(_tr("Utan stöd", "Unsupported TWh"), f"{unsupported_twh:.2f}")
+    d3.metric(_tr("Täckt andel", "Covered share"), f"{supported_share_pct:.0f}%")
+    st.caption(
+        _tr(
+            f"Blockerar nu: {blocking_label_text}.",
+            f"Currently blocking: {blocking_label_text}.",
+        )
     )
+    with st.expander(_tr("Vilka tekniker blockerar geografin?", "Which technologies are blocking geography?"), expanded=False):
+        st.write(
+            _tr(
+                "Det här betyder inte att scenariot är fel, bara att workbooken ännu inte innehåller en tydlig markintensitet för dessa delar av mixen. "
+                "För mötesdemo kan du slå på testläget i sidopanelen och få en preliminär karta baserad på de stödda teknikerna.",
+                "This does not mean the scenario is wrong, only that the workbook does not yet contain a clear land intensity for these parts of the mix. "
+                "For demos or exploration, you can turn on test mode in the sidebar and get a provisional map based on the supported technologies.",
+            )
+        )
+        if not blocking_times_df.empty:
+            blocking_display_df = _translate_app_category_column(blocking_times_df)
+            st.dataframe(
+                blocking_display_df[
+                    ["TIMES-teknik", "Appkategori", "TWh", "Andel %", "Status", "Motivering"]
+                ].rename(
+                    columns=_translate_columns(
+                        {
+                            "TIMES-teknik": ("TIMES-teknik", "TIMES technology"),
+                            "Appkategori": ("Appkategori", "App category"),
+                            "TWh": ("TWh", "TWh"),
+                            "Andel %": ("Andel %", "Share %"),
+                            "Status": ("Status", "Status"),
+                            "Motivering": ("Motivering", "Reason"),
+                        }
+                    )
+                ).round(2),
+                use_container_width=True,
+                hide_index=True,
+                height=min(320, 80 + 35 * max(len(blocking_display_df), 1)),
+            )
 if wind_acceptance_available:
     st.caption(
         _tr(
@@ -2523,7 +2669,7 @@ if wind_acceptance_available:
             f"Wind placement: `{_wind_placement_label(str(wind_placement_id))}`. {wind_allowed_hex_count} of {len(analysis_df)} hexes are allowed ({wind_allowed_share_pct:.2f}%).",
         )
     )
-if selection_mode == "manual" and strict_ready:
+if selection_mode == "manual" and geometry_ready:
     covered_area = manual_selected_count * hex_area
     st.caption(
         _tr(
@@ -2682,12 +2828,22 @@ with side_col:
     calc_caption_sv = (
         f"Markanspråksscenario: `{area_scenario_label}`. "
         + (f"Vindplacering: `{_wind_placement_label(str(wind_placement_id))}`. " if wind_acceptance_available else "")
+        + (
+            "Testläge: geografin beräknas bara på stödda TIMES-tekniker. "
+            if geometry_test_mode
+            else ""
+        )
         + f"AreaDemand-status: `{area_demand_status}`. "
         + "Beräkningen sker per TIMES-teknik och stoppas om workbooken saknar kompatibel markintensitet för en aktiv teknik."
     )
     calc_caption_en = (
         f"Land-demand scenario: `{area_scenario_label}`. "
         + (f"Wind placement: `{_wind_placement_label(str(wind_placement_id))}`. " if wind_acceptance_available else "")
+        + (
+            "Test mode: geography is calculated only from supported TIMES technologies. "
+            if geometry_test_mode
+            else ""
+        )
         + f"AreaDemand status: `{area_demand_status}`. "
         + "The calculation runs per TIMES technology and stops if the workbook lacks a compatible land intensity for an active technology."
     )
@@ -2779,17 +2935,26 @@ st.info(
     )
 )
 if selected_unsupported_times_techs:
-    st.warning(
-        _tr(
-            "Strikt läge: följande aktiva TIMES-tekniker saknar kompatibel markintensitet i workbooken: ",
-            "Strict mode: the following active TIMES technologies lack compatible land intensity in the workbook: ",
+    if geometry_test_mode:
+        st.info(
+            _tr(
+                "Testläge är aktivt. Följande TIMES-tekniker saknar fortfarande workbook-stöd och är därför tillfälligt exkluderade ur geografin: ",
+                "Test mode is active. The following TIMES technologies still lack workbook support and are therefore temporarily excluded from the geography: ",
+            )
+            + blocking_label_text
         )
-        + ", ".join(selected_unsupported_times_techs)
-        + _tr(
-            ". Sätt deras andel till 0 eller bygg en explicit mapping innan kartanalysen tolkas.",
-            ". Set their share to 0 or build an explicit mapping before interpreting the map analysis.",
+    else:
+        st.warning(
+            _tr(
+                "Följande aktiva TIMES-tekniker saknar kompatibel markintensitet i workbooken: ",
+                "The following active TIMES technologies lack compatible land intensity in the workbook: ",
+            )
+            + blocking_label_text
+            + _tr(
+                ". Komplettera AreaDemand-mappningen eller slå på testläget innan kartanalysen tolkas.",
+                ". Complete the AreaDemand mapping or turn on test mode before interpreting the map analysis.",
+            )
         )
-    )
 st.caption(
     _tr(
         f"TIMESreport-status: `{times_status}`. AreaDemand-status: `{area_demand_status}`. "
@@ -3080,6 +3245,13 @@ with st.expander(_tr("AreaDemand-känslighet", "AreaDemand sensitivity"), expand
         st.caption(_tr("Inga markintensitetsscenarier kunde byggas.", "No land-intensity scenarios could be built."))
     else:
         st.caption(_tr("Jämför totalt markanspråk mellan Lågt, Mellan och Högt för nuvarande scenario och elmix.", "Compare total land demand between Low, Medium, and High for the current scenario and electricity mix."))
+        if geometry_test_mode:
+            st.caption(
+                _tr(
+                    "Tabellen nedan bygger i testläge bara på de TIMES-tekniker som redan har workbook-stöd.",
+                    "The table below uses only the TIMES technologies that already have workbook support when test mode is active.",
+                )
+            )
         st.dataframe(
             area_sensitivity_df[["Scenario", "Vald", "Strikt klar", "Total km2", "Delta vs vald %", "Saknade TIMES-tekniker"]]
             .rename(
