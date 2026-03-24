@@ -3,8 +3,10 @@ import math
 import os
 import re
 import shutil
+import struct
 import tempfile
 import urllib.request
+from functools import lru_cache
 from pathlib import Path
 
 try:
@@ -74,6 +76,12 @@ AREA_SCENARIO_UI_LABELS = {
 SELECTION_MODE_UI_LABELS = {
     "auto": {"sv": "Auto", "en": "Auto"},
     "manual": {"sv": "Manuellt", "en": "Manual"},
+}
+WIND_PLACEMENT_ORDER = ("high_acceptance", "medium_acceptance", "low_acceptance")
+WIND_PLACEMENT_UI_LABELS = {
+    "high_acceptance": {"sv": "Hög", "en": "High"},
+    "medium_acceptance": {"sv": "Mellan", "en": "Medium"},
+    "low_acceptance": {"sv": "Låg", "en": "Low"},
 }
 ENERGY_COMGROUP_MAP = {
     "nrg_win": "wind",
@@ -235,6 +243,28 @@ def _selection_mode_label(selection_mode: str) -> str:
     return labels.get(_current_language(), fallback)
 
 
+def _wind_placement_label(scenario_id: str) -> str:
+    labels = WIND_PLACEMENT_UI_LABELS.get(str(scenario_id), {})
+    fallback = str(scenario_id)
+    return labels.get(_current_language(), fallback)
+
+
+def _wind_allowed_column(scenario_id: str) -> str:
+    return f"allowed_for_wind_{scenario_id}"
+
+
+def _wind_score_column(scenario_id: str) -> str:
+    return f"acceptance_score_{scenario_id}"
+
+
+def _wind_class_column(scenario_id: str) -> str:
+    return f"acceptance_class_{scenario_id}"
+
+
+def _wind_reason_column(scenario_id: str) -> str:
+    return f"exclusion_reason_{scenario_id}"
+
+
 def _translate_columns(rename_map: dict[str, tuple[str, str]]) -> dict[str, str]:
     return {column: _tr(sv, en) for column, (sv, en) in rename_map.items()}
 
@@ -247,6 +277,176 @@ def _translate_app_category_column(df: pd.DataFrame, column: str = "Appkategori"
         lambda value: _human_tech_name(str(value)) if str(value).strip() else ""
     )
     return display_df
+
+
+def _rgba_css(color: list[int] | tuple[int, ...]) -> str:
+    if not isinstance(color, (list, tuple)) or len(color) < 4:
+        return "rgba(180, 180, 180, 0.5)"
+    r, g, b, a = color[:4]
+    alpha = max(0.0, min(1.0, float(a) / 255.0))
+    return f"rgba({int(r)}, {int(g)}, {int(b)}, {alpha:.3f})"
+
+
+def _render_map_legend(items: list[tuple[str, list[int] | tuple[int, ...]]]) -> None:
+    blocks = []
+    for label, color in items:
+        blocks.append(
+            (
+                "<div style='display:flex;align-items:center;gap:0.45rem;margin:0.12rem 0;'>"
+                f"<span style='display:inline-block;width:14px;height:14px;border-radius:3px;border:1px solid rgba(0,0,0,0.18);background:{_rgba_css(color)};'></span>"
+                f"<span style='font-size:0.9rem;'>{label}</span>"
+                "</div>"
+            )
+        )
+    st.markdown(
+        (
+            "<div style='padding:0.55rem 0.7rem;border:1px solid rgba(49,51,63,0.14);"
+            "border-radius:0.6rem;background:rgba(255,255,255,0.82);margin-bottom:0.75rem;'>"
+            f"<div style='font-size:0.82rem;font-weight:600;margin-bottom:0.2rem;'>{_tr('Teckenförklaring', 'Legend')}</div>"
+            + "".join(blocks)
+            + "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
+
+def _utm33n_to_lonlat(easting: float, northing: float) -> tuple[float, float]:
+    # EPSG:32633 -> EPSG:4326 using the standard WGS84 UTM inverse transform.
+    a = 6378137.0
+    ecc_sq = 0.0066943799901413165
+    ecc_prime_sq = ecc_sq / (1.0 - ecc_sq)
+    k0 = 0.9996
+    x = float(easting) - 500000.0
+    y = float(northing)
+    m = y / k0
+    mu = m / (
+        a
+        * (
+            1.0
+            - ecc_sq / 4.0
+            - 3.0 * ecc_sq**2 / 64.0
+            - 5.0 * ecc_sq**3 / 256.0
+        )
+    )
+    e1 = (1.0 - math.sqrt(1.0 - ecc_sq)) / (1.0 + math.sqrt(1.0 - ecc_sq))
+    j1 = 3.0 * e1 / 2.0 - 27.0 * e1**3 / 32.0
+    j2 = 21.0 * e1**2 / 16.0 - 55.0 * e1**4 / 32.0
+    j3 = 151.0 * e1**3 / 96.0
+    j4 = 1097.0 * e1**4 / 512.0
+    fp = mu + j1 * math.sin(2.0 * mu) + j2 * math.sin(4.0 * mu) + j3 * math.sin(6.0 * mu) + j4 * math.sin(8.0 * mu)
+    sin_fp = math.sin(fp)
+    cos_fp = math.cos(fp)
+    tan_fp = math.tan(fp)
+    c1 = ecc_prime_sq * cos_fp**2
+    t1 = tan_fp**2
+    n1 = a / math.sqrt(1.0 - ecc_sq * sin_fp**2)
+    r1 = a * (1.0 - ecc_sq) / (1.0 - ecc_sq * sin_fp**2) ** 1.5
+    d = x / (n1 * k0)
+    q1 = n1 * tan_fp / r1
+    q2 = d**2 / 2.0
+    q3 = (5.0 + 3.0 * t1 + 10.0 * c1 - 4.0 * c1**2 - 9.0 * ecc_prime_sq) * d**4 / 24.0
+    q4 = (61.0 + 90.0 * t1 + 298.0 * c1 + 45.0 * t1**2 - 252.0 * ecc_prime_sq - 3.0 * c1**2) * d**6 / 720.0
+    lat = fp - q1 * (q2 - q3 + q4)
+    q5 = d
+    q6 = (1.0 + 2.0 * t1 + c1) * d**3 / 6.0
+    q7 = (5.0 - 2.0 * c1 + 28.0 * t1 - 3.0 * c1**2 + 8.0 * ecc_prime_sq + 24.0 * t1**2) * d**5 / 120.0
+    lon_origin = math.radians(15.0)
+    lon = lon_origin + (q5 - q6 + q7) / cos_fp
+    return math.degrees(lat), math.degrees(lon)
+
+
+def _signed_ring_area_xy(ring: list[tuple[float, float]]) -> float:
+    if len(ring) < 3:
+        return 0.0
+    area = 0.0
+    for idx, (x1, y1) in enumerate(ring):
+        x2, y2 = ring[(idx + 1) % len(ring)]
+        area += x1 * y2 - x2 * y1
+    return 0.5 * area
+
+
+def _polygon_area_xy(rings: list[list[tuple[float, float]]]) -> float:
+    if not rings:
+        return 0.0
+    outer = abs(_signed_ring_area_xy(rings[0]))
+    holes = sum(abs(_signed_ring_area_xy(ring)) for ring in rings[1:])
+    return max(0.0, outer - holes)
+
+
+def _read_wkb_polygon(data: bytes, offset: int = 0) -> tuple[list[list[tuple[float, float]]], int]:
+    byte_order = data[offset]
+    endian = "<" if byte_order == 1 else ">"
+    offset += 1
+    geom_type = struct.unpack_from(f"{endian}I", data, offset)[0]
+    offset += 4
+    if geom_type % 1000 != 3:
+        raise ValueError(f"Unsupported polygon geometry type: {geom_type}")
+    ring_count = struct.unpack_from(f"{endian}I", data, offset)[0]
+    offset += 4
+    rings: list[list[tuple[float, float]]] = []
+    for _ in range(ring_count):
+        point_count = struct.unpack_from(f"{endian}I", data, offset)[0]
+        offset += 4
+        ring: list[tuple[float, float]] = []
+        for _ in range(point_count):
+            x, y = struct.unpack_from(f"{endian}dd", data, offset)
+            offset += 16
+            ring.append((float(x), float(y)))
+        rings.append(ring)
+    return rings, offset
+
+
+def _read_wkb_geometry_collection(data: bytes, offset: int = 0) -> tuple[list[list[list[tuple[float, float]]]], int]:
+    byte_order = data[offset]
+    endian = "<" if byte_order == 1 else ">"
+    offset += 1
+    geom_type = struct.unpack_from(f"{endian}I", data, offset)[0]
+    offset += 4
+    base_type = geom_type % 1000
+    if base_type == 3:
+        offset -= 5
+        polygon, offset = _read_wkb_polygon(data, offset)
+        return [polygon], offset
+    if base_type != 6:
+        raise ValueError(f"Unsupported geometry collection type: {geom_type}")
+    polygon_count = struct.unpack_from(f"{endian}I", data, offset)[0]
+    offset += 4
+    polygons: list[list[list[tuple[float, float]]]] = []
+    for _ in range(polygon_count):
+        polygon, offset = _read_wkb_polygon(data, offset)
+        polygons.append(polygon)
+    return polygons, offset
+
+
+@lru_cache(maxsize=16384)
+def _decode_gpkg_polygon(blob: bytes | None) -> tuple[object | None, float | None]:
+    if not isinstance(blob, (bytes, bytearray)) or len(blob) < 8 or bytes(blob[:2]) != b"GP":
+        return None, None
+    flags = int(blob[3])
+    envelope_code = (flags >> 1) & 0b111
+    envelope_sizes = {0: 0, 1: 32, 2: 48, 3: 48, 4: 64}
+    wkb_offset = 8 + envelope_sizes.get(envelope_code, 0)
+    try:
+        polygons_xy, _ = _read_wkb_geometry_collection(bytes(blob), wkb_offset)
+    except Exception:
+        return None, None
+    if not polygons_xy:
+        return None, None
+    total_area_km2 = sum(_polygon_area_xy(rings) for rings in polygons_xy) / 1_000_000.0
+    display_rings_xy = max(polygons_xy, key=_polygon_area_xy)
+    display_rings = []
+    for ring_xy in display_rings_xy:
+        if len(ring_xy) < 4:
+            continue
+        lonlat_ring = []
+        for x, y in ring_xy:
+            lat, lon = _utm33n_to_lonlat(x, y)
+            lonlat_ring.append([lon, lat])
+        display_rings.append(lonlat_ring)
+    if not display_rings:
+        return None, total_area_km2 if total_area_km2 > 0 else None
+    polygon = display_rings[0] if len(display_rings) == 1 else display_rings
+    return polygon, total_area_km2 if total_area_km2 > 0 else None
 
 
 def _find_first_col(columns: list[str], tokens: list[str]) -> str | None:
@@ -265,6 +465,33 @@ def _read_table_file(path: Path) -> pd.DataFrame:
         return pd.read_excel(path)
     if suffix in {".parquet", ".pq"}:
         return pd.read_parquet(path)
+    if suffix == ".gpkg":
+        import sqlite3
+
+        with sqlite3.connect(path) as con:
+            layer_df = pd.read_sql_query(
+                "SELECT table_name FROM gpkg_contents WHERE data_type = 'features' ORDER BY table_name LIMIT 1",
+                con,
+            )
+            if layer_df.empty:
+                raise ValueError(f"Inget feature-lager hittades i geopackage: {path}")
+            layer_name = str(layer_df.iloc[0]["table_name"])
+            geom_df = pd.read_sql_query(
+                "SELECT column_name FROM gpkg_geometry_columns WHERE table_name = ?",
+                con,
+                params=[layer_name],
+            )
+            geom_col = str(geom_df.iloc[0]["column_name"]) if not geom_df.empty else None
+            col_df = pd.read_sql_query(f'PRAGMA table_info("{layer_name}")', con)
+            selected_cols = []
+            for name in col_df["name"].astype(str).tolist():
+                if str(name) == str(geom_col):
+                    selected_cols.append(f'"{name}" AS "__gpkg_geom__"')
+                else:
+                    selected_cols.append(f'"{name}"')
+            if not selected_cols:
+                raise ValueError(f"Inga attributkolumner hittades i geopackage-lagret: {path}")
+            return pd.read_sql_query(f'SELECT {", ".join(selected_cols)} FROM "{layer_name}"', con)
     raise ValueError(f"Filformat stods inte: {path}")
 
 
@@ -625,11 +852,30 @@ def _config_path(name: str) -> Path | None:
     return path if path.exists() else None
 
 
+def _find_res9_hex_gpkg(project_root: Path) -> Path | None:
+    candidates = [
+        project_root.parent
+        / "landskapsanalys"
+        / "docs"
+        / "geocontext"
+        / "acceptance_framework"
+        / "data"
+        / "bornholm_vindacceptans_stage1_v4_res9"
+        / "bornholm_vindacceptans_stage1_v4_res9_hex.gpkg",
+        project_root
+        / "data"
+        / "gc4"
+        / "bornholm_vindacceptans_stage1_v4_res9_hex.gpkg",
+    ]
+    return next((p for p in candidates if p.exists()), None)
+
+
 def _find_hex_points(project_root: Path) -> Path | None:
     configured = _config_path("HEX_POINTS_PATH")
     if configured is not None:
         return configured
     candidates = [
+        _find_res9_hex_gpkg(project_root),
         project_root / "jyp_note_book_geocontext" / "bornholm_points_with_context_gc4.csv",
         project_root / "data" / "gc4" / "bornholm_points_with_context_gc4.csv",
     ]
@@ -662,12 +908,25 @@ def _resolve_hex_sources(project_root: Path) -> tuple[Path | None, Path | None, 
     points_path = _find_hex_points(project_root)
     scores_path = _find_hex_scores(project_root)
     acceptance_path = _find_acceptance_layer(project_root)
+    scores_configured = _config_path("HEX_SCORES_PATH") is not None
+    acceptance_configured = _config_path("ACCEPTANCE_LAYER_PATH") is not None
+
+    if points_path is not None and points_path.suffix.lower() == ".gpkg":
+        if not scores_configured:
+            scores_path = None
+        if not acceptance_configured:
+            acceptance_path = None
 
     parts: list[str] = []
     parts.append(f"points: {points_path}" if points_path is not None else "points: saknas")
-    parts.append(f"scores: {scores_path}" if scores_path is not None else "scores: saknas")
+    if points_path is not None and points_path.suffix.lower() == ".gpkg" and scores_path is None:
+        parts.append("scores: inbyggt i points-gpkg")
+    else:
+        parts.append(f"scores: {scores_path}" if scores_path is not None else "scores: saknas")
     if acceptance_path is not None:
         parts.append(f"acceptance: {acceptance_path}")
+    elif points_path is not None and points_path.suffix.lower() == ".gpkg":
+        parts.append("acceptance: inbyggt i points-gpkg")
     return points_path, scores_path, acceptance_path, "; ".join(parts)
 
 
@@ -1626,8 +1885,16 @@ def _hex_polygon(hex_id: str):
 
 @st.cache_data(show_spinner=False)
 def build_map_frame(df: pd.DataFrame) -> pd.DataFrame:
-    keep_cols = [c for c in ["hex_id", "class_km", "F1", "F2", "F3", "F4", "F5", "build_candidate", "acceptance_value"] if c in df.columns]
-    work = df[keep_cols].copy()
+    work = df.copy()
+    geom_col = "__gpkg_geom__" if "__gpkg_geom__" in work.columns else None
+    if "hex_id" not in work.columns:
+        raise ValueError("Hexramen saknar kolumnen hex_id.")
+    if "class_km" not in work.columns:
+        work["class_km"] = 0
+    if "build_candidate" not in work.columns:
+        work["build_candidate"] = True
+    if "acceptance_value" not in work.columns:
+        work["acceptance_value"] = ""
     if h3 is None:
         work["lat"] = np.nan
         work["lon"] = np.nan
@@ -1639,22 +1906,33 @@ def build_map_frame(df: pd.DataFrame) -> pd.DataFrame:
     lons = []
     polys = []
     areas = []
-    for h in work["hex_id"].astype(str):
+    geom_values = work[geom_col].tolist() if geom_col is not None else [None] * len(work)
+    for h, geom_blob in zip(work["hex_id"].astype(str), geom_values):
+        polygon = None
+        polygon_area_km2 = None
+        if geom_col is not None:
+            polygon, polygon_area_km2 = _decode_gpkg_polygon(geom_blob)
         try:
             lat, lon = h3.cell_to_latlng(h)
             lats.append(lat)
             lons.append(lon)
-            polys.append(_hex_polygon(h))
-            areas.append(float(h3.cell_area(h, unit="km^2")))
+            polys.append(polygon if polygon is not None else _hex_polygon(h))
+            areas.append(
+                float(polygon_area_km2)
+                if polygon_area_km2 is not None and polygon_area_km2 > 0
+                else float(h3.cell_area(h, unit="km^2"))
+            )
         except Exception:
             lats.append(np.nan)
             lons.append(np.nan)
-            polys.append(None)
-            areas.append(np.nan)
+            polys.append(polygon)
+            areas.append(float(polygon_area_km2) if polygon_area_km2 is not None else np.nan)
     work["lat"] = lats
     work["lon"] = lons
     work["polygon"] = polys
     work["hex_area_km2"] = areas
+    if geom_col is not None:
+        work = work.drop(columns=[geom_col])
     return work
 
 
@@ -1765,6 +2043,7 @@ base_mix_map = times_mix
 times_preview_df, times_preview_summary, times_preview_status = load_timesreport_preview(project_root)
 times_mapping_audit, times_mapping_status = load_timesreport_mapping_audit(project_root)
 scenario_desc_map, scenario_source_map, scenario_meta_status = load_scenario_metadata_duckdb(project_root)
+wind_placement_options = [scenario_id for scenario_id in WIND_PLACEMENT_ORDER if _wind_allowed_column(scenario_id) in gc4.columns]
 
 if st.sidebar.button(_language_switch_label(), use_container_width=True):
     _toggle_language()
@@ -1820,6 +2099,30 @@ st.sidebar.caption(
         "Literature sources are only shown in the fact box below.",
     )
 )
+
+if wind_placement_options:
+    st.sidebar.subheader(_tr("Vindplacering", "Wind placement"))
+    wind_placement_id = st.sidebar.segmented_control(
+        _tr("Acceptansnivå för ny vindkraft", "Acceptance level for new wind power"),
+        options=wind_placement_options,
+        default="medium_acceptance" if "medium_acceptance" in wind_placement_options else wind_placement_options[0],
+        selection_mode="single",
+        format_func=_wind_placement_label,
+        help=_tr(
+            "Styr bara placering av ny vindkraft. Mellan är standard i v4.",
+            "Controls placement of new wind power only. Medium is the default in v4.",
+        ),
+    )
+    if wind_placement_id is None:
+        wind_placement_id = "medium_acceptance" if "medium_acceptance" in wind_placement_options else wind_placement_options[0]
+else:
+    wind_placement_id = None
+    st.sidebar.info(
+        _tr(
+            "Inga vindspecifika acceptansscenarier hittades i den valda hexkällan.",
+            "No wind-specific acceptance scenarios were found in the selected hex source.",
+        )
+    )
 
 st.sidebar.subheader(_tr("Elmix-sliders (%)", "Electricity mix sliders (%)"))
 tech_keys = list(base_mix.keys())
@@ -1896,6 +2199,37 @@ selected_times_raw_mix_df["times_tech_display"] = selected_times_raw_mix_df.appl
     lambda row: _times_tech_display(str(row["times_tech"]), str(row["energy_key"])),
     axis=1,
 )
+
+wind_allowed_col = _wind_allowed_column(wind_placement_id) if wind_placement_id else ""
+wind_score_col = _wind_score_column(wind_placement_id) if wind_placement_id else ""
+wind_class_col = _wind_class_column(wind_placement_id) if wind_placement_id else ""
+wind_reason_col = _wind_reason_column(wind_placement_id) if wind_placement_id else ""
+wind_acceptance_available = bool(wind_placement_id and wind_allowed_col in analysis_df.columns)
+wind_score_available = bool(wind_acceptance_available and wind_score_col in analysis_df.columns)
+wind_class_available = bool(wind_acceptance_available and wind_class_col in analysis_df.columns)
+wind_reason_available = bool(wind_acceptance_available and wind_reason_col in analysis_df.columns)
+wind_allowed_hex_count = 0
+wind_allowed_share_pct = 0.0
+
+if wind_acceptance_available:
+    for target_df in (map_df, analysis_df):
+        target_df["wind_allowed_selected"] = _coerce_candidate_series(target_df[wind_allowed_col]).fillna(False)
+        target_df["wind_acceptance_score_selected"] = (
+            pd.to_numeric(target_df[wind_score_col], errors="coerce").fillna(0.0) if wind_score_available else 0.0
+        )
+        target_df["wind_acceptance_class_selected"] = (
+            target_df[wind_class_col].fillna("").astype(str) if wind_class_available else ""
+        )
+        target_df["wind_acceptance_reason_selected"] = (
+            target_df[wind_reason_col].fillna("").astype(str) if wind_reason_available else ""
+        )
+        target_df["acceptance_value"] = np.where(
+            target_df["wind_allowed_selected"],
+            target_df["wind_acceptance_class_selected"],
+            target_df["wind_acceptance_reason_selected"],
+        )
+    wind_allowed_hex_count = int(analysis_df["wind_allowed_selected"].sum())
+    wind_allowed_share_pct = 100.0 * wind_allowed_hex_count / max(len(analysis_df), 1)
 
 area_scenario_table = pd.DataFrame(area_demand_bundle.get("scenario_table", pd.DataFrame())).copy()
 if not area_scenario_table.empty:
@@ -2055,12 +2389,18 @@ if strict_ready:
     for _, row in strict_supported_active_df.iterrows():
         tech_family = str(row["energy_key"])
         suitability_col = f"s_{tech_family}"
-        if suitability_col not in build.columns:
+        candidate_frame = build.copy()
+        ranking_col = suitability_col
+        if tech_family == "wind" and wind_acceptance_available:
+            candidate_frame = candidate_frame[candidate_frame["wind_allowed_selected"] == True].copy()
+            if wind_score_available:
+                ranking_col = "wind_acceptance_score_selected"
+        if ranking_col not in candidate_frame.columns:
             continue
         n = int(math.ceil(float(row["area_need_km2"]) / max(1e-9, hex_area)))
         if n <= 0:
             continue
-        top = build.sort_values(suitability_col, ascending=False).head(min(n, len(build))).copy()
+        top = candidate_frame.sort_values(ranking_col, ascending=False).head(min(n, len(candidate_frame))).copy()
         top["selected_for"] = _times_tech_display(str(row["times_tech"]), tech_family)
         alloc_parts.append(top[["hex_id", "selected_for"]])
 
@@ -2081,7 +2421,17 @@ if selection_mode == "manual" and strict_ready:
     total_twh = max(1e-9, float(strict_supported_active_df["selected_twh"].sum()))
     weighted = pd.Series(np.zeros(len(manual_df)), index=manual_df.index)
     for _, row in strict_supported_active_df.iterrows():
-        s_col = f"s_{str(row['energy_key'])}"
+        tech_family = str(row["energy_key"])
+        if tech_family == "wind" and wind_acceptance_available:
+            wind_component = (
+                manual_df["wind_acceptance_score_selected"].fillna(0.0) / 100.0
+                if wind_score_available
+                else manual_df.get("s_wind", pd.Series(np.zeros(len(manual_df)), index=manual_df.index))
+            )
+            wind_component = wind_component.where(manual_df["wind_allowed_selected"], 0.0)
+            weighted += wind_component * (float(row["selected_twh"]) / total_twh)
+            continue
+        s_col = f"s_{tech_family}"
         if s_col not in manual_df.columns:
             continue
         weighted += manual_df[s_col] * (float(row["selected_twh"]) / total_twh)
@@ -2134,18 +2484,6 @@ elif selection_mode == "manual" and not strict_ready:
 view = map_df.merge(alloc, on="hex_id", how="left")
 view["selected"] = view["selected"].fillna(0).astype(int)
 view["selected_for"] = view["selected_for"].fillna("")
-view["cluster_color"] = view["class_km"].map(CLUSTER_COLORS).apply(lambda x: x if isinstance(x, list) else [180, 180, 180, 70])
-view["line_color"] = np.where(view["build_candidate"], "[60,60,60,100]", "[150,150,150,50]")
-view["fill_color"] = view["cluster_color"]
-if "build_candidate" in view.columns:
-    excluded_mask = ~view["build_candidate"].fillna(True)
-    if excluded_mask.any():
-        view.loc[excluded_mask, "fill_color"] = view.loc[excluded_mask, "fill_color"].apply(lambda _: [185, 185, 185, 40])
-selected_mask = view["selected"] == 1
-if selected_mask.any():
-    view.loc[selected_mask, "fill_color"] = view.loc[selected_mask, "fill_color"].apply(
-        lambda _: [220, 20, 60, 180]
-    )
 
 c1, c2, c3, c4 = st.columns(4)
 c1.metric(_tr("Scenario", "Scenario"), scenario_label)
@@ -2161,6 +2499,13 @@ if not strict_ready:
             "Active TIMES technologies without workbook support: ",
         )
         + ", ".join(sorted(set(selected_unsupported_times_techs)))
+    )
+if wind_acceptance_available:
+    st.caption(
+        _tr(
+            f"Vindplacering: `{_wind_placement_label(str(wind_placement_id))}`. {wind_allowed_hex_count} av {len(analysis_df)} hex är tillåtna ({wind_allowed_share_pct:.2f}%).",
+            f"Wind placement: `{_wind_placement_label(str(wind_placement_id))}`. {wind_allowed_hex_count} of {len(analysis_df)} hexes are allowed ({wind_allowed_share_pct:.2f}%).",
+        )
     )
 if selection_mode == "manual" and strict_ready:
     covered_area = manual_selected_count * hex_area
@@ -2213,6 +2558,60 @@ scenario_order = baseline_df["scenario_label"].drop_duplicates().tolist()
 map_col, side_col = st.columns([1.8, 1.1], gap="large")
 with map_col:
     st.subheader(_tr("Karta: hexagoner + urval", "Map: hexagons + selection"))
+    map_control_col, map_mode_caption_col = st.columns([1.0, 1.4], gap="small")
+    with map_control_col:
+        show_wind_acceptance = st.toggle(
+            _tr("Visa vindacceptans", "Show wind acceptance"),
+            value=wind_acceptance_available,
+            disabled=not wind_acceptance_available,
+            help=_tr(
+                "Växla mellan vindacceptans och landskapsklasser i kartans färger.",
+                "Switch the map colors between wind acceptance and landscape classes.",
+            ),
+        )
+    with map_mode_caption_col:
+        st.caption(
+            _tr(
+                "På: färger visar tillåten/otillåten vindplacering. Av: färger visar landskapsklasser.",
+                "On: colors show allowed/blocked wind placement. Off: colors show landscape classes.",
+            )
+        )
+
+    map_view = view.copy()
+    map_view["cluster_color"] = map_view["class_km"].map(CLUSTER_COLORS).apply(
+        lambda x: x if isinstance(x, list) else [180, 180, 180, 70]
+    )
+    map_view["fill_color"] = map_view["cluster_color"]
+    if show_wind_acceptance and wind_acceptance_available:
+        allowed_mask = map_view["wind_allowed_selected"].fillna(False).astype(bool).tolist()
+        map_view["fill_color"] = [
+            [46, 125, 50, 150] if is_allowed else [190, 190, 190, 45]
+            for is_allowed in allowed_mask
+        ]
+        legend_items = [
+            (_tr("Tillåten för vind", "Allowed for wind"), [46, 125, 50, 150]),
+            (_tr("Ej tillåten för vind", "Not allowed for wind"), [190, 190, 190, 45]),
+            (_tr("Valda hex", "Selected hexes"), [220, 20, 60, 180]),
+        ]
+    else:
+        if "build_candidate" in map_view.columns:
+            excluded_mask = ~map_view["build_candidate"].fillna(True)
+            if excluded_mask.any():
+                map_view.loc[excluded_mask, "fill_color"] = map_view.loc[excluded_mask, "fill_color"].apply(
+                    lambda _: [185, 185, 185, 40]
+                )
+        legend_items = [(_tr("Valda hex", "Selected hexes"), [220, 20, 60, 180])]
+        for class_id in sorted(CLUSTER_COLORS):
+            legend_items.append((f"class_km {class_id}", CLUSTER_COLORS[class_id]))
+
+    selected_mask = map_view["selected"] == 1
+    if selected_mask.any():
+        map_view.loc[selected_mask, "fill_color"] = map_view.loc[selected_mask, "fill_color"].apply(
+            lambda _: [220, 20, 60, 180]
+        )
+
+    _render_map_legend(legend_items)
+
     tooltip_lines = [
         "<b>hex_id:</b> {hex_id}",
         f"<b>{_tr('vald för', 'selected for')}:</b> {{selected_for}}",
@@ -2220,6 +2619,10 @@ with map_col:
     ]
     if "class_km" in view.columns:
         tooltip_lines.insert(1, "<b>class_km:</b> {class_km}")
+    if wind_acceptance_available:
+        tooltip_lines.append(f"<b>{_tr('vind tillåten', 'wind allowed')}:</b> {{wind_allowed_selected}}")
+        tooltip_lines.append(f"<b>{_tr('vindscore', 'wind score')}:</b> {{wind_acceptance_score_selected}}")
+        tooltip_lines.append(f"<b>{_tr('vindklass', 'wind class')}:</b> {{wind_acceptance_class_selected}}")
     if "acceptance_value" in view.columns and view["acceptance_value"].astype(str).str.strip().any():
         tooltip_lines.append(f"<b>{_tr('acceptans', 'acceptance')}:</b> {{acceptance_value}}")
     tooltip = {
@@ -2228,18 +2631,18 @@ with map_col:
     }
     polygon_layer = pdk.Layer(
         "PolygonLayer",
-        data=view,
+        data=map_view,
         get_polygon="polygon",
         get_fill_color="fill_color",
         get_line_color=[90, 90, 90, 90],
         line_width_min_pixels=0.5,
-        stroked=True,
+        stroked=False,
         filled=True,
         pickable=True,
         auto_highlight=True,
     )
-    center_lat = float(view["lat"].median())
-    center_lon = float(view["lon"].median())
+    center_lat = float(map_view["lat"].median())
+    center_lon = float(map_view["lon"].median())
     deck = pdk.Deck(
         layers=[polygon_layer],
         initial_view_state=pdk.ViewState(latitude=center_lat, longitude=center_lon, zoom=9, pitch=0),
@@ -2247,20 +2650,35 @@ with map_col:
         map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
     )
     st.pydeck_chart(deck, use_container_width=True)
-    if "acceptance_value" in build.columns and build["acceptance_value"].astype(str).str.strip().any():
+    if wind_acceptance_available:
+        st.caption(
+            _tr(
+                f"V4-res9 används för kartan. Vindfilter `{_wind_placement_label(str(wind_placement_id))}` styr bara ny vindkraft, med `Mellan` som standard.",
+                f"V4-res9 is used for the map. The `{_wind_placement_label(str(wind_placement_id))}` wind filter only affects new wind power, with `Medium` as the default.",
+            )
+        )
+    elif "acceptance_value" in build.columns and build["acceptance_value"].astype(str).str.strip().any():
         st.caption(_tr("Kartlagret är kompletterat med acceptansinformation när den finns tillgänglig.", "The map layer is enriched with acceptance information when available."))
 
 with side_col:
     st.subheader(_tr("Beräkning", "Calculation"))
     st.dataframe(mix_df_display.round(2), use_container_width=True, height=min(360, 80 + 35 * max(len(mix_df_display), 1)))
+    calc_caption_sv = (
+        f"Markanspråksscenario: `{area_scenario_label}`. "
+        + (f"Vindplacering: `{_wind_placement_label(str(wind_placement_id))}`. " if wind_acceptance_available else "")
+        + f"AreaDemand-status: `{area_demand_status}`. "
+        + "Beräkningen sker per TIMES-teknik och stoppas om workbooken saknar kompatibel markintensitet för en aktiv teknik."
+    )
+    calc_caption_en = (
+        f"Land-demand scenario: `{area_scenario_label}`. "
+        + (f"Wind placement: `{_wind_placement_label(str(wind_placement_id))}`. " if wind_acceptance_available else "")
+        + f"AreaDemand status: `{area_demand_status}`. "
+        + "The calculation runs per TIMES technology and stops if the workbook lacks a compatible land intensity for an active technology."
+    )
     st.caption(
         _tr(
-            f"Markanspråksscenario: `{area_scenario_label}`. "
-            f"AreaDemand-status: `{area_demand_status}`. "
-            "Beräkningen sker per TIMES-teknik och stoppas om workbooken saknar kompatibel markintensitet för en aktiv teknik.",
-            f"Land-demand scenario: `{area_scenario_label}`. "
-            f"AreaDemand status: `{area_demand_status}`. "
-            "The calculation runs per TIMES technology and stops if the workbook lacks a compatible land intensity for an active technology.",
+            calc_caption_sv,
+            calc_caption_en,
         )
     )
     st.markdown(f"### {_tr('Baslinjer (TIMES-data)', 'Baselines (TIMES data)')}")
