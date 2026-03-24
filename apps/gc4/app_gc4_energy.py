@@ -1,4 +1,5 @@
 import hashlib
+import json
 import math
 import os
 import re
@@ -472,6 +473,24 @@ def _read_table_file(path: Path) -> pd.DataFrame:
     suffix = path.suffix.lower()
     if suffix == ".csv":
         return pd.read_csv(path)
+    if suffix in {".geojson", ".json"}:
+        with path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        if not isinstance(payload, dict) or str(payload.get("type")) != "FeatureCollection":
+            raise ValueError(f"GeoJSON-filen har inte typen FeatureCollection: {path}")
+        rows: list[dict[str, object]] = []
+        for feature in payload.get("features", []):
+            if not isinstance(feature, dict):
+                continue
+            geometry = feature.get("geometry") or {}
+            props = dict(feature.get("properties") or {})
+            polygon = None
+            if geometry.get("type") == "Polygon":
+                coords = geometry.get("coordinates") or []
+                polygon = coords[0] if len(coords) == 1 else coords
+            props["polygon"] = polygon
+            rows.append(props)
+        return pd.DataFrame(rows)
     if suffix in {".xlsx", ".xls"}:
         return pd.read_excel(path)
     if suffix in {".parquet", ".pq"}:
@@ -822,12 +841,7 @@ def _as_twh(value: pd.Series, units: pd.Series) -> pd.Series:
 
 
 def _find_timesreport_csv(project_root: Path) -> Path | None:
-    candidates = [
-        project_root / "external" / "DemoS_012_timesreport" / "TIMESreport" / "compare_timesreport.csv",
-        project_root / "external" / "DemoS_012_timesreport" / "compare_timesreport.csv",
-        project_root / "data" / "external" / "timesreport" / "compare_timesreport.csv",
-    ]
-    return next((p for p in candidates if p.exists()), None)
+    return _config_path("TIMESREPORT_CSV_PATH")
 
 
 def _find_duckdb(project_root: Path) -> Path | None:
@@ -863,20 +877,9 @@ def _config_path(name: str) -> Path | None:
     return path if path.exists() else None
 
 
-def _find_res9_hex_gpkg(project_root: Path) -> Path | None:
+def _find_res9_hex_geojson(project_root: Path) -> Path | None:
     candidates = [
-        project_root.parent
-        / "landskapsanalys"
-        / "docs"
-        / "geocontext"
-        / "acceptance_framework"
-        / "data"
-        / "bornholm_vindacceptans_stage1_v4_res9"
-        / "bornholm_vindacceptans_stage1_v4_res9_hex.gpkg",
-        project_root
-        / "data"
-        / "gc4"
-        / "bornholm_vindacceptans_stage1_v4_res9_hex.gpkg",
+        project_root / "data" / "gc4" / "bornholm_vindacceptans_stage1_v4_res9_hex.geojson",
     ]
     return next((p for p in candidates if p.exists()), None)
 
@@ -886,9 +889,7 @@ def _find_hex_points(project_root: Path) -> Path | None:
     if configured is not None:
         return configured
     candidates = [
-        _find_res9_hex_gpkg(project_root),
-        project_root / "jyp_note_book_geocontext" / "bornholm_points_with_context_gc4.csv",
-        project_root / "data" / "gc4" / "bornholm_points_with_context_gc4.csv",
+        _find_res9_hex_geojson(project_root),
     ]
     return next((p for p in candidates if p is not None and p.exists()), None)
 
@@ -897,22 +898,14 @@ def _find_hex_scores(project_root: Path) -> Path | None:
     configured = _config_path("HEX_SCORES_PATH")
     if configured is not None:
         return configured
-    candidates = [
-        project_root / "jyp_note_book_geocontext" / "bornholm_r8_factor_scores_gc4.csv",
-        project_root / "data" / "gc4" / "bornholm_r8_factor_scores_gc4.csv",
-    ]
-    return next((p for p in candidates if p.exists()), None)
+    return None
 
 
 def _find_acceptance_layer(project_root: Path) -> Path | None:
     configured = _config_path("ACCEPTANCE_LAYER_PATH")
     if configured is not None:
         return configured
-    candidates = [
-        project_root / "data" / "processed" / "acceptance_layer.csv",
-        project_root / "data" / "processed" / "acceptance_layer.parquet",
-    ]
-    return next((p for p in candidates if p.exists()), None)
+    return None
 
 
 def _resolve_hex_sources(project_root: Path) -> tuple[Path | None, Path | None, Path | None, str]:
@@ -922,7 +915,7 @@ def _resolve_hex_sources(project_root: Path) -> tuple[Path | None, Path | None, 
     scores_configured = _config_path("HEX_SCORES_PATH") is not None
     acceptance_configured = _config_path("ACCEPTANCE_LAYER_PATH") is not None
 
-    if points_path is not None and points_path.suffix.lower() == ".gpkg":
+    if points_path is not None and points_path.suffix.lower() in {".gpkg", ".geojson", ".json"}:
         if not scores_configured:
             scores_path = None
         if not acceptance_configured:
@@ -930,14 +923,14 @@ def _resolve_hex_sources(project_root: Path) -> tuple[Path | None, Path | None, 
 
     parts: list[str] = []
     parts.append(f"points: {points_path}" if points_path is not None else "points: saknas")
-    if points_path is not None and points_path.suffix.lower() == ".gpkg" and scores_path is None:
-        parts.append("scores: inbyggt i points-gpkg")
+    if points_path is not None and points_path.suffix.lower() in {".gpkg", ".geojson", ".json"} and scores_path is None:
+        parts.append("scores: inbyggt i points-fil")
     else:
         parts.append(f"scores: {scores_path}" if scores_path is not None else "scores: saknas")
     if acceptance_path is not None:
         parts.append(f"acceptance: {acceptance_path}")
-    elif points_path is not None and points_path.suffix.lower() == ".gpkg":
-        parts.append("acceptance: inbyggt i points-gpkg")
+    elif points_path is not None and points_path.suffix.lower() in {".gpkg", ".geojson", ".json"}:
+        parts.append("acceptance: inbyggt i points-fil")
     return points_path, scores_path, acceptance_path, "; ".join(parts)
 
 
@@ -1203,19 +1196,19 @@ def _load_preview_frame_duckdb(con) -> tuple[pd.DataFrame | None, dict[str, list
 def _load_energy_rows_csv(project_root: Path) -> tuple[pd.DataFrame | None, str]:
     csv_path = _find_timesreport_csv(project_root)
     if csv_path is None:
-        return None, "fallback: compare_timesreport.csv saknas"
+        return None, "TIMESREPORT_CSV_PATH saknas"
 
     try:
         raw = pd.read_csv(csv_path)
     except Exception as exc:
-        return None, f"fallback: kunde inte lasa TIMESreport csv ({exc})"
+        return None, f"kunde inte lasa TIMESreport csv override ({exc})"
     if raw.empty:
-        return None, "fallback: TIMESreport csv tom"
+        return None, "TIMESreport csv override tom"
 
     raw.columns = [str(c).strip().lower() for c in raw.columns]
     need = {"scen", "year", "value", "units"}
     if not need.issubset(set(raw.columns)):
-        return None, "fallback: TIMESreport csv saknar nodvandiga kolumner (scen/year/value/units)"
+        return None, "TIMESreport csv override saknar nodvandiga kolumner (scen/year/value/units)"
 
     df = raw.copy()
     if "topic" in df.columns:
@@ -1232,18 +1225,18 @@ def _load_energy_rows_csv(project_root: Path) -> tuple[pd.DataFrame | None, str]
             df = df[annual]
 
     if df.empty:
-        return None, "fallback: inga rader kvar efter TIMESreport-filtrering"
+        return None, "inga rader kvar efter TIMESreport csv-filtrering"
 
     df = _classify_energy_frame(df)
     df["year"] = pd.to_numeric(df["year"], errors="coerce")
     df = df.dropna(subset=["year"])
     if df.empty:
-        return None, "fallback: inga giltiga ar hittades i TIMESreport csv"
+        return None, "inga giltiga ar hittades i TIMESreport csv override"
     df["year"] = df["year"].astype(int)
     df["value_twh"] = _as_twh(df["value"], df["units"])
     df = df.dropna(subset=["value_twh"])
     if df.empty:
-        return None, "fallback: alla values blev ogiltiga efter enhetskonvertering"
+        return None, "alla values i TIMESreport csv override blev ogiltiga efter enhetskonvertering"
 
     df["scen"] = df["scen"].astype(str)
     return df, f"loaded: {csv_path}"
@@ -1266,7 +1259,7 @@ def load_timesreport_scenarios(
         scenario_totals.setdefault(str(r["scen"]), {})[int(r["year"])] = float(r["value_twh"])
 
     if not scenario_totals:
-        return None, None, "fallback: kunde inte bygga scenarios fran TIMESreport csv"
+        return None, None, "kunde inte bygga scenarios fran TIMESreport csv override"
 
     base_mix = _build_base_mix_by_year(mix, scenario_totals)
     for scen, year_totals in scenario_totals.items():
@@ -1898,6 +1891,8 @@ def _hex_polygon(hex_id: str):
 def build_map_frame(df: pd.DataFrame) -> pd.DataFrame:
     work = df.copy()
     geom_col = "__gpkg_geom__" if "__gpkg_geom__" in work.columns else None
+    polygon_col = "polygon" if "polygon" in work.columns else None
+    area_col = "hex_area_km2" if "hex_area_km2" in work.columns else None
     if "hex_id" not in work.columns:
         raise ValueError("Hexramen saknar kolumnen hex_id.")
     if "class_km" not in work.columns:
@@ -1918,9 +1913,14 @@ def build_map_frame(df: pd.DataFrame) -> pd.DataFrame:
     polys = []
     areas = []
     geom_values = work[geom_col].tolist() if geom_col is not None else [None] * len(work)
-    for h, geom_blob in zip(work["hex_id"].astype(str), geom_values):
-        polygon = None
-        polygon_area_km2 = None
+    polygon_values = work[polygon_col].tolist() if polygon_col is not None else [None] * len(work)
+    area_values = work[area_col].tolist() if area_col is not None else [None] * len(work)
+    for h, geom_blob, existing_polygon, existing_area in zip(
+        work["hex_id"].astype(str), geom_values, polygon_values, area_values
+    ):
+        polygon = existing_polygon if existing_polygon is not None else None
+        polygon_area_km2 = pd.to_numeric(existing_area, errors="coerce")
+        polygon_area_km2 = float(polygon_area_km2) if pd.notna(polygon_area_km2) else None
         if geom_col is not None:
             polygon, polygon_area_km2 = _decode_gpkg_polygon(geom_blob)
         try:
@@ -1998,7 +1998,12 @@ if h3 is None:
 
 hex_points_path, hex_scores_path, acceptance_layer_path, hex_source_status = _resolve_hex_sources(project_root)
 if hex_points_path is None:
-    st.error(_tr("Saknar hexagondata. Ange `HEX_POINTS_PATH` eller lägg en points-fil i standardplatsen.", "Hexagon data is missing. Set `HEX_POINTS_PATH` or place a points file in the default location."))
+    st.error(
+        _tr(
+            "Saknar res9-hexagondata. Lägg `data/gc4/bornholm_vindacceptans_stage1_v4_res9_hex.geojson` i repot eller ange `HEX_POINTS_PATH` explicit.",
+            "Missing res9 hexagon data. Add `data/gc4/bornholm_vindacceptans_stage1_v4_res9_hex.geojson` to the repo or set `HEX_POINTS_PATH` explicitly.",
+        )
+    )
     st.caption(f"{_tr('Hexstatus', 'Hex status')}: `{hex_source_status}`")
     st.stop()
 
@@ -2025,9 +2030,9 @@ if times_totals is None or times_mix is None:
     st.caption(
         _tr(
             "Kontrollera `data/processed/speedlocal_times.duckdb`, `DUCKDB_PATH`, `DUCKDB_SHARE_URL` "
-            f"eller TIMESreport-csv. (`{times_status}`)",
+            f"eller en explicit `TIMESREPORT_CSV_PATH`-override. (`{times_status}`)",
             "Check `data/processed/speedlocal_times.duckdb`, `DUCKDB_PATH`, `DUCKDB_SHARE_URL` "
-            f"or the TIMES report csv. (`{times_status}`)",
+            f"or an explicit `TIMESREPORT_CSV_PATH` override. (`{times_status}`)",
         )
     )
     st.stop()
