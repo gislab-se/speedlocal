@@ -5,6 +5,7 @@ from datetime import datetime
 from html import escape
 from pathlib import Path
 import math
+import re
 
 import duckdb
 import h3
@@ -46,19 +47,84 @@ ENERGY_LABELS = {
     "demand": "Efterfragan",
     "other": "Ovrigt",
 }
-ENERGY_ALIASES = {
-    "wind": ["wind", "win", "elewin"],
-    "solar": ["solar", "sol", "elesol"],
-    "hydro": ["hydro", "hyd", "water", "elehyd"],
-    "nuclear": ["nuclear", "nuc", "karn", "elenuc", "nrg_nuk", "tg_nuc"],
-    "bio": ["biomass", "bio", "elebio", "nrg_bio", "tg_bio"],
-    "coal": ["coal", "coa", "elecoa", "nrg_coa", "tg_coa"],
-    "gas": ["gas", "elegas", "nrg_gas", "tg_gas"],
-    "oil": ["oil", "dsl", "hfo", "ker", "lpg", "nap", "eleoil", "nrg_oil", "tg_oil"],
-    "renewables": ["renew", "rnw", "rew", "elernw", "tg_rew", "nrg_rnw"],
-    "electricity": ["electricity", "elc", "tg_elc", "nrg_elc"],
-    "demand": ["demand", "dem", "tg_dmd", "dem_com"],
+ENERGY_COMGROUP_MAP = {
+    "nrg_win": "wind",
+    "nrg_sol": "solar",
+    "nrg_hyd": "hydro",
+    "nrg_nuk": "nuclear",
+    "nrg_nuc": "nuclear",
+    "nrg_sbio": "bio",
+    "nrg_bio": "bio",
+    "nrg_bga": "bio",
+    "nrg_bfu": "bio",
+    "nrg_man": "bio",
+    "nrg_gas": "gas",
+    "nrg_coal": "coal",
+    "nrg_coa": "coal",
+    "nrg_foil": "oil",
+    "nrg_oil": "oil",
+    "nrg_elc": "electricity",
+    "nrg_elec": "electricity",
+    "nrg_rnw": "renewables",
+    "nrg_rew": "renewables",
+    "nrg_amb": "other",
+    "nrg_dhea": "other",
+    "nrg_wst": "other",
 }
+ENERGY_TECHGROUP_MAP = {
+    "tg_bio": "bio",
+    "tg_elc": "electricity",
+    "tg_gas": "gas",
+    "tg_nuc": "nuclear",
+    "tg_rew": "renewables",
+    "tg_coa": "coal",
+    "tg_oil": "oil",
+    "tg_dmd": "demand",
+}
+ENERGY_EXACT_TOKEN_MAP = {
+    "wind": "wind",
+    "win": "wind",
+    "solar": "solar",
+    "sol": "solar",
+    "hydro": "hydro",
+    "water": "hydro",
+    "nuclear": "nuclear",
+    "nuc": "nuclear",
+    "biomass": "bio",
+    "bio": "bio",
+    "coal": "coal",
+    "coa": "coal",
+    "gas": "gas",
+    "oil": "oil",
+    "electricity": "electricity",
+    "elc": "electricity",
+    "demand": "demand",
+    "dem": "demand",
+    "dsl": "oil",
+    "gsl": "oil",
+    "hfo": "oil",
+    "lpg": "oil",
+    "nap": "oil",
+    "ker": "oil",
+}
+ENERGY_PREFIX_RULES = (
+    ("elcwin", "wind"),
+    ("minwin", "wind"),
+    ("elcsol", "solar"),
+    ("minsol", "solar"),
+    ("elehyd", "hydro"),
+    ("elenuc", "nuclear"),
+    ("elegas", "gas"),
+    ("eleoil", "oil"),
+    ("elebio", "bio"),
+)
+ENERGY_SUFFIX_RULES = (
+    ("dsl", "oil"),
+    ("gsl", "oil"),
+    ("lpg", "oil"),
+    ("hfo", "oil"),
+    ("nap", "oil"),
+)
 CLUSTER_COLORS = {
     0: "#7fb3d5",
     1: "#f39c12",
@@ -106,13 +172,42 @@ def scenario_display_label(scen: str, descriptions: dict[str, str]) -> str:
     return f"{desc} [{scen}]"
 
 
-def tech_from_text(text: str) -> str:
-    low = str(text).lower().strip()
-    if not low:
-        return "other"
-    for tech, aliases in ENERGY_ALIASES.items():
-        if any(alias in low for alias in aliases):
-            return tech
+def energy_tokens(*values: object) -> list[str]:
+    tokens: list[str] = []
+    for value in values:
+        low = str(value).lower().strip()
+        if not low or low == "nan":
+            continue
+        tokens.extend(re.findall(r"[a-z0-9]+", low))
+    return tokens
+
+
+def tech_from_fields(
+    techgroup: object = "",
+    comgroup: object = "",
+    prc: object = "",
+    com: object = "",
+) -> str:
+    comgroup_key = str(comgroup).lower().strip()
+    if comgroup_key in ENERGY_COMGROUP_MAP:
+        return ENERGY_COMGROUP_MAP[comgroup_key]
+
+    techgroup_key = str(techgroup).lower().strip()
+    if techgroup_key in ENERGY_TECHGROUP_MAP:
+        return ENERGY_TECHGROUP_MAP[techgroup_key]
+
+    tokens = energy_tokens(prc, com, techgroup, comgroup)
+    for token in tokens:
+        if token in ENERGY_EXACT_TOKEN_MAP:
+            return ENERGY_EXACT_TOKEN_MAP[token]
+    for token in tokens:
+        for prefix, tech in ENERGY_PREFIX_RULES:
+            if token.startswith(prefix):
+                return tech
+    for token in tokens:
+        for suffix, tech in ENERGY_SUFFIX_RULES:
+            if token.endswith(suffix):
+                return tech
     return "other"
 
 
@@ -274,7 +369,7 @@ def load_times_data(db_path: Path) -> tuple[dict[str, dict[int, float]], dict[st
                 """
                 SELECT scen, CAST(year AS INTEGER) AS year, COALESCE(energy_key, 'other') AS energy_key, value_twh
                 FROM v_energy_mix
-                WHERE CAST(year AS INTEGER) IN (2030, 2040, 2050)
+                WHERE TRY_CAST(year AS INTEGER) IS NOT NULL
                 """
             ).df()
         else:
@@ -296,16 +391,23 @@ def load_times_data(db_path: Path) -> tuple[dict[str, dict[int, float]], dict[st
             where = [
                 "lower(topic) = 'energy'",
                 "lower(attr) IN ('f_out', 'comnet')",
-                "TRY_CAST(year AS INTEGER) IN (2030, 2040, 2050)",
+                "TRY_CAST(year AS INTEGER) IS NOT NULL",
             ]
             if ts_col is not None:
                 where.append(f"upper(coalesce({ts_col}, '')) = 'ANNUAL'")
             raw = con.execute(
                 f"SELECT {', '.join(select_cols)} FROM {source_table} WHERE {' AND '.join(where)}"
             ).df()
-            source_cols = [c for c in ["techgroup", "comgroup", "prc", "com"] if c in raw.columns]
-            if source_cols:
-                raw["energy_key"] = raw[source_cols].fillna("").astype(str).agg(" ".join, axis=1).apply(tech_from_text)
+            if any(c in raw.columns for c in ["techgroup", "comgroup", "prc", "com"]):
+                raw["energy_key"] = raw.apply(
+                    lambda row: tech_from_fields(
+                        techgroup=row.get("techgroup", ""),
+                        comgroup=row.get("comgroup", ""),
+                        prc=row.get("prc", ""),
+                        com=row.get("com", ""),
+                    ),
+                    axis=1,
+                )
             else:
                 raw["energy_key"] = "other"
             raw["year"] = pd.to_numeric(raw["year"], errors="coerce")
@@ -765,7 +867,6 @@ def build_report_text(
         ("Valj framtidsbild", "Valjer vilket TIMES-scenario som styr total energimangd och standardmix."),
         ("Scenarioar (TIMES)", "Valjer vilket scenarioar som driver TWh, startmix och markansprak."),
         ("AreaDemand-kalla", "Valjer vilken litteraturkolumn for markintensitet som ska anvandas."),
-        ("Utbyggnadszon", "Styr om bara `class_km 0` eller aven extra kluster ska kunna bebyggas."),
         ("Elmix sliders (%)", "Lat anvandaren justera mixen. Sliders ar lankade och summerar till 100 %."),
         ("Nyckeltal", "Visar scenario, ar, markansprak i km2 och uppskattat antal hexagoner som behovs."),
         ("Karta", "Visar GC4-hexagoner, klustertillhorighet och auto-/manuellt valda hexagoner."),
@@ -843,7 +944,6 @@ Kort logik:
 - Scenario: **{example.scenario_label}**
 - Scenarioar: **{example.year}**
 - AreaDemand-kalla: **{example.area_profile_label}**
-- Utbyggnadszon i exemplet: **class_km {example.allowed_clusters}**
 - Urvalsmetod i exemplet: **Auto**
 - Total energimangd: **{example.base_total_twh:.2f} TWh**
 - Utraknat markansprak: **{example.total_area_need_km2:.2f} km2**
@@ -927,7 +1027,7 @@ def main() -> None:
 
     baseline_series = {
         scenario_display_label(scen, scenario_descriptions): {
-            int(year): float(value) for year, value in sorted(years.items()) if int(year) in {2030, 2040, 2050}
+            int(year): float(value) for year, value in sorted(years.items())
         }
         for scen, years in sorted(scenario_totals.items())
     }

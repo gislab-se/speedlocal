@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import re
 
 import pandas as pd
 
@@ -21,19 +22,84 @@ UNIT_TO_TWH = {
     "tj": 1.0 / 3600.0,
 }
 
-ENERGY_ALIASES = {
-    "wind": ["wind", "win", "elewin"],
-    "solar": ["solar", "sol", "elesol"],
-    "hydro": ["hydro", "hyd", "water", "elehyd"],
-    "nuclear": ["nuclear", "nuc", "karn", "elenuc", "nrg_nuk", "tg_nuc"],
-    "bio": ["biomass", "bio", "elebio", "nrg_bio", "tg_bio"],
-    "coal": ["coal", "coa", "elecoa", "nrg_coa", "tg_coa"],
-    "gas": ["gas", "elegas", "nrg_gas", "tg_gas"],
-    "oil": ["oil", "dsl", "hfo", "ker", "lpg", "nap", "eleoil", "nrg_oil", "tg_oil"],
-    "renewables": ["renew", "rnw", "rew", "elernw", "tg_rew", "nrg_rnw"],
-    "electricity": ["electricity", "elc", "tg_elc", "nrg_elc"],
-    "demand": ["demand", "dem", "tg_dmd", "dem_com"],
+ENERGY_COMGROUP_MAP = {
+    "nrg_win": "wind",
+    "nrg_sol": "solar",
+    "nrg_hyd": "hydro",
+    "nrg_nuk": "nuclear",
+    "nrg_nuc": "nuclear",
+    "nrg_sbio": "bio",
+    "nrg_bio": "bio",
+    "nrg_bga": "bio",
+    "nrg_bfu": "bio",
+    "nrg_man": "bio",
+    "nrg_gas": "gas",
+    "nrg_coal": "coal",
+    "nrg_coa": "coal",
+    "nrg_foil": "oil",
+    "nrg_oil": "oil",
+    "nrg_elc": "electricity",
+    "nrg_elec": "electricity",
+    "nrg_rnw": "renewables",
+    "nrg_rew": "renewables",
+    "nrg_amb": "other",
+    "nrg_dhea": "other",
+    "nrg_wst": "other",
 }
+ENERGY_TECHGROUP_MAP = {
+    "tg_bio": "bio",
+    "tg_elc": "electricity",
+    "tg_gas": "gas",
+    "tg_nuc": "nuclear",
+    "tg_rew": "renewables",
+    "tg_coa": "coal",
+    "tg_oil": "oil",
+    "tg_dmd": "demand",
+}
+ENERGY_EXACT_TOKEN_MAP = {
+    "wind": "wind",
+    "win": "wind",
+    "solar": "solar",
+    "sol": "solar",
+    "hydro": "hydro",
+    "water": "hydro",
+    "nuclear": "nuclear",
+    "nuc": "nuclear",
+    "biomass": "bio",
+    "bio": "bio",
+    "coal": "coal",
+    "coa": "coal",
+    "gas": "gas",
+    "oil": "oil",
+    "electricity": "electricity",
+    "elc": "electricity",
+    "demand": "demand",
+    "dem": "demand",
+    "dsl": "oil",
+    "gsl": "oil",
+    "hfo": "oil",
+    "lpg": "oil",
+    "nap": "oil",
+    "ker": "oil",
+}
+ENERGY_PREFIX_RULES = (
+    ("elcwin", "wind"),
+    ("minwin", "wind"),
+    ("elcsol", "solar"),
+    ("minsol", "solar"),
+    ("elehyd", "hydro"),
+    ("elenuc", "nuclear"),
+    ("elegas", "gas"),
+    ("eleoil", "oil"),
+    ("elebio", "bio"),
+)
+ENERGY_SUFFIX_RULES = (
+    ("dsl", "oil"),
+    ("gsl", "oil"),
+    ("lpg", "oil"),
+    ("hfo", "oil"),
+    ("nap", "oil"),
+)
 
 DEFAULT_AREA_FACTORS = {
     "wind": 1.20,
@@ -49,19 +115,58 @@ DEFAULT_AREA_FACTORS = {
     "demand": 1.00,
     "other": 1.00,
 }
+AREA_TECH_ALIASES = {
+    "wind": ["wind"],
+    "solar": ["solar"],
+    "hydro": ["hydro", "water", "run-of-river", "reservoir"],
+    "nuclear": ["nuclear", "smr"],
+    "bio": ["bio", "biomass"],
+    "coal": ["coal"],
+    "gas": ["gas"],
+    "oil": ["oil"],
+}
 
 
 def normalize_text(s: pd.Series) -> pd.Series:
     return s.astype(str).str.lower().str.strip()
 
 
-def tech_from_text(text: str) -> str:
-    t = str(text).lower().strip()
-    if not t:
-        return "other"
-    for tech, aliases in ENERGY_ALIASES.items():
-        if any(a in t for a in aliases):
-            return tech
+def energy_tokens(*values: object) -> list[str]:
+    tokens: list[str] = []
+    for value in values:
+        low = str(value).lower().strip()
+        if not low or low == "nan":
+            continue
+        tokens.extend(re.findall(r"[a-z0-9]+", low))
+    return tokens
+
+
+def tech_from_fields(
+    techgroup: object = "",
+    comgroup: object = "",
+    prc: object = "",
+    com: object = "",
+) -> str:
+    comgroup_key = str(comgroup).lower().strip()
+    if comgroup_key in ENERGY_COMGROUP_MAP:
+        return ENERGY_COMGROUP_MAP[comgroup_key]
+
+    techgroup_key = str(techgroup).lower().strip()
+    if techgroup_key in ENERGY_TECHGROUP_MAP:
+        return ENERGY_TECHGROUP_MAP[techgroup_key]
+
+    tokens = energy_tokens(prc, com, techgroup, comgroup)
+    for token in tokens:
+        if token in ENERGY_EXACT_TOKEN_MAP:
+            return ENERGY_EXACT_TOKEN_MAP[token]
+    for token in tokens:
+        for prefix, tech in ENERGY_PREFIX_RULES:
+            if token.startswith(prefix):
+                return tech
+    for token in tokens:
+        for suffix, tech in ENERGY_SUFFIX_RULES:
+            if token.endswith(suffix):
+                return tech
     return "other"
 
 
@@ -79,9 +184,18 @@ def read_timesreport_csv(csv_path: Path) -> pd.DataFrame:
     if "regionto" in df.columns and "regto" not in df.columns:
         df["regto"] = df["regionto"]
 
-    source_cols = [c for c in ["techgroup", "comgroup", "prc", "com"] if c in df.columns]
-    merged = df[source_cols].fillna("").astype(str).agg(" ".join, axis=1) if source_cols else ""
-    df["energy_key"] = merged.apply(tech_from_text) if source_cols else "other"
+    if any(c in df.columns for c in ["techgroup", "comgroup", "prc", "com"]):
+        df["energy_key"] = df.apply(
+            lambda row: tech_from_fields(
+                techgroup=row.get("techgroup", ""),
+                comgroup=row.get("comgroup", ""),
+                prc=row.get("prc", ""),
+                com=row.get("com", ""),
+            ),
+            axis=1,
+        )
+    else:
+        df["energy_key"] = "other"
 
     units = normalize_text(df["units"])
     factor = units.map(UNIT_TO_TWH).fillna(1.0)
@@ -122,7 +236,7 @@ def read_area_factors(area_path: Path) -> pd.DataFrame:
 
     factors = DEFAULT_AREA_FACTORS.copy()
     low = work[tech_col].astype(str).str.lower()
-    for tech, aliases in ENERGY_ALIASES.items():
+    for tech, aliases in AREA_TECH_ALIASES.items():
         mask = low.apply(lambda v: any(a in v for a in aliases))
         if mask.any():
             # Heuristic: if source likely GWh/km2, convert to km2/TWh via 1000/x.
@@ -207,4 +321,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
