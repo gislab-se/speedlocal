@@ -7,10 +7,21 @@ import tempfile
 import urllib.request
 from pathlib import Path
 
+try:
+    import altair as alt
+except Exception:  # pragma: no cover
+    alt = None
+
 import numpy as np
 import pandas as pd
 import pydeck as pdk
 import streamlit as st
+from apps.gc4.area_demand_scenarios import (
+    SCENARIO_LABELS as AREA_SCENARIO_LABELS,
+    SCENARIO_ORDER as AREA_SCENARIO_ORDER,
+    TIMES_TECH_RULES as AREA_SCENARIO_TIMES_RULES,
+    build_area_demand_scenario_bundle,
+)
 
 try:
     import duckdb
@@ -23,49 +34,125 @@ except Exception:  # pragma: no cover
     h3 = None
 
 
-SCENARIO_TOTALS_TWH = {
-    "Teknologioptimist": {2030: 190.0, 2040: 320.0, 2050: 370.0},
-    "Gjennomgripende omstilling": {2030: 180.0, 2040: 225.0, 2050: 235.0},
-    "Litt her og der": {2030: 170.0, 2040: 235.0, 2050: 245.0},
-    "Ny hverdag": {2030: 175.0, 2040: 185.0, 2050: 182.0},
-}
-
-BASE_MIX_PCT = {
-    "Teknologioptimist": {"wind": 52.0, "solar": 16.0, "nuclear": 10.0},
-    "Gjennomgripende omstilling": {"wind": 42.0, "solar": 24.0, "nuclear": 7.0},
-    "Litt her og der": {"wind": 34.0, "solar": 15.0, "nuclear": 5.0},
-    "Ny hverdag": {"wind": 28.0, "solar": 12.0, "nuclear": 4.0},
-}
-
 DEFAULT_AREA_FACTORS = {"wind": 1.20, "solar": 2.10, "nuclear": 0.12}  # km2/TWh
 DEFAULT_AREA_FACTOR_GENERIC = 1.00
 ENERGY_LABELS = {
-    "wind": "Vind",
-    "solar": "Sol",
-    "nuclear": "Karnkraft",
-    "hydro": "Vattenkraft",
-    "bio": "Bioenergi",
-    "coal": "Kol",
-    "gas": "Gas",
-    "oil": "Olja",
-    "renewables": "Fornybart",
-    "electricity": "El",
-    "demand": "Efterfragan",
-    "other": "Ovrigt",
+    "sv": {
+        "wind": "Vind",
+        "solar": "Sol",
+        "nuclear": "Kärnkraft",
+        "hydro": "Vattenkraft",
+        "bio": "Bioenergi",
+        "coal": "Kol",
+        "gas": "Gas",
+        "oil": "Olja",
+        "renewables": "Förnybart",
+        "electricity": "El",
+        "demand": "Efterfrågan",
+        "other": "Övrigt",
+    },
+    "en": {
+        "wind": "Wind",
+        "solar": "Solar",
+        "nuclear": "Nuclear",
+        "hydro": "Hydropower",
+        "bio": "Bioenergy",
+        "coal": "Coal",
+        "gas": "Gas",
+        "oil": "Oil",
+        "renewables": "Renewables",
+        "electricity": "Electricity",
+        "demand": "Demand",
+        "other": "Other",
+    },
 }
-ENERGY_ALIASES = {
-    "wind": ["wind", "win", "elewin"],
-    "solar": ["solar", "sol", "elesol"],
-    "hydro": ["hydro", "hyd", "water", "elehyd"],
-    "nuclear": ["nuclear", "nuc", "karn", "elenuc", "nrg_nuk", "tg_nuc"],
-    "bio": ["biomass", "bio", "elebio", "nrg_bio", "tg_bio"],
-    "coal": ["coal", "coa", "elecoa", "nrg_coa", "tg_coa"],
-    "gas": ["gas", "elegas", "nrg_gas", "tg_gas"],
-    "oil": ["oil", "dsl", "hfo", "ker", "lpg", "nap", "eleoil", "nrg_oil", "tg_oil"],
-    "renewables": ["renew", "rnw", "rew", "elernw", "tg_rew", "nrg_rnw"],
-    "electricity": ["electricity", "elc", "tg_elc", "nrg_elc"],
-    "demand": ["demand", "dem", "tg_dmd", "dem_com"],
+AREA_SCENARIO_UI_LABELS = {
+    "low": {"sv": "Lågt markanspråk", "en": "Low land demand"},
+    "mid": {"sv": "Mellan", "en": "Medium"},
+    "high": {"sv": "Högt", "en": "High"},
 }
+SELECTION_MODE_UI_LABELS = {
+    "auto": {"sv": "Auto", "en": "Auto"},
+    "manual": {"sv": "Manuellt", "en": "Manual"},
+}
+ENERGY_COMGROUP_MAP = {
+    "nrg_win": "wind",
+    "nrg_sol": "solar",
+    "nrg_hyd": "hydro",
+    "nrg_nuk": "nuclear",
+    "nrg_nuc": "nuclear",
+    "nrg_sbio": "bio",
+    "nrg_bio": "bio",
+    "nrg_bga": "bio",
+    "nrg_bfu": "bio",
+    "nrg_man": "bio",
+    "nrg_gas": "gas",
+    "nrg_coal": "coal",
+    "nrg_coa": "coal",
+    "nrg_foil": "oil",
+    "nrg_oil": "oil",
+    "nrg_elc": "electricity",
+    "nrg_elec": "electricity",
+    "nrg_rnw": "renewables",
+    "nrg_rew": "renewables",
+    "nrg_amb": "other",
+    "nrg_dhea": "other",
+    "nrg_wst": "other",
+}
+ENERGY_TECHGROUP_MAP = {
+    "tg_bio": "bio",
+    "tg_elc": "electricity",
+    "tg_gas": "gas",
+    "tg_nuc": "nuclear",
+    "tg_rew": "renewables",
+    "tg_coa": "coal",
+    "tg_oil": "oil",
+    "tg_dmd": "demand",
+}
+ENERGY_EXACT_TOKEN_MAP = {
+    "wind": "wind",
+    "win": "wind",
+    "solar": "solar",
+    "sol": "solar",
+    "hydro": "hydro",
+    "water": "hydro",
+    "nuclear": "nuclear",
+    "nuc": "nuclear",
+    "biomass": "bio",
+    "bio": "bio",
+    "coal": "coal",
+    "coa": "coal",
+    "gas": "gas",
+    "oil": "oil",
+    "electricity": "electricity",
+    "elc": "electricity",
+    "demand": "demand",
+    "dem": "demand",
+    "dsl": "oil",
+    "gsl": "oil",
+    "hfo": "oil",
+    "lpg": "oil",
+    "nap": "oil",
+    "ker": "oil",
+}
+ENERGY_PREFIX_RULES = (
+    ("elcwin", "wind"),
+    ("minwin", "wind"),
+    ("elcsol", "solar"),
+    ("minsol", "solar"),
+    ("elehyd", "hydro"),
+    ("elenuc", "nuclear"),
+    ("elegas", "gas"),
+    ("eleoil", "oil"),
+    ("elebio", "bio"),
+)
+ENERGY_SUFFIX_RULES = (
+    ("dsl", "oil"),
+    ("gsl", "oil"),
+    ("lpg", "oil"),
+    ("hfo", "oil"),
+    ("nap", "oil"),
+)
 UNIT_TO_TWH = {
     "twh": 1.0,
     "gwh": 1e-3,
@@ -112,7 +199,54 @@ def _get_config_value(name: str) -> str:
     return str(secret_value).strip()
 
 
-GEOCONTEXT_APP_URL = _get_config_value("GEOCONTEXT_APP_URL")
+def _current_language() -> str:
+    language = str(st.session_state.get("ui_language", "sv")).strip().lower()
+    if language not in {"sv", "en"}:
+        language = "sv"
+    st.session_state["ui_language"] = language
+    return language
+
+
+def _tr(sv: str, en: str) -> str:
+    return sv if _current_language() == "sv" else en
+
+
+def _toggle_language() -> None:
+    st.session_state["ui_language"] = "en" if _current_language() == "sv" else "sv"
+
+
+def _language_switch_label() -> str:
+    return "Switch to English" if _current_language() == "sv" else "Byt till svenska"
+
+
+def _language_status_label() -> str:
+    return "Svenska" if _current_language() == "sv" else "English"
+
+
+def _area_scenario_label(scenario_id: str) -> str:
+    labels = AREA_SCENARIO_UI_LABELS.get(str(scenario_id), {})
+    fallback = AREA_SCENARIO_LABELS.get(str(scenario_id), str(scenario_id))
+    return labels.get(_current_language(), fallback)
+
+
+def _selection_mode_label(selection_mode: str) -> str:
+    labels = SELECTION_MODE_UI_LABELS.get(str(selection_mode), {})
+    fallback = str(selection_mode)
+    return labels.get(_current_language(), fallback)
+
+
+def _translate_columns(rename_map: dict[str, tuple[str, str]]) -> dict[str, str]:
+    return {column: _tr(sv, en) for column, (sv, en) in rename_map.items()}
+
+
+def _translate_app_category_column(df: pd.DataFrame, column: str = "Appkategori") -> pd.DataFrame:
+    if column not in df.columns:
+        return df
+    display_df = df.copy()
+    display_df[column] = display_df[column].map(
+        lambda value: _human_tech_name(str(value)) if str(value).strip() else ""
+    )
+    return display_df
 
 
 def _find_first_col(columns: list[str], tokens: list[str]) -> str | None:
@@ -121,6 +255,17 @@ def _find_first_col(columns: list[str], tokens: list[str]) -> str | None:
         if any(t in low for t in tokens):
             return c
     return None
+
+
+def _read_table_file(path: Path) -> pd.DataFrame:
+    suffix = path.suffix.lower()
+    if suffix == ".csv":
+        return pd.read_csv(path)
+    if suffix in {".xlsx", ".xls"}:
+        return pd.read_excel(path)
+    if suffix in {".parquet", ".pq"}:
+        return pd.read_parquet(path)
+    raise ValueError(f"Filformat stods inte: {path}")
 
 
 def _default_area_factors() -> dict[str, float]:
@@ -141,7 +286,8 @@ def _default_area_factors() -> dict[str, float]:
 
 
 def _human_tech_name(tech: str) -> str:
-    return ENERGY_LABELS.get(tech, tech.replace("_", " ").title())
+    labels = ENERGY_LABELS.get(_current_language(), ENERGY_LABELS["sv"])
+    return labels.get(tech, tech.replace("_", " ").title())
 
 
 def _scenario_display_label(scen: str, descriptions: dict[str, str]) -> str:
@@ -151,14 +297,130 @@ def _scenario_display_label(scen: str, descriptions: dict[str, str]) -> str:
     return f"{desc} [{scen}]"
 
 
-def _tech_from_text(text: str) -> str:
-    t = str(text).lower().strip()
-    if not t:
-        return "other"
-    for tech, aliases in ENERGY_ALIASES.items():
-        if any(a in t for a in aliases):
-            return tech
-    return "other"
+def _times_tech_code(comgroup: object = "", techgroup: object = "") -> str:
+    comgroup_text = str(comgroup).strip().upper()
+    if comgroup_text and comgroup_text not in {"NA", "NAN"}:
+        return comgroup_text
+    techgroup_text = str(techgroup).strip().upper()
+    if techgroup_text and techgroup_text not in {"NA", "NAN"}:
+        return techgroup_text
+    return "UNKNOWN"
+
+
+def _times_tech_display(times_tech: str, energy_key: str) -> str:
+    human = _human_tech_name(energy_key)
+    if not human:
+        return times_tech
+    return f"{times_tech} ({human})"
+
+
+def _build_baseline_line_chart(
+    data: pd.DataFrame,
+    y_field: str,
+    y_title: str,
+    year_order: list[str],
+    scenario_order: list[str],
+    *,
+    zero: bool = True,
+    value_format: str = ".2f",
+):
+    if alt is None:
+        return None
+    return (
+        alt.Chart(data)
+        .mark_line(point=alt.OverlayMarkDef(filled=True, size=72), strokeWidth=2.5)
+        .encode(
+            x=alt.X("year_label:N", title=_tr("År", "Year"), sort=year_order),
+            y=alt.Y(f"{y_field}:Q", title=y_title, scale=alt.Scale(zero=zero)),
+            color=alt.Color("scenario_label:N", title=_tr("Scenario", "Scenario"), sort=scenario_order),
+            tooltip=[
+                alt.Tooltip("scenario_label:N", title=_tr("Scenario", "Scenario")),
+                alt.Tooltip("year_label:N", title=_tr("År", "Year")),
+                alt.Tooltip(f"{y_field}:Q", title=y_title, format=value_format),
+            ],
+        )
+        .properties(height=320)
+        .interactive()
+    )
+
+
+def _energy_tokens(*values: object) -> list[str]:
+    tokens: list[str] = []
+    for value in values:
+        low = str(value).lower().strip()
+        if not low or low == "nan":
+            continue
+        tokens.extend(re.findall(r"[a-z0-9]+", low))
+    return tokens
+
+
+def _tech_from_fields(
+    techgroup: object = "",
+    comgroup: object = "",
+    prc: object = "",
+    com: object = "",
+) -> tuple[str, str]:
+    comgroup_key = str(comgroup).lower().strip()
+    if comgroup_key in ENERGY_COMGROUP_MAP:
+        return ENERGY_COMGROUP_MAP[comgroup_key], "comgroup"
+
+    techgroup_key = str(techgroup).lower().strip()
+    if techgroup_key in ENERGY_TECHGROUP_MAP:
+        return ENERGY_TECHGROUP_MAP[techgroup_key], "techgroup"
+
+    tokens = _energy_tokens(prc, com, techgroup, comgroup)
+    for token in tokens:
+        if token in ENERGY_EXACT_TOKEN_MAP:
+            return ENERGY_EXACT_TOKEN_MAP[token], "token"
+
+    for token in tokens:
+        for prefix, tech in ENERGY_PREFIX_RULES:
+            if token.startswith(prefix):
+                return tech, "token"
+
+    for token in tokens:
+        for suffix, tech in ENERGY_SUFFIX_RULES:
+            if token.endswith(suffix):
+                return tech, "token"
+
+    return "other", "unmapped"
+
+
+def _classify_energy_frame(frame: pd.DataFrame) -> pd.DataFrame:
+    work = frame.copy()
+    if work.empty:
+        work["energy_key"] = pd.Series(dtype="object")
+        work["mapping_source"] = pd.Series(dtype="object")
+        work["raw_mapping"] = pd.Series(dtype="object")
+        return work
+
+    energy_keys: list[str] = []
+    mapping_sources: list[str] = []
+    raw_mappings: list[str] = []
+    raw_fields = ["techgroup", "comgroup", "prc", "com"]
+
+    for row in work.to_dict("records"):
+        tech, source = _tech_from_fields(
+            techgroup=row.get("techgroup", ""),
+            comgroup=row.get("comgroup", ""),
+            prc=row.get("prc", ""),
+            com=row.get("com", ""),
+        )
+        energy_keys.append(str(tech))
+        mapping_sources.append(str(source))
+        raw_mappings.append(
+            " | ".join(
+                [
+                    str(row.get(name, "")).strip() if str(row.get(name, "")).strip() else "NA"
+                    for name in raw_fields
+                ]
+            )
+        )
+
+    work["energy_key"] = energy_keys
+    work["mapping_source"] = mapping_sources
+    work["raw_mapping"] = raw_mappings
+    return work
 
 
 def _normalize_mix_100(values: dict[str, float]) -> dict[str, float]:
@@ -171,6 +433,41 @@ def _normalize_mix_100(values: dict[str, float]) -> dict[str, float]:
         eq = 100.0 / len(keys)
         return {k: eq for k in keys}
     return {k: clean[k] * 100.0 / s for k in keys}
+
+
+def _set_mix_state(tech_keys: list[str], values: dict[str, float]) -> None:
+    normalized = _normalize_mix_100({tech: float(values.get(tech, 0.0)) for tech in tech_keys})
+    for tech in tech_keys:
+        st.session_state[f"mix_{tech}"] = float(normalized.get(tech, 0.0))
+
+
+def _sync_mix_state(tech_keys: list[str], base_mix: dict[str, float]) -> None:
+    ctx_key = "_mix_tech_ctx"
+    current_ctx = "|".join(tech_keys)
+    previous_ctx = str(st.session_state.get(ctx_key, ""))
+
+    if not tech_keys:
+        st.session_state[ctx_key] = current_ctx
+        return
+
+    if not previous_ctx:
+        _set_mix_state(tech_keys, base_mix)
+        st.session_state[ctx_key] = current_ctx
+        return
+
+    if previous_ctx == current_ctx:
+        st.session_state[ctx_key] = current_ctx
+        return
+
+    preserved: dict[str, float] = {}
+    for tech in tech_keys:
+        state_key = f"mix_{tech}"
+        if state_key in st.session_state:
+            preserved[tech] = float(st.session_state.get(state_key, 0.0))
+        else:
+            preserved[tech] = float(base_mix.get(tech, 0.0))
+    _set_mix_state(tech_keys, preserved)
+    st.session_state[ctx_key] = current_ctx
 
 
 def _build_base_mix_by_year(
@@ -320,6 +617,60 @@ def _find_area_profile_duckdb(project_root: Path) -> Path | None:
     return next((p for p in candidates if p.exists()), None)
 
 
+def _config_path(name: str) -> Path | None:
+    value = _get_config_value(name)
+    if not value:
+        return None
+    path = Path(value)
+    return path if path.exists() else None
+
+
+def _find_hex_points(project_root: Path) -> Path | None:
+    configured = _config_path("HEX_POINTS_PATH")
+    if configured is not None:
+        return configured
+    candidates = [
+        project_root / "jyp_note_book_geocontext" / "bornholm_points_with_context_gc4.csv",
+        project_root / "data" / "gc4" / "bornholm_points_with_context_gc4.csv",
+    ]
+    return next((p for p in candidates if p.exists()), None)
+
+
+def _find_hex_scores(project_root: Path) -> Path | None:
+    configured = _config_path("HEX_SCORES_PATH")
+    if configured is not None:
+        return configured
+    candidates = [
+        project_root / "jyp_note_book_geocontext" / "bornholm_r8_factor_scores_gc4.csv",
+        project_root / "data" / "gc4" / "bornholm_r8_factor_scores_gc4.csv",
+    ]
+    return next((p for p in candidates if p.exists()), None)
+
+
+def _find_acceptance_layer(project_root: Path) -> Path | None:
+    configured = _config_path("ACCEPTANCE_LAYER_PATH")
+    if configured is not None:
+        return configured
+    candidates = [
+        project_root / "data" / "processed" / "acceptance_layer.csv",
+        project_root / "data" / "processed" / "acceptance_layer.parquet",
+    ]
+    return next((p for p in candidates if p.exists()), None)
+
+
+def _resolve_hex_sources(project_root: Path) -> tuple[Path | None, Path | None, Path | None, str]:
+    points_path = _find_hex_points(project_root)
+    scores_path = _find_hex_scores(project_root)
+    acceptance_path = _find_acceptance_layer(project_root)
+
+    parts: list[str] = []
+    parts.append(f"points: {points_path}" if points_path is not None else "points: saknas")
+    parts.append(f"scores: {scores_path}" if scores_path is not None else "scores: saknas")
+    if acceptance_path is not None:
+        parts.append(f"acceptance: {acceptance_path}")
+    return points_path, scores_path, acceptance_path, "; ".join(parts)
+
+
 @st.cache_data(show_spinner=False, ttl=3600)
 def _download_duckdb_share(share_url: str) -> tuple[str | None, str]:
     url = str(share_url).strip()
@@ -389,21 +740,94 @@ def _duckdb_columns(con, name: str) -> list[str]:
     return [str(r[0]) for r in rows]
 
 
-def _load_energy_mix_frame_duckdb(con) -> tuple[pd.DataFrame | None, str]:
-    if _duckdb_has_object(con, "v_energy_mix"):
-        mix = con.execute(
-            """
-            SELECT
-                scen,
-                CAST(year AS INTEGER) AS year,
-                COALESCE(energy_key, 'other') AS energy_key,
-                value_twh
-            FROM v_energy_mix
-            WHERE CAST(year AS INTEGER) IN (2030, 2040, 2050)
-            """
-        ).df()
-        return mix, "loaded duckdb view: v_energy_mix"
+def _aggregate_energy_mix_frame(raw: pd.DataFrame) -> pd.DataFrame:
+    if raw.empty:
+        return pd.DataFrame(columns=["scen", "year", "energy_key", "value_twh"])
+    return (
+        raw.groupby(["scen", "year", "energy_key"], as_index=False)["value_twh"]
+        .sum()
+        .sort_values(["scen", "year", "energy_key"])
+    )
 
+
+def _build_times_mapping_audit(raw: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    empty_mix = pd.DataFrame(columns=["scen", "year", "energy_key", "value_twh", "share_pct", "row_count"])
+    empty_coverage = pd.DataFrame(
+        columns=[
+            "scen",
+            "year",
+            "total_twh",
+            "named_twh",
+            "other_bucket_twh",
+            "unmapped_twh",
+            "named_share_pct",
+            "other_bucket_share_pct",
+            "unmapped_share_pct",
+        ]
+    )
+    empty_mapping = pd.DataFrame(
+        columns=["scen", "year", "energy_key", "mapping_source", "raw_mapping", "value_twh", "row_count"]
+    )
+    if raw.empty:
+        return {"coverage": empty_coverage, "mix": empty_mix, "mapping": empty_mapping}
+
+    mix = (
+        raw.groupby(["scen", "year", "energy_key"], as_index=False)
+        .agg(value_twh=("value_twh", "sum"), row_count=("energy_key", "size"))
+        .sort_values(["scen", "year", "value_twh"], ascending=[True, True, False])
+    )
+    totals = (
+        mix.groupby(["scen", "year"], as_index=False)["value_twh"]
+        .sum()
+        .rename(columns={"value_twh": "total_twh"})
+    )
+    mix = mix.merge(totals, on=["scen", "year"], how="left")
+    mix["share_pct"] = np.where(mix["total_twh"] > 0, 100.0 * mix["value_twh"] / mix["total_twh"], 0.0)
+
+    named = (
+        mix[mix["energy_key"] != "other"]
+        .groupby(["scen", "year"], as_index=False)["value_twh"]
+        .sum()
+        .rename(columns={"value_twh": "named_twh"})
+    )
+    other_bucket = (
+        mix[mix["energy_key"] == "other"]
+        .groupby(["scen", "year"], as_index=False)["value_twh"]
+        .sum()
+        .rename(columns={"value_twh": "other_bucket_twh"})
+    )
+    unmapped = (
+        raw[raw["mapping_source"] == "unmapped"]
+        .groupby(["scen", "year"], as_index=False)["value_twh"]
+        .sum()
+        .rename(columns={"value_twh": "unmapped_twh"})
+    )
+
+    coverage = totals.merge(named, on=["scen", "year"], how="left").merge(
+        other_bucket, on=["scen", "year"], how="left"
+    ).merge(unmapped, on=["scen", "year"], how="left")
+    for column in ["named_twh", "other_bucket_twh", "unmapped_twh"]:
+        coverage[column] = coverage[column].fillna(0.0)
+    coverage["named_share_pct"] = np.where(
+        coverage["total_twh"] > 0, 100.0 * coverage["named_twh"] / coverage["total_twh"], 0.0
+    )
+    coverage["other_bucket_share_pct"] = np.where(
+        coverage["total_twh"] > 0, 100.0 * coverage["other_bucket_twh"] / coverage["total_twh"], 0.0
+    )
+    coverage["unmapped_share_pct"] = np.where(
+        coverage["total_twh"] > 0, 100.0 * coverage["unmapped_twh"] / coverage["total_twh"], 0.0
+    )
+    coverage = coverage.sort_values(["scen", "year"]).reset_index(drop=True)
+
+    mapping = (
+        raw.groupby(["scen", "year", "energy_key", "mapping_source", "raw_mapping"], as_index=False)
+        .agg(value_twh=("value_twh", "sum"), row_count=("energy_key", "size"))
+        .sort_values(["scen", "year", "value_twh"], ascending=[True, True, False])
+    )
+    return {"coverage": coverage, "mix": mix, "mapping": mapping}
+
+
+def _load_energy_rows_duckdb(con) -> tuple[pd.DataFrame | None, str]:
     source_table = next((name for name in ["timesreport_raw", "timesreport"] if _duckdb_has_object(con, name)), None)
     if source_table is None:
         return None, "duckdb saknar timesreport_raw/timesreport"
@@ -427,7 +851,7 @@ def _load_energy_mix_frame_duckdb(con) -> tuple[pd.DataFrame | None, str]:
     where_clauses = [
         "lower(topic) = 'energy'",
         "lower(attr) IN ('f_out', 'comnet')",
-        "TRY_CAST(year AS INTEGER) IN (2030, 2040, 2050)",
+        "TRY_CAST(year AS INTEGER) IS NOT NULL",
     ]
     if ts_col is not None:
         where_clauses.append(f"upper(coalesce({ts_col}, '')) = 'ANNUAL'")
@@ -442,13 +866,7 @@ def _load_energy_mix_frame_duckdb(con) -> tuple[pd.DataFrame | None, str]:
     if raw.empty:
         return raw, f"duckdb-tabell {source_table} gav tomt resultat"
 
-    source_cols = [c for c in ["techgroup", "comgroup", "prc", "com"] if c in raw.columns]
-    if source_cols:
-        merged_source = raw[source_cols].fillna("").astype(str).agg(" ".join, axis=1)
-        raw["energy_key"] = merged_source.apply(_tech_from_text)
-    else:
-        raw["energy_key"] = "other"
-
+    raw = _classify_energy_frame(raw)
     raw["year"] = pd.to_numeric(raw["year"], errors="coerce")
     raw["value_twh"] = _as_twh(raw["value"], raw["units"])
     raw = raw.dropna(subset=["year", "value_twh"])
@@ -456,12 +874,29 @@ def _load_energy_mix_frame_duckdb(con) -> tuple[pd.DataFrame | None, str]:
         return None, f"duckdb-tabell {source_table} saknar giltiga year/value"
 
     raw["year"] = raw["year"].astype(int)
-    mix = (
-        raw.groupby(["scen", "year", "energy_key"], as_index=False)["value_twh"]
-        .sum()
-        .sort_values(["scen", "year", "energy_key"])
-    )
-    return mix, f"loaded duckdb raw: {source_table}"
+    raw["scen"] = raw["scen"].astype(str)
+    return raw, f"loaded duckdb raw: {source_table}"
+
+
+def _load_energy_mix_frame_duckdb(con) -> tuple[pd.DataFrame | None, str]:
+    if _duckdb_has_object(con, "v_energy_mix"):
+        mix = con.execute(
+            """
+            SELECT
+                scen,
+                CAST(year AS INTEGER) AS year,
+                COALESCE(energy_key, 'other') AS energy_key,
+                value_twh
+            FROM v_energy_mix
+            WHERE TRY_CAST(year AS INTEGER) IS NOT NULL
+            """
+        ).df()
+        return mix, "loaded duckdb view: v_energy_mix"
+
+    raw, status = _load_energy_rows_duckdb(con)
+    if raw is None:
+        return None, status
+    return _aggregate_energy_mix_frame(raw), status
 
 
 def _load_preview_frame_duckdb(con) -> tuple[pd.DataFrame | None, dict[str, list[str]] | None, str]:
@@ -495,24 +930,22 @@ def _load_preview_frame_duckdb(con) -> tuple[pd.DataFrame | None, dict[str, list
     return preview, summary, f"loaded duckdb preview: {source_table}"
 
 
-def load_timesreport_scenarios(
-    project_root: Path,
-) -> tuple[dict[str, dict[int, float]] | None, dict[str, dict[int, dict[str, float]]] | None, str]:
+def _load_energy_rows_csv(project_root: Path) -> tuple[pd.DataFrame | None, str]:
     csv_path = _find_timesreport_csv(project_root)
     if csv_path is None:
-        return None, None, "fallback: compare_timesreport.csv saknas"
+        return None, "fallback: compare_timesreport.csv saknas"
 
     try:
         raw = pd.read_csv(csv_path)
     except Exception as exc:
-        return None, None, f"fallback: kunde inte lasa TIMESreport csv ({exc})"
+        return None, f"fallback: kunde inte lasa TIMESreport csv ({exc})"
     if raw.empty:
-        return None, None, "fallback: TIMESreport csv tom"
+        return None, "fallback: TIMESreport csv tom"
 
     raw.columns = [str(c).strip().lower() for c in raw.columns]
     need = {"scen", "year", "value", "units"}
     if not need.issubset(set(raw.columns)):
-        return None, None, "fallback: TIMESreport csv saknar nodvandiga kolumner (scen/year/value/units)"
+        return None, "fallback: TIMESreport csv saknar nodvandiga kolumner (scen/year/value/units)"
 
     df = raw.copy()
     if "topic" in df.columns:
@@ -529,46 +962,43 @@ def load_timesreport_scenarios(
             df = df[annual]
 
     if df.empty:
-        return None, None, "fallback: inga rader kvar efter TIMESreport-filtrering"
+        return None, "fallback: inga rader kvar efter TIMESreport-filtrering"
 
-    source_cols = [c for c in ["techgroup", "comgroup", "prc", "com"] if c in df.columns]
-    if not source_cols:
-        return None, None, "fallback: ingen energikolumn hittades i TIMESreport csv"
-    merged_source = df[source_cols].fillna("").astype(str).agg(" ".join, axis=1)
-    df["tech"] = merged_source.apply(_tech_from_text)
-    if df.empty:
-        return None, None, "fallback: inga energirader hittades i TIMESreport csv"
-
+    df = _classify_energy_frame(df)
     df["year"] = pd.to_numeric(df["year"], errors="coerce")
     df = df.dropna(subset=["year"])
-    df["year"] = df["year"].astype(int)
-    df = df[df["year"].isin([2030, 2040, 2050])]
     if df.empty:
-        return None, None, "fallback: hittade inte ar 2030/2040/2050 i TIMESreport csv"
-
+        return None, "fallback: inga giltiga ar hittades i TIMESreport csv"
+    df["year"] = df["year"].astype(int)
     df["value_twh"] = _as_twh(df["value"], df["units"])
     df = df.dropna(subset=["value_twh"])
     if df.empty:
-        return None, None, "fallback: alla values blev ogiltiga efter enhetskonvertering"
+        return None, "fallback: alla values blev ogiltiga efter enhetskonvertering"
 
-    agg_all = (
-        df.groupby(["scen", "year", "tech"], as_index=False)["value_twh"]
-        .sum()
-        .rename(columns={"value_twh": "twh"})
-    )
-    known = agg_all[agg_all["tech"] != "other"].copy()
-    agg = known if not known.empty else agg_all
-    totals = agg.groupby(["scen", "year"], as_index=False)["twh"].sum()
+    df["scen"] = df["scen"].astype(str)
+    return df, f"loaded: {csv_path}"
+
+
+def load_timesreport_scenarios(
+    project_root: Path,
+) -> tuple[dict[str, dict[int, float]] | None, dict[str, dict[int, dict[str, float]]] | None, str]:
+    df, load_status = _load_energy_rows_csv(project_root)
+    if df is None:
+        return None, None, load_status
+    if df.empty:
+        return None, None, load_status
+
+    mix = _aggregate_energy_mix_frame(df)
+    totals = mix.groupby(["scen", "year"], as_index=False)["value_twh"].sum()
 
     scenario_totals: dict[str, dict[int, float]] = {}
     for _, r in totals.iterrows():
-        scenario_totals.setdefault(str(r["scen"]), {})[int(r["year"])] = float(r["twh"])
+        scenario_totals.setdefault(str(r["scen"]), {})[int(r["year"])] = float(r["value_twh"])
 
     if not scenario_totals:
         return None, None, "fallback: kunde inte bygga scenarios fran TIMESreport csv"
 
-    mix_rows = agg.rename(columns={"tech": "energy_key", "twh": "value_twh"})
-    base_mix = _build_base_mix_by_year(mix_rows, scenario_totals)
+    base_mix = _build_base_mix_by_year(mix, scenario_totals)
     for scen, year_totals in scenario_totals.items():
         if scen not in base_mix:
             base_mix[scen] = {}
@@ -576,7 +1006,7 @@ def load_timesreport_scenarios(
             if int(year) not in base_mix[scen]:
                 base_mix[scen][int(year)] = {"other": 100.0}
 
-    return scenario_totals, base_mix, f"loaded: {csv_path}"
+    return scenario_totals, base_mix, load_status
 
 
 def load_timesreport_scenarios_duckdb(
@@ -894,6 +1324,38 @@ def load_area_factor_profiles_sidecar(project_root: Path) -> tuple[dict[str, dic
     return profiles, f"loaded area profile duckdb: {db_path}"
 
 
+@st.cache_data(show_spinner=False)
+def load_timesreport_energy_rows(project_root: Path) -> tuple[pd.DataFrame | None, str]:
+    if duckdb is not None:
+        db_path, db_status = _resolve_duckdb(project_root)
+        if db_path is not None:
+            try:
+                con = duckdb.connect(str(db_path), read_only=True)
+                raw, raw_status = _load_energy_rows_duckdb(con)
+                con.close()
+                if raw is not None:
+                    return raw, f"{db_status}; {raw_status}"
+            except Exception:
+                pass
+    raw, raw_status = _load_energy_rows_csv(project_root)
+    return raw, raw_status
+
+
+@st.cache_data(show_spinner=False)
+def load_area_demand_scenario_bundle_cached(
+    project_root: Path,
+    times_tech_scope: tuple[str, ...],
+) -> tuple[dict[str, object] | None, str]:
+    xlsx_path = _find_area_demand_xlsx(project_root)
+    if xlsx_path is None:
+        return None, "AreaDemand.xlsx saknas"
+    try:
+        bundle = build_area_demand_scenario_bundle(xlsx_path, list(times_tech_scope))
+    except Exception as exc:
+        return None, f"kunde inte bygga AreaDemand-scenarier ({exc})"
+    return bundle, f"loaded AreaDemand-scenarier: {xlsx_path}"
+
+
 def load_timesreport_preview(
     project_root: Path,
 ) -> tuple[pd.DataFrame | None, dict[str, list[str]] | None, str]:
@@ -930,6 +1392,26 @@ def load_timesreport_preview(
         )
         summary[key] = vals[:80]
     return df.head(25), summary, f"loaded: {csv_path}"
+
+
+@st.cache_data(show_spinner=False)
+def load_timesreport_mapping_audit(project_root: Path) -> tuple[dict[str, pd.DataFrame] | None, str]:
+    if duckdb is not None:
+        db_path, db_status = _resolve_duckdb(project_root)
+        if db_path is not None:
+            try:
+                con = duckdb.connect(str(db_path), read_only=True)
+                raw, raw_status = _load_energy_rows_duckdb(con)
+                con.close()
+                if raw is not None:
+                    return _build_times_mapping_audit(raw), f"{db_status}; {raw_status}"
+            except Exception as exc:
+                return None, f"{db_status}; mapping audit misslyckades ({exc})"
+
+    raw, raw_status = _load_energy_rows_csv(project_root)
+    if raw is None:
+        return None, raw_status
+    return _build_times_mapping_audit(raw), raw_status
 
 
 @st.cache_data(show_spinner=False)
@@ -1004,11 +1486,113 @@ def load_scenario_metadata_duckdb(project_root: Path) -> tuple[dict[str, str], d
 
 
 @st.cache_data(show_spinner=False)
-def load_gc4(base_dir: Path) -> pd.DataFrame:
-    pts = pd.read_csv(base_dir / "bornholm_points_with_context_gc4.csv")
-    scores = pd.read_csv(base_dir / "bornholm_r8_factor_scores_gc4.csv")
-    df = pts.merge(scores[["hex_id", "class_km", "F1", "F2", "F3", "F4", "F5"]], on="hex_id", how="left")
-    df["class_km"] = df["class_km"].fillna(-1).astype(int)
+def _coerce_candidate_series(series: pd.Series) -> pd.Series:
+    if series.dtype == bool:
+        return series.fillna(False)
+    numeric = pd.to_numeric(series, errors="coerce")
+    if numeric.notna().any():
+        return numeric.fillna(0).gt(0)
+    low = series.astype(str).str.strip().str.lower()
+    return low.isin({"1", "true", "yes", "ja", "y", "allowed", "accept", "accepted"})
+
+
+def _find_build_candidate_column(columns: list[str]) -> str | None:
+    exact_names = [
+        "build_candidate",
+        "build_allowed",
+        "allow_build",
+        "accepted",
+        "is_accepted",
+        "is_buildable",
+        "eligible",
+    ]
+    low_lookup = {str(c).lower(): str(c) for c in columns}
+    for name in exact_names:
+        if name in low_lookup:
+            return low_lookup[name]
+    for column in columns:
+        low = str(column).lower()
+        if "accept" in low and ("flag" in low or "allow" in low or "build" in low):
+            return str(column)
+    return None
+
+
+def _find_acceptance_value_column(columns: list[str], excluded: set[str]) -> str | None:
+    preferred = ["acceptance_score", "acceptance", "social_acceptance", "status"]
+    low_lookup = {str(c).lower(): str(c) for c in columns}
+    for name in preferred:
+        if name in low_lookup and low_lookup[name] not in excluded:
+            return low_lookup[name]
+    for column in columns:
+        low = str(column).lower()
+        if "accept" in low and str(column) not in excluded:
+            return str(column)
+    return None
+
+
+@st.cache_data(show_spinner=False)
+def load_hex_context(
+    points_path_str: str,
+    scores_path_str: str | None = None,
+    acceptance_path_str: str | None = None,
+) -> pd.DataFrame:
+    points_path = Path(points_path_str)
+    pts = _read_table_file(points_path)
+    if "hex_id" not in pts.columns:
+        raise ValueError(f"Hexfil saknar kolumnen hex_id: {points_path}")
+
+    df = pts.copy()
+
+    if scores_path_str:
+        scores_path = Path(scores_path_str)
+        scores = _read_table_file(scores_path)
+        if "hex_id" not in scores.columns:
+            raise ValueError(f"Scorefil saknar kolumnen hex_id: {scores_path}")
+        score_cols = [c for c in ["hex_id", "class_km", "F1", "F2", "F3", "F4", "F5"] if c in scores.columns]
+        if score_cols and "hex_id" in score_cols:
+            df = df.merge(scores[score_cols], on="hex_id", how="left")
+
+    if acceptance_path_str:
+        acceptance_path = Path(acceptance_path_str)
+        acceptance = _read_table_file(acceptance_path)
+        if "hex_id" not in acceptance.columns:
+            raise ValueError(f"Acceptansfil saknar kolumnen hex_id: {acceptance_path}")
+        rename_map: dict[str, str] = {}
+        for column in acceptance.columns:
+            if column == "hex_id":
+                continue
+            if column in df.columns:
+                rename_map[str(column)] = f"accept_{column}"
+        if rename_map:
+            acceptance = acceptance.rename(columns=rename_map)
+        df = df.merge(acceptance, on="hex_id", how="left")
+
+        candidate_col = _find_build_candidate_column(list(acceptance.columns))
+        if candidate_col is not None:
+            df["build_candidate"] = _coerce_candidate_series(df[candidate_col]).fillna(False)
+        else:
+            df["build_candidate"] = True
+
+        acceptance_value_col = _find_acceptance_value_column(list(acceptance.columns), {candidate_col} if candidate_col else set())
+        if acceptance_value_col is not None:
+            df["acceptance_value"] = df[acceptance_value_col].astype(str).replace("nan", "")
+        else:
+            df["acceptance_value"] = ""
+    else:
+        df["build_candidate"] = True
+        df["acceptance_value"] = ""
+
+    if "class_km" not in df.columns:
+        df["class_km"] = 0
+    df["class_km"] = pd.to_numeric(df["class_km"], errors="coerce").fillna(0).astype(int)
+
+    for col in ["F1", "F2", "F3", "F4", "F5"]:
+        if col not in df.columns:
+            df[col] = 0.0
+        df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
+
+    df["build_candidate"] = df["build_candidate"].fillna(True).astype(bool)
+    df["acceptance_value"] = df["acceptance_value"].fillna("").astype(str)
     return df
 
 
@@ -1042,7 +1626,8 @@ def _hex_polygon(hex_id: str):
 
 @st.cache_data(show_spinner=False)
 def build_map_frame(df: pd.DataFrame) -> pd.DataFrame:
-    work = df[["hex_id", "class_km", "F1", "F2", "F3", "F4", "F5"]].copy()
+    keep_cols = [c for c in ["hex_id", "class_km", "F1", "F2", "F3", "F4", "F5", "build_candidate", "acceptance_value"] if c in df.columns]
+    work = df[keep_cols].copy()
     if h3 is None:
         work["lat"] = np.nan
         work["lon"] = np.nan
@@ -1114,20 +1699,30 @@ def suitability(df: pd.DataFrame, tech: str) -> pd.Series:
 
 st.set_page_config(page_title="GC4 + Energy Prototype", layout="wide")
 st.title("GC4 + Energy Prototype (Bornholm)")
-st.caption("Hexagoner + kluster + markansprak. class_km = 0 anvands som utbyggnadszon.")
+st.caption(_tr("Hexagoner + markanspråk kopplat till TIMES-scenarier.", "Hexagons + land demand linked to TIMES scenarios."))
 
 app_base = Path(__file__).resolve().parent
-project_root = app_base.parents[1]  # .../speedlocal_bornholm
-gc4_base = project_root / "jyp_note_book_geocontext"
-
-if not gc4_base.exists():
-    st.error(f"Saknar GC4-data: {gc4_base}")
-    st.stop()
+project_root = app_base.parents[1]
 if h3 is None:
-    st.error("Python-paketet `h3` saknas. Installera dependencies och starta om appen.")
+    st.error(_tr("Python-paketet `h3` saknas. Installera beroenden och starta om appen.", "The Python package `h3` is missing. Install dependencies and restart the app."))
     st.stop()
 
-gc4 = load_gc4(gc4_base)
+hex_points_path, hex_scores_path, acceptance_layer_path, hex_source_status = _resolve_hex_sources(project_root)
+if hex_points_path is None:
+    st.error(_tr("Saknar hexagondata. Ange `HEX_POINTS_PATH` eller lägg en points-fil i standardplatsen.", "Hexagon data is missing. Set `HEX_POINTS_PATH` or place a points file in the default location."))
+    st.caption(f"{_tr('Hexstatus', 'Hex status')}: `{hex_source_status}`")
+    st.stop()
+
+try:
+    gc4 = load_hex_context(
+        str(hex_points_path),
+        str(hex_scores_path) if hex_scores_path is not None else None,
+        str(acceptance_layer_path) if acceptance_layer_path is not None else None,
+    )
+except Exception as exc:
+    st.error(_tr(f"Kunde inte läsa hexagondata ({exc})", f"Could not read hexagon data ({exc})"))
+    st.caption(f"{_tr('Hexstatus', 'Hex status')}: `{hex_source_status}`")
+    st.stop()
 map_df = build_map_frame(gc4).dropna(subset=["lat", "lon", "polygon"]).copy()
 suitability_scores = build_suitability_frame(gc4)
 analysis_df = map_df.merge(suitability_scores, on="hex_id", how="left")
@@ -1136,123 +1731,124 @@ times_totals_csv, times_mix_csv, times_status_csv = load_timesreport_scenarios(p
 times_totals = times_totals_db if times_totals_db is not None else times_totals_csv
 times_mix = times_mix_db if times_mix_db is not None else times_mix_csv
 times_status = times_status_db if times_totals_db is not None else times_status_csv
-
-area_factors_db, area_status_db = load_area_factors_duckdb(project_root)
-area_profiles_sidecar, area_profiles_sidecar_status = load_area_factor_profiles_sidecar(project_root)
-area_profiles_xlsx, area_profiles_xlsx_status = load_area_factor_profiles_xlsx(project_root)
-area_profiles_source = area_profiles_sidecar if area_profiles_sidecar else area_profiles_xlsx
-area_profiles_status = area_profiles_sidecar_status if area_profiles_sidecar else area_profiles_xlsx_status
-
-area_profile_catalog: dict[str, dict[str, object]] = {}
-if area_factors_db is not None:
-    area_profile_catalog["duckdb"] = {
-        "label": "DuckDB area_factors",
-        "factors": area_factors_db,
-        "status": area_status_db,
-        "factor_sources": {energy_key: "duckdb" for energy_key in area_factors_db.keys()},
-        "coverage": sorted(area_factors_db.keys()),
-    }
-for profile_id, profile in area_profiles_source.items():
-    area_profile_catalog[profile_id] = {
-        "label": str(profile["label"]),
-        "factors": dict(profile["factors"]),
-        "status": f"{area_profiles_status}; {profile['metric']}",
-        "factor_sources": dict(profile.get("factor_sources", {})),
-        "coverage": list(profile["coverage"]),
-    }
-if not area_profile_catalog:
-    st.error("Inga AreaDemand-profiler hittades. Bygg eller peka ut AreaDemand-profiler innan appen startar.")
+if times_totals is None or times_mix is None:
+    st.error(_tr("Saknar TIMES-scenarier. Appen använder inte längre hårdkodade mock-scenarier.", "TIMES scenarios are missing. The app no longer uses hardcoded mock scenarios."))
+    st.caption(
+        _tr(
+            "Kontrollera `data/processed/speedlocal_times.duckdb`, `DUCKDB_PATH`, `DUCKDB_SHARE_URL` "
+            f"eller TIMESreport-csv. (`{times_status}`)",
+            "Check `data/processed/speedlocal_times.duckdb`, `DUCKDB_PATH`, `DUCKDB_SHARE_URL` "
+            f"or the TIMES report csv. (`{times_status}`)",
+        )
+    )
     st.stop()
 
-scenario_totals = times_totals if times_totals is not None else SCENARIO_TOTALS_TWH
-base_mix_map = times_mix if times_mix is not None else BASE_MIX_PCT
+times_raw_df, times_raw_status = load_timesreport_energy_rows(project_root)
+if times_raw_df is None or times_raw_df.empty:
+    st.error(_tr("Kunde inte läsa råa TIMES-rader för markintensitetsmodellen.", "Could not read raw TIMES rows for the land-intensity model."))
+    st.caption(f"{_tr('TIMES-radstatus', 'TIMES row status')}: `{times_raw_status}`")
+    st.stop()
+times_raw_df = times_raw_df.copy()
+times_raw_df["times_tech"] = [
+    _times_tech_code(comgroup=row.get("comgroup", ""), techgroup=row.get("techgroup", ""))
+    for row in times_raw_df.to_dict("records")
+]
+times_tech_scope = tuple(sorted(code for code in times_raw_df["times_tech"].astype(str).unique().tolist() if code != "UNKNOWN"))
+area_demand_bundle, area_demand_status = load_area_demand_scenario_bundle_cached(project_root, times_tech_scope)
+if area_demand_bundle is None:
+    st.error(_tr("Kunde inte bygga markintensitetsscenarier från AreaDemand.xlsx.", "Could not build land-intensity scenarios from AreaDemand.xlsx."))
+    st.caption(f"AreaDemand-status: `{area_demand_status}`")
+    st.stop()
+
+scenario_totals = times_totals
+base_mix_map = times_mix
 times_preview_df, times_preview_summary, times_preview_status = load_timesreport_preview(project_root)
+times_mapping_audit, times_mapping_status = load_timesreport_mapping_audit(project_root)
 scenario_desc_map, scenario_source_map, scenario_meta_status = load_scenario_metadata_duckdb(project_root)
 
-st.sidebar.header("Scenario")
+if st.sidebar.button(_language_switch_label(), use_container_width=True):
+    _toggle_language()
+    st.rerun()
+st.sidebar.caption(f"{_tr('Språk', 'Language')}: {_language_status_label()}")
+
+st.sidebar.header(_tr("Scenario", "Scenario"))
 scenario_options = list(scenario_totals.keys())
 scenario = st.sidebar.selectbox(
-    "Valj framtidsbild",
+    _tr("Scenario", "Scenario"),
     scenario_options,
     index=0,
     format_func=lambda scen: _scenario_display_label(str(scen), scenario_desc_map),
 )
 scenario_label = _scenario_display_label(str(scenario), scenario_desc_map)
-st.sidebar.subheader("Landskapsanalys")
-if GEOCONTEXT_APP_URL:
-    st.sidebar.link_button("Oppna fristaende geocontext-app", GEOCONTEXT_APP_URL, use_container_width=True)
-else:
-    st.sidebar.caption("Satt GEOCONTEXT_APP_URL for lank till fristaende geocontext-app.")
 scenario_years = sorted([int(y) for y in scenario_totals.get(scenario, {}).keys()])
-preferred_years = [y for y in [2030, 2040, 2050] if y in scenario_years]
-year_options = preferred_years if preferred_years else (scenario_years if scenario_years else [2050])
+year_options = scenario_years if scenario_years else [2050]
 default_year = 2050 if 2050 in year_options else year_options[-1]
-if len(year_options) <= 1:
-    year = st.sidebar.selectbox(
-        "Scenarioar (TIMES)",
-        options=year_options,
-        index=0,
-        help="Valet styr vilket ar i TIMES-scenariot som används for total TWh, basmix och markansprak.",
+year = st.sidebar.segmented_control(
+    _tr("Scenarioår (TIMES)", "Scenario year (TIMES)"),
+    options=year_options,
+    default=default_year,
+    selection_mode="single",
+    help=_tr(
+        "Valet styr vilket år i TIMES-scenariot som används för total TWh, basmix och markanspråk.",
+        "This selects which year in the TIMES scenario is used for total TWh, base mix, and land demand.",
+    ),
+)
+if year is None:
+    year = default_year
+st.sidebar.caption(
+    _tr(
+        "Detta är inte kalenderåret i kartan, utan vilket scenarioår från TIMES-data som driver analysen.",
+        "This is not the calendar year on the map, but the scenario year from TIMES data that drives the analysis.",
     )
-else:
-    year = st.sidebar.select_slider(
-        "Scenarioar (TIMES)",
-        options=year_options,
-        value=default_year,
-        help="Valet styr vilket ar i TIMES-scenariot som används for total TWh, basmix och markansprak.",
-    )
-st.sidebar.caption("Detta ar inte kalenderaret i kartan, utan vilket scenarioar fran TIMES-data som driver analysen.")
+)
 base_total = float(scenario_totals.get(scenario, {}).get(year, 0.0))
 base_mix = _resolve_base_mix_for_year(base_mix_map, str(scenario), int(year))
 
-st.sidebar.subheader("Markintensitet")
-area_profile_options = list(area_profile_catalog.keys())
-default_area_profile = _recommended_area_profile_id(area_profiles_source) or (
-    "duckdb" if "duckdb" in area_profile_catalog else area_profile_options[0]
+st.sidebar.subheader(_tr("Markintensitet", "Land intensity"))
+area_scenario_id = st.sidebar.select_slider(
+    _tr("Markanspråksscenario", "Land-demand scenario"),
+    options=list(AREA_SCENARIO_ORDER),
+    value="mid",
+    format_func=lambda scenario_id: _area_scenario_label(str(scenario_id)),
 )
-default_area_profile_index = (
-    area_profile_options.index(default_area_profile) if default_area_profile in area_profile_options else 0
-)
-area_profile_id = st.sidebar.selectbox(
-    "AreaDemand-kalla",
-    options=area_profile_options,
-    index=default_area_profile_index,
-    format_func=lambda profile_id: str(area_profile_catalog[profile_id]["label"]),
-)
-st.sidebar.caption("Production density = arsproduktion per area. Power density = medeleffekt per area, omraknad till arsproduktion.")
-area_profile = area_profile_catalog[area_profile_id]
-area_factors = dict(area_profile["factors"])
-area_status = str(area_profile["status"])
-area_profile_label = str(area_profile["label"])
-area_factor_sources = dict(area_profile.get("factor_sources", {}))
-
-st.sidebar.subheader("Utbyggnadszon")
-zone_mode = st.sidebar.toggle("Tillat class_km 1-7 ocksa", value=False)
-all_clusters = sorted([int(v) for v in gc4["class_km"].dropna().unique().tolist() if int(v) >= 0])
-extra_cluster_choices = [c for c in all_clusters if c != 0]
-selected_extra_clusters = []
-if zone_mode:
-    selected_extra_clusters = st.sidebar.multiselect(
-        "Valj extra kluster (utover class 0)",
-        options=extra_cluster_choices,
-        default=[],
+area_scenario_label = _area_scenario_label(area_scenario_id)
+st.sidebar.caption(
+    _tr(
+        "Tre scenarier byggs direkt från litteraturspann i AreaDemand.xlsx. "
+        "Litteraturkällor visas bara i faktarutan nedan.",
+        "Three scenarios are built directly from literature ranges in AreaDemand.xlsx. "
+        "Literature sources are only shown in the fact box below.",
     )
+)
 
-st.sidebar.subheader("Elmix sliders (%)")
+st.sidebar.subheader(_tr("Elmix-sliders (%)", "Electricity mix sliders (%)"))
 tech_keys = list(base_mix.keys())
 if not tech_keys:
     tech_keys = ["other"]
     base_mix = {"other": 100.0}
 base_mix = _normalize_mix_100({k: float(base_mix.get(k, 0.0)) for k in tech_keys})
-
-mix_ctx = f"{scenario}|{year}|{'|'.join(tech_keys)}"
-ctx_key = "_mix_ctx"
-if st.session_state.get(ctx_key) != mix_ctx:
-    st.session_state[ctx_key] = mix_ctx
-    for tech in tech_keys:
-        st.session_state[f"mix_{tech}"] = float(base_mix.get(tech, 0.0))
+_sync_mix_state(tech_keys, base_mix)
 slider_state_keys = [f"mix_{tech}" for tech in tech_keys]
-st.sidebar.caption("Sliders ar lankade och halls ihop till totalt 100%. Startvarden kommer fran valt scenarioar.")
+if st.sidebar.button(_tr("Återställ till TIMES-mix", "Reset to TIMES mix"), use_container_width=True):
+    _set_mix_state(tech_keys, base_mix)
+st.sidebar.caption(
+    _tr(
+        "Sliders är länkade och hålls ihop till totalt 100%. "
+        "Din manuella mix ligger kvar när du byter scenario eller scenarioår.",
+        "Sliders are linked and constrained to a total of 100%. "
+        "Your manual mix stays in place when you switch scenario or scenario year.",
+    )
+)
+st.sidebar.info(
+    _tr(
+        "Elmix-kategorierna är förenklade planeringskategorier byggda från TIMES-reporten. "
+        "Vind, Sol, Olja och El ligger nära TIMES, Bioenergi är hopslagen och Övrigt är en samlingskategori. "
+        "Se 'TIMES mapping audit' nedan för detaljer.",
+        "The electricity-mix categories are simplified planning categories built from the TIMES report. "
+        "Wind, Solar, Oil, and Electricity stay close to TIMES, Bioenergy is aggregated, and Other is a collection bucket. "
+        "See 'TIMES mapping audit' below for details.",
+    )
+)
 for tech in tech_keys:
     key = f"mix_{tech}"
     slider_kwargs = {
@@ -1269,82 +1865,208 @@ for tech in tech_keys:
 
 mix_raw = {tech: float(st.session_state.get(f"mix_{tech}", 0.0)) for tech in tech_keys}
 mix_pct = _normalize_mix_100(mix_raw)
-st.sidebar.caption(f"Summa elmix: {sum(mix_raw.values()):.1f}%")
+st.sidebar.caption(f"{_tr('Summa elmix', 'Total electricity mix')}: {sum(mix_raw.values()):.1f}%")
 twh = {tech: base_total * mix_pct[tech] / 100.0 for tech in tech_keys}
-area_need = {tech: twh[tech] * float(area_factors.get(tech, DEFAULT_AREA_FACTOR_GENERIC)) for tech in tech_keys}
-total_area_need = float(sum(area_need.values()))
-area_factor_detail_rows: list[dict[str, float | str]] = []
-selected_profile_fallback_techs: list[str] = []
-selected_profile_direct_techs: list[str] = []
-for tech in tech_keys:
-    source_key = str(area_factor_sources.get(tech, "missing_generic"))
-    if source_key in {"fallback_default", "missing_generic"}:
-        selected_profile_fallback_techs.append(tech)
-    else:
-        selected_profile_direct_techs.append(tech)
-    area_factor_detail_rows.append(
-        {
-            "energy_key": tech,
-            "Energislag": _human_tech_name(tech),
-            "km2_per_twh": float(area_factors.get(tech, DEFAULT_AREA_FACTOR_GENERIC)),
-            "Kalla": _area_factor_source_label(source_key, area_profile_label),
+selected_times_raw_mix_df = times_raw_df[
+    (times_raw_df["scen"].astype(str) == str(scenario))
+    & (pd.to_numeric(times_raw_df["year"], errors="coerce") == int(year))
+].copy()
+selected_times_raw_mix_df = (
+    selected_times_raw_mix_df.groupby(["times_tech", "energy_key"], as_index=False)["value_twh"]
+    .sum()
+    .sort_values(["energy_key", "times_tech"])
+    .reset_index(drop=True)
+)
+if selected_times_raw_mix_df.empty:
+    st.error(_tr("Inga råa TIMES-tekniker hittades för valt scenarioår.", "No raw TIMES technologies were found for the selected scenario year."))
+    st.caption(f"{_tr('TIMES-radstatus', 'TIMES row status')}: `{times_raw_status}`")
+    st.stop()
+
+selected_times_raw_mix_df["bucket_base_twh"] = selected_times_raw_mix_df.groupby("energy_key")["value_twh"].transform("sum")
+selected_times_raw_mix_df["within_bucket_share"] = np.where(
+    selected_times_raw_mix_df["bucket_base_twh"] > 0,
+    selected_times_raw_mix_df["value_twh"] / selected_times_raw_mix_df["bucket_base_twh"],
+    0.0,
+)
+selected_times_raw_mix_df["selected_twh"] = (
+    selected_times_raw_mix_df["energy_key"].map(lambda tech: float(twh.get(str(tech), 0.0)))
+    * selected_times_raw_mix_df["within_bucket_share"]
+)
+selected_times_raw_mix_df["times_tech_display"] = selected_times_raw_mix_df.apply(
+    lambda row: _times_tech_display(str(row["times_tech"]), str(row["energy_key"])),
+    axis=1,
+)
+
+area_scenario_table = pd.DataFrame(area_demand_bundle.get("scenario_table", pd.DataFrame())).copy()
+if not area_scenario_table.empty:
+    selected_times_raw_mix_df = selected_times_raw_mix_df.merge(
+        area_scenario_table[
+            ["TIMES-teknik", "Workbook-rad", "Lagt km2/TWh", "Mellan km2/TWh", "Hogt km2/TWh", "Status", "Motivering"]
+        ],
+        left_on="times_tech",
+        right_on="TIMES-teknik",
+        how="left",
+    )
+selected_area_factors = dict(area_demand_bundle.get("factors_by_scenario", {}).get(area_scenario_id, {}))
+selected_times_raw_mix_df["selected_km2_per_twh"] = selected_times_raw_mix_df["times_tech"].map(selected_area_factors)
+selected_times_raw_mix_df["area_need_km2"] = (
+    selected_times_raw_mix_df["selected_twh"] * selected_times_raw_mix_df["selected_km2_per_twh"]
+)
+
+active_times_tech_df = selected_times_raw_mix_df[selected_times_raw_mix_df["selected_twh"] > 1e-9].copy()
+strict_missing_active_df = active_times_tech_df[active_times_tech_df["selected_km2_per_twh"].isna()].copy()
+strict_supported_active_df = active_times_tech_df[active_times_tech_df["selected_km2_per_twh"].notna()].copy()
+strict_ready = strict_missing_active_df.empty
+total_area_need = float(strict_supported_active_df["area_need_km2"].sum()) if strict_ready else float("nan")
+
+area_factor_detail_df = (
+    active_times_tech_df[
+        [
+            "times_tech_display",
+            "times_tech",
+            "energy_key",
+            "selected_twh",
+            "selected_km2_per_twh",
+            "area_need_km2",
+            "Status",
+            "Motivering",
+        ]
+    ]
+    .rename(
+        columns={
+            "times_tech_display": "TIMES-teknik",
+            "energy_key": "Appkategori",
+            "selected_twh": "TWh",
+            "selected_km2_per_twh": "km2_per_twh",
+            "area_need_km2": "km2",
         }
     )
-area_factor_detail_df = pd.DataFrame(area_factor_detail_rows)
-area_sensitivity_rows: list[dict[str, float | str]] = []
-for profile_id, profile in area_profile_catalog.items():
-    profile_factors = dict(profile["factors"])
-    profile_sources = dict(profile.get("factor_sources", {}))
-    profile_total = float(
-        sum(twh[tech] * float(profile_factors.get(tech, DEFAULT_AREA_FACTOR_GENERIC)) for tech in tech_keys)
+    .reset_index(drop=True)
+)
+
+area_sensitivity_rows: list[dict[str, object]] = []
+for scenario_option in AREA_SCENARIO_ORDER:
+    scenario_factor_map = dict(area_demand_bundle.get("factors_by_scenario", {}).get(str(scenario_option), {}))
+    missing_df = active_times_tech_df[~active_times_tech_df["times_tech"].isin(list(scenario_factor_map.keys()))].copy()
+    total_km2 = (
+        float(sum(float(row["selected_twh"]) * float(scenario_factor_map[str(row["times_tech"])]) for _, row in active_times_tech_df.iterrows()))
+        if missing_df.empty
+        else np.nan
     )
-    fallback_techs = [
-        _human_tech_name(tech)
-        for tech in tech_keys
-        if str(profile_sources.get(tech, "missing_generic")) in {"fallback_default", "missing_generic"}
-    ]
     area_sensitivity_rows.append(
         {
-            "profile_id": profile_id,
-            "profile": str(profile["label"]),
-            "total_km2": profile_total,
-            "fallback_count": len(fallback_techs),
-            "fallback_techs": ", ".join(fallback_techs) if fallback_techs else "",
+            "Scenario": _area_scenario_label(str(scenario_option)),
+            "Vald": str(scenario_option) == str(area_scenario_id),
+            "Strikt klar": missing_df.empty,
+            "Total km2": total_km2,
+            "Saknade TIMES-tekniker": ", ".join(missing_df["times_tech"].astype(str).tolist()),
         }
     )
-area_sensitivity_df = pd.DataFrame(area_sensitivity_rows).sort_values("total_km2").reset_index(drop=True)
-if not area_sensitivity_df.empty:
-    area_sensitivity_df["delta_vs_selected_pct"] = np.where(
-        total_area_need > 0,
-        100.0 * (area_sensitivity_df["total_km2"] / total_area_need - 1.0),
-        0.0,
+area_sensitivity_df = pd.DataFrame(area_sensitivity_rows)
+if not area_sensitivity_df.empty and strict_ready and total_area_need > 0:
+    area_sensitivity_df["Delta vs vald %"] = np.where(
+        area_sensitivity_df["Total km2"].notna(),
+        100.0 * (area_sensitivity_df["Total km2"] / total_area_need - 1.0),
+        np.nan,
     )
+else:
+    area_sensitivity_df["Delta vs vald %"] = np.nan
 
-allowed_clusters = [0] + selected_extra_clusters
-build = analysis_df[analysis_df["class_km"].isin(allowed_clusters)].copy()
+active_times_tech_codes = active_times_tech_df["times_tech"].astype(str).tolist()
+area_mapping_active_df = pd.DataFrame(area_demand_bundle.get("mapping_table", pd.DataFrame())).copy()
+if not area_mapping_active_df.empty:
+    area_mapping_active_df = area_mapping_active_df[
+        area_mapping_active_df["TIMES-teknik"].astype(str).isin(active_times_tech_codes)
+    ].reset_index(drop=True)
+area_scenario_active_df = pd.DataFrame(area_demand_bundle.get("scenario_table", pd.DataFrame())).copy()
+if not area_scenario_active_df.empty:
+    area_scenario_active_df = area_scenario_active_df[
+        area_scenario_active_df["TIMES-teknik"].astype(str).isin(active_times_tech_codes)
+    ].copy()
+    selected_col_name = {
+        "low": "Lagt km2/TWh",
+        "mid": "Mellan km2/TWh",
+        "high": "Hogt km2/TWh",
+    }.get(str(area_scenario_id), "Mellan km2/TWh")
+    area_scenario_active_df["Vald scenario km2/TWh"] = area_scenario_active_df[selected_col_name]
+    area_scenario_active_df = area_scenario_active_df.reset_index(drop=True)
+active_area_observation_df = pd.DataFrame(area_demand_bundle.get("observation_table", pd.DataFrame())).copy()
+if not active_area_observation_df.empty:
+    active_area_observation_df = active_area_observation_df[
+        active_area_observation_df["TIMES-teknik"].astype(str).isin(active_times_tech_codes)
+    ].reset_index(drop=True)
+
+selected_supported_times_techs = strict_supported_active_df["times_tech"].astype(str).tolist()
+selected_unsupported_times_techs = strict_missing_active_df["times_tech"].astype(str).tolist()
+
+times_coverage_df = (
+    times_mapping_audit.get("coverage", pd.DataFrame()) if isinstance(times_mapping_audit, dict) else pd.DataFrame()
+)
+times_mix_audit_df = (
+    times_mapping_audit.get("mix", pd.DataFrame()) if isinstance(times_mapping_audit, dict) else pd.DataFrame()
+)
+times_mapping_df = (
+    times_mapping_audit.get("mapping", pd.DataFrame()) if isinstance(times_mapping_audit, dict) else pd.DataFrame()
+)
+selected_times_coverage = pd.Series(dtype="object")
+selected_times_mix_df = pd.DataFrame()
+selected_times_other_df = pd.DataFrame()
+selected_times_unmapped_df = pd.DataFrame()
+if not times_coverage_df.empty:
+    selected_cov = times_coverage_df[
+        (times_coverage_df["scen"].astype(str) == str(scenario))
+        & (pd.to_numeric(times_coverage_df["year"], errors="coerce") == int(year))
+    ]
+    if not selected_cov.empty:
+        selected_times_coverage = selected_cov.iloc[0]
+if not times_mix_audit_df.empty:
+    selected_times_mix_df = times_mix_audit_df[
+        (times_mix_audit_df["scen"].astype(str) == str(scenario))
+        & (pd.to_numeric(times_mix_audit_df["year"], errors="coerce") == int(year))
+    ].copy()
+if not times_mapping_df.empty:
+    selected_mapping = times_mapping_df[
+        (times_mapping_df["scen"].astype(str) == str(scenario))
+        & (pd.to_numeric(times_mapping_df["year"], errors="coerce") == int(year))
+    ].copy()
+    if not selected_mapping.empty:
+        selected_times_other_df = selected_mapping[selected_mapping["energy_key"] == "other"].copy()
+        selected_times_unmapped_df = selected_mapping[selected_mapping["mapping_source"] == "unmapped"].copy()
+
+build = analysis_df[analysis_df["build_candidate"] == True].copy()
 if build.empty:
-    st.error("Inga hexagons hittades i vald utbyggnadszon.")
+    build = analysis_df.copy()
+if build.empty:
+    st.error(_tr("Inga hexagoner hittades i kartlagret.", "No hexagons were found in the map layer."))
     st.stop()
 
 hex_area = float(build["hex_area_km2"].median())
-hex_need_total = int(math.ceil(total_area_need / max(1e-9, hex_area)))
+hex_need_total = int(math.ceil(total_area_need / max(1e-9, hex_area))) if strict_ready and pd.notna(total_area_need) else 0
 
-selection_mode = st.sidebar.radio("Urvalsmetod for hexagoner", options=["Auto", "Manuellt"], index=0)
+selection_mode = st.sidebar.radio(
+    _tr("Urvalsmetod för hexagoner", "Hexagon selection mode"),
+    options=["auto", "manual"],
+    index=0,
+    format_func=_selection_mode_label,
+)
 
 alloc_parts = []
-for tech in tech_keys:
-    tmp = build.copy()
-    n = int(math.ceil(area_need[tech] / max(1e-9, hex_area)))
-    if n <= 0:
-        continue
-    top = tmp.sort_values(f"s_{tech}", ascending=False).head(min(n, len(tmp))).copy()
-    top["selected_for"] = tech
-    alloc_parts.append(top[["hex_id", "selected_for"]])
+if strict_ready:
+    for _, row in strict_supported_active_df.iterrows():
+        tech_family = str(row["energy_key"])
+        suitability_col = f"s_{tech_family}"
+        if suitability_col not in build.columns:
+            continue
+        n = int(math.ceil(float(row["area_need_km2"]) / max(1e-9, hex_area)))
+        if n <= 0:
+            continue
+        top = build.sort_values(suitability_col, ascending=False).head(min(n, len(build))).copy()
+        top["selected_for"] = _times_tech_display(str(row["times_tech"]), tech_family)
+        alloc_parts.append(top[["hex_id", "selected_for"]])
 
 if alloc_parts:
     alloc_auto = pd.concat(alloc_parts, ignore_index=True)
     alloc_auto["selected"] = 1
-    alloc_auto["selected_for"] = alloc_auto["selected_for"].apply(_human_tech_name)
     alloc_auto = alloc_auto.groupby("hex_id", as_index=False).agg(
         selected=("selected", "max"),
         selected_for=("selected_for", "first"),
@@ -1354,43 +2076,71 @@ else:
 
 alloc = alloc_auto.copy()
 manual_selected_count = 0
-if selection_mode == "Manuellt":
+if selection_mode == "manual" and strict_ready:
     manual_df = build.copy()
-    total_twh = max(1e-9, float(sum(twh.values())))
+    total_twh = max(1e-9, float(strict_supported_active_df["selected_twh"].sum()))
     weighted = pd.Series(np.zeros(len(manual_df)), index=manual_df.index)
-    for tech in tech_keys:
-        s_col = f"s_{tech}"
-        weighted += manual_df[s_col] * (float(twh.get(tech, 0.0)) / total_twh)
+    for _, row in strict_supported_active_df.iterrows():
+        s_col = f"s_{str(row['energy_key'])}"
+        if s_col not in manual_df.columns:
+            continue
+        weighted += manual_df[s_col] * (float(row["selected_twh"]) / total_twh)
     manual_df["s_total"] = weighted
     manual_df = manual_df.sort_values("s_total", ascending=False)
     manual_df["use"] = False
     manual_df.iloc[: min(hex_need_total, len(manual_df)), manual_df.columns.get_loc("use")] = True
 
-    st.subheader("Manuellt urval av utbyggnadshexagoner")
-    st.caption("Bocka i hexagoner som ska inga i urvalet. Forvalet markerar hogst rankade.")
+    st.subheader(_tr("Manuellt urval av utbyggnadshexagoner", "Manual selection of development hexagons"))
+    st.caption(
+        _tr(
+            "Bocka i hexagoner som ska ingå i urvalet. Förvalet markerar högst rankade.",
+            "Tick the hexagons to include in the selection. The preselection marks the highest-ranked ones.",
+        )
+    )
+    manual_cols = ["use", "hex_id", "s_total", "hex_area_km2"]
+    if "class_km" in manual_df.columns:
+        manual_cols.insert(2, "class_km")
+    if "acceptance_value" in manual_df.columns and manual_df["acceptance_value"].astype(str).str.strip().any():
+        manual_cols.append("acceptance_value")
+    manual_column_config = {
+        "use": st.column_config.CheckboxColumn(_tr("Vald", "Selected")),
+        "hex_id": st.column_config.TextColumn("hex_id"),
+        "class_km": st.column_config.NumberColumn("class_km"),
+        "s_total": st.column_config.NumberColumn("Suitability"),
+        "hex_area_km2": st.column_config.NumberColumn("Hex km2"),
+        "acceptance_value": st.column_config.TextColumn(_tr("Acceptans", "Acceptance")),
+    }
     editor = st.data_editor(
-        manual_df[["use", "hex_id", "class_km", "s_total", "hex_area_km2"]].round(4),
+        manual_df[manual_cols].round(4),
         use_container_width=True,
         height=260,
         hide_index=True,
-        column_config={
-            "use": st.column_config.CheckboxColumn("Vald"),
-            "hex_id": st.column_config.TextColumn("hex_id"),
-            "class_km": st.column_config.NumberColumn("class_km"),
-            "s_total": st.column_config.NumberColumn("Suitability"),
-            "hex_area_km2": st.column_config.NumberColumn("Hex km2"),
-        },
+        column_config=manual_column_config,
     )
     chosen_hex = editor.loc[editor["use"] == True, "hex_id"].astype(str).tolist()
     manual_selected_count = len(chosen_hex)
-    alloc = pd.DataFrame({"hex_id": chosen_hex, "selected": 1, "selected_for": "Manuellt"})
+    alloc = pd.DataFrame({"hex_id": chosen_hex, "selected": 1, "selected_for": _tr("Manuellt", "Manual")})
+elif selection_mode == "manual" and not strict_ready:
+    st.subheader(_tr("Manuellt urval av utbyggnadshexagoner", "Manual selection of development hexagons"))
+    st.warning(
+        _tr(
+            "Manuellt urval är avstängt i strikt läge tills den aktiva mixen bara innehåller TIMES-tekniker med "
+            "stödd markintensitet i AreaDemand.xlsx.",
+            "Manual selection is disabled in strict mode until the active mix only contains TIMES technologies with "
+            "supported land intensity in AreaDemand.xlsx.",
+        )
+    )
 
 view = map_df.merge(alloc, on="hex_id", how="left")
 view["selected"] = view["selected"].fillna(0).astype(int)
 view["selected_for"] = view["selected_for"].fillna("")
 view["cluster_color"] = view["class_km"].map(CLUSTER_COLORS).apply(lambda x: x if isinstance(x, list) else [180, 180, 180, 70])
-view["line_color"] = np.where(view["class_km"] == 0, "[30,30,30,120]", "[120,120,120,80]")
+view["line_color"] = np.where(view["build_candidate"], "[60,60,60,100]", "[150,150,150,50]")
 view["fill_color"] = view["cluster_color"]
+if "build_candidate" in view.columns:
+    excluded_mask = ~view["build_candidate"].fillna(True)
+    if excluded_mask.any():
+        view.loc[excluded_mask, "fill_color"] = view.loc[excluded_mask, "fill_color"].apply(lambda _: [185, 185, 185, 40])
 selected_mask = view["selected"] == 1
 if selected_mask.any():
     view.loc[selected_mask, "fill_color"] = view.loc[selected_mask, "fill_color"].apply(
@@ -1398,89 +2148,82 @@ if selected_mask.any():
     )
 
 c1, c2, c3, c4 = st.columns(4)
-c1.metric("Scenario", scenario_label)
-c2.metric("Ar", str(year))
-c3.metric("Markansprak (km2)", f"{total_area_need:.1f}")
-c4.metric("Hex behov (vald zon)", f"{hex_need_total}")
-st.caption(
-    f"AreaDemand-profil: `{area_profile_label}`. AreaDemand-status: "
-    f"`{area_status}`. Faktorer km2/TWh -> "
-    + ", ".join([f"{_human_tech_name(k)}={float(area_factors.get(k, DEFAULT_AREA_FACTOR_GENERIC)):.3f}" for k in tech_keys])
-)
-st.info(
-    "AreaDemand-transparens: "
-    f"{len(selected_profile_direct_techs)} av {len(tech_keys)} aktiva energislag har direkta kallvarden i vald profil. "
-    f"{len(selected_profile_fallback_techs)} anvander fallback."
-)
-if selected_profile_fallback_techs:
-    st.warning(
-        "Vald AreaDemand-profil saknar direkta kallvarden for: "
-        + ", ".join(_human_tech_name(tech) for tech in selected_profile_fallback_techs)
-        + ". Dessa rader anvander fallback-varden i berakningen."
-    )
-st.caption(f"TIMESreport-status: `{times_status}`.")
-if scenario in scenario_desc_map or scenario in scenario_source_map:
-    meta_parts = [f"Kod: {scenario}"]
-    if scenario in scenario_source_map:
-        meta_parts.append(f"Kalldata: {scenario_source_map[scenario]}")
-    st.caption("DuckDB-scenariometadata: " + ". ".join(meta_parts) + f". (`{scenario_meta_status}`)")
-st.caption(f"Utbyggnadszon: class_km {sorted(allowed_clusters)}. Urvalsmetod: {selection_mode}.")
-with st.expander("TIMESreport output preview", expanded=False):
-    st.caption(f"Preview-status: `{times_preview_status}`")
-    if times_preview_summary:
-        if "scen" in times_preview_summary:
-            scen_labels = [
-                _scenario_display_label(str(scen), scenario_desc_map) for scen in times_preview_summary["scen"]
-            ]
-            st.write("Scenarier:", ", ".join(scen_labels))
-        if "techgroup" in times_preview_summary:
-            st.write("Techgroup (unika):", ", ".join(times_preview_summary["techgroup"]))
-        if "comgroup" in times_preview_summary:
-            st.write("Comgroup (unika):", ", ".join(times_preview_summary["comgroup"]))
-        if "units" in times_preview_summary:
-            st.write("Units (unika):", ", ".join(times_preview_summary["units"]))
-    if times_preview_df is not None:
-        st.dataframe(times_preview_df, use_container_width=True, height=260)
-with st.expander("AreaDemand sensitivity", expanded=False):
-    if area_sensitivity_df.empty:
-        st.caption("Inga alternativa AreaDemand-profiler hittades.")
-    else:
-        st.caption("Jämför totalt markanspråk för vald scenario/mix över alla tillgängliga AreaDemand-antaganden.")
-        st.dataframe(
-            area_sensitivity_df[["profile", "total_km2", "delta_vs_selected_pct", "fallback_count", "fallback_techs"]]
-            .round(2),
-            use_container_width=True,
-            height=260,
+c1.metric(_tr("Scenario", "Scenario"), scenario_label)
+c2.metric(_tr("År", "Year"), str(year))
+c3.metric(_tr("Markanspråk (km2)", "Land demand (km2)"), f"{total_area_need:.1f}" if strict_ready else _tr("Ej tillgängligt", "Not available"))
+c4.metric(_tr("Hexbehov", "Hex demand"), f"{hex_need_total}" if strict_ready else _tr("Ej tillgängligt", "Not available"))
+if not strict_ready:
+    st.error(
+        _tr(
+            "Strikt markintensitetsläge kan inte beräkna geografin för nuvarande mix. "
+            "Aktiva TIMES-tekniker utan workbook-stöd: ",
+            "Strict land-intensity mode cannot calculate geography for the current mix. "
+            "Active TIMES technologies without workbook support: ",
         )
-with st.expander("AreaDemand transparens", expanded=False):
-    st.caption("Visar exakt vilka faktorer som kommer fran vald kalla och vilka som kommer fran fallback.")
-    st.dataframe(
-        area_factor_detail_df[["Energislag", "km2_per_twh", "Kalla"]].round(3),
-        use_container_width=True,
-        height=220,
+        + ", ".join(sorted(set(selected_unsupported_times_techs)))
     )
-if selection_mode == "Manuellt":
+if selection_mode == "manual" and strict_ready:
     covered_area = manual_selected_count * hex_area
     st.caption(
-        f"Manuellt valda hex: {manual_selected_count} (~{covered_area:.1f} km2) av behov {hex_need_total} hex (~{total_area_need:.1f} km2)."
+        _tr(
+            f"Manuellt valda hex: {manual_selected_count} (~{covered_area:.1f} km2) av behov {hex_need_total} hex (~{total_area_need:.1f} km2).",
+            f"Manually selected hexes: {manual_selected_count} (~{covered_area:.1f} km2) out of a need for {hex_need_total} hexes (~{total_area_need:.1f} km2).",
+        )
     )
     if manual_selected_count < hex_need_total:
-        st.warning("Manuellt urval tacker inte hela beraknat markansprak.")
+        st.warning(_tr("Manuellt urval täcker inte hela beräknat markanspråk.", "Manual selection does not cover the full calculated land demand."))
 
-mix_df = pd.DataFrame(
-    [{"Energislag": _human_tech_name(k), "TWh": float(twh.get(k, 0.0)), "km2": float(area_need.get(k, 0.0))} for k in tech_keys]
+mix_df = area_factor_detail_df.copy()
+mix_df_display = _translate_app_category_column(mix_df)
+mix_df_display = mix_df_display.rename(
+    columns=_translate_columns(
+        {
+            "TIMES-teknik": ("TIMES-teknik", "TIMES technology"),
+            "Appkategori": ("Appkategori", "App category"),
+            "TWh": ("TWh", "TWh"),
+            "km2_per_twh": ("km2 per TWh", "km2 per TWh"),
+            "km2": ("km2", "km2"),
+            "Status": ("Status", "Status"),
+            "Motivering": ("Motivering", "Reason"),
+        }
+    )
 )
 
-left, right = st.columns([1.0, 2.0], gap="large")
-with left:
-    st.subheader("Berakning")
-    st.dataframe(mix_df.round(2), use_container_width=True, height=180)
-    st.caption("Toggle styr om utbyggnad ar endast class 0 eller class 0 + valda kluster.")
+baseline_df = (
+    pd.DataFrame(scenario_totals)
+    .rename_axis("year")
+    .reset_index()
+    .melt(id_vars="year", var_name="scenario", value_name="total_twh")
+)
+baseline_df["scenario"] = baseline_df["scenario"].astype(str)
+baseline_df["scenario_label"] = baseline_df["scenario"].map(
+    lambda scen: _scenario_display_label(scen, scenario_desc_map)
+)
+baseline_df = baseline_df.sort_values(["scenario", "year"]).reset_index(drop=True)
+baseline_df["year_label"] = baseline_df["year"].astype(int).astype(str)
+baseline_df["base_year_twh"] = baseline_df.groupby("scenario")["total_twh"].transform("first")
+baseline_df["index_first_year"] = np.where(
+    baseline_df["base_year_twh"] > 0,
+    100.0 * baseline_df["total_twh"] / baseline_df["base_year_twh"],
+    np.nan,
+)
+year_order = [str(year) for year in sorted(int(year) for year in baseline_df["year"].dropna().unique().tolist())]
+scenario_order = baseline_df["scenario_label"].drop_duplicates().tolist()
 
-with right:
-    st.subheader("Karta: GC4-hex + utbyggnadsval")
+map_col, side_col = st.columns([1.8, 1.1], gap="large")
+with map_col:
+    st.subheader(_tr("Karta: hexagoner + urval", "Map: hexagons + selection"))
+    tooltip_lines = [
+        "<b>hex_id:</b> {hex_id}",
+        f"<b>{_tr('vald för', 'selected for')}:</b> {{selected_for}}",
+        f"<b>{_tr('byggkandidat', 'build candidate')}:</b> {{build_candidate}}",
+    ]
+    if "class_km" in view.columns:
+        tooltip_lines.insert(1, "<b>class_km:</b> {class_km}")
+    if "acceptance_value" in view.columns and view["acceptance_value"].astype(str).str.strip().any():
+        tooltip_lines.append(f"<b>{_tr('acceptans', 'acceptance')}:</b> {{acceptance_value}}")
     tooltip = {
-        "html": "<b>hex_id:</b> {hex_id}<br/><b>class_km:</b> {class_km}<br/><b>selected_for:</b> {selected_for}",
+        "html": "<br/>".join(tooltip_lines),
         "style": {"backgroundColor": "white", "color": "black"},
     }
     polygon_layer = pdk.Layer(
@@ -1504,16 +2247,444 @@ with right:
         map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
     )
     st.pydeck_chart(deck, use_container_width=True)
+    if "acceptance_value" in build.columns and build["acceptance_value"].astype(str).str.strip().any():
+        st.caption(_tr("Kartlagret är kompletterat med acceptansinformation när den finns tillgänglig.", "The map layer is enriched with acceptance information when available."))
 
-baseline_title = "### Baslinjer (TIMES-data)" if times_totals is not None else "### Baslinjer (mock, ersatts senare av TIMES-data)"
-st.markdown(baseline_title)
-baseline_df = (
-    pd.DataFrame(scenario_totals)
-    .rename_axis("year")
-    .reset_index()
-    .melt(id_vars="year", var_name="scenario", value_name="total_twh")
+with side_col:
+    st.subheader(_tr("Beräkning", "Calculation"))
+    st.dataframe(mix_df_display.round(2), use_container_width=True, height=min(360, 80 + 35 * max(len(mix_df_display), 1)))
+    st.caption(
+        _tr(
+            f"Markanspråksscenario: `{area_scenario_label}`. "
+            f"AreaDemand-status: `{area_demand_status}`. "
+            "Beräkningen sker per TIMES-teknik och stoppas om workbooken saknar kompatibel markintensitet för en aktiv teknik.",
+            f"Land-demand scenario: `{area_scenario_label}`. "
+            f"AreaDemand status: `{area_demand_status}`. "
+            "The calculation runs per TIMES technology and stops if the workbook lacks a compatible land intensity for an active technology.",
+        )
+    )
+    st.markdown(f"### {_tr('Baslinjer (TIMES-data)', 'Baselines (TIMES data)')}")
+    if float(baseline_df["total_twh"].max()) > 5 * float(max(1e-9, baseline_df["total_twh"].median())):
+        st.caption(
+            _tr(
+                "Ett scenario ligger mycket högre än de andra i totalvyn. "
+                "Titta på fliken 'Index' eller 'Tabell' för att se de lägre kurvorna tydligare.",
+                "One scenario sits much higher than the others in the total view. "
+                "Look at the 'Index' or 'Table' tab to see the lower curves more clearly.",
+            )
+        )
+
+    total_tab, index_tab, table_tab = st.tabs(["Total TWh", "Index", _tr("Tabell", "Table")])
+    with total_tab:
+        total_chart = _build_baseline_line_chart(
+            baseline_df,
+            "total_twh",
+            "Total TWh",
+            year_order,
+            scenario_order,
+            zero=True,
+            value_format=".2f",
+        )
+        if total_chart is not None:
+            st.altair_chart(total_chart, width="stretch")
+        else:
+            baseline_fallback = baseline_df[["year_label", "scenario_label", "total_twh"]].rename(
+                columns={"scenario_label": "scenario"}
+            )
+            st.line_chart(
+                baseline_fallback,
+                x="year_label",
+                y="total_twh",
+                color="scenario",
+                width="stretch",
+            )
+
+    with index_tab:
+        st.caption(_tr("Index visar utvecklingen relativt varje scenarios första tillgängliga år (=100).", "Index shows the change relative to each scenario's first available year (=100)."))
+        index_chart = _build_baseline_line_chart(
+            baseline_df,
+            "index_first_year",
+            _tr("Index (första år = 100)", "Index (first year = 100)"),
+            year_order,
+            scenario_order,
+            zero=False,
+            value_format=".1f",
+        )
+        if index_chart is not None:
+            st.altair_chart(index_chart, width="stretch")
+        else:
+            baseline_index_fallback = baseline_df[["year_label", "scenario_label", "index_first_year"]].rename(
+                columns={"scenario_label": "scenario"}
+            )
+            st.line_chart(
+                baseline_index_fallback,
+                x="year_label",
+                y="index_first_year",
+                color="scenario",
+                width="stretch",
+            )
+
+    with table_tab:
+        baseline_table = (
+            baseline_df.pivot(index="year", columns="scenario_label", values="total_twh")
+            .reset_index()
+            .rename_axis(None, axis=1)
+            .round(3)
+        )
+        st.dataframe(baseline_table, width="stretch", hide_index=True)
+
+st.markdown(f"### {_tr('Datakvalitet och transparens', 'Data quality and transparency')}")
+st.info(
+    _tr(
+        "Markintensitetstransparens: "
+        f"{len(selected_supported_times_techs)} av {len(active_times_tech_codes)} aktiva TIMES-tekniker har "
+        "direkt scenariofaktor från AreaDemand.xlsx.",
+        "Land-intensity transparency: "
+        f"{len(selected_supported_times_techs)} of {len(active_times_tech_codes)} active TIMES technologies have "
+        "a direct scenario factor from AreaDemand.xlsx.",
+    )
 )
-baseline_df["scenario"] = baseline_df["scenario"].astype(str).map(
-    lambda scen: _scenario_display_label(scen, scenario_desc_map)
+if selected_unsupported_times_techs:
+    st.warning(
+        _tr(
+            "Strikt läge: följande aktiva TIMES-tekniker saknar kompatibel markintensitet i workbooken: ",
+            "Strict mode: the following active TIMES technologies lack compatible land intensity in the workbook: ",
+        )
+        + ", ".join(selected_unsupported_times_techs)
+        + _tr(
+            ". Sätt deras andel till 0 eller bygg en explicit mapping innan kartanalysen tolkas.",
+            ". Set their share to 0 or build an explicit mapping before interpreting the map analysis.",
+        )
+    )
+st.caption(
+    _tr(
+        f"TIMESreport-status: `{times_status}`. AreaDemand-status: `{area_demand_status}`. "
+        f"Markanspråksscenario: `{area_scenario_label}`.",
+        f"TIMES report status: `{times_status}`. AreaDemand status: `{area_demand_status}`. "
+        f"Land-demand scenario: `{area_scenario_label}`.",
+    )
 )
-st.line_chart(baseline_df, x="year", y="total_twh", color="scenario", use_container_width=True)
+if not selected_times_coverage.empty:
+    named_share = float(selected_times_coverage.get("named_share_pct", 0.0))
+    other_share = float(selected_times_coverage.get("other_bucket_share_pct", 0.0))
+    other_twh = float(selected_times_coverage.get("other_bucket_twh", 0.0))
+    unmapped_twh = float(selected_times_coverage.get("unmapped_twh", 0.0))
+    st.info(
+        _tr(
+            "TIMES-kartläggning för valt scenarioår: "
+            f"{named_share:.1f}% ligger i namngivna planeringskategorier och "
+            f"{other_share:.1f}% ligger i 'Övrigt' ({other_twh:.2f} TWh).",
+            "TIMES mapping for the selected scenario year: "
+            f"{named_share:.1f}% is in named planning categories and "
+            f"{other_share:.1f}% is in 'Other' ({other_twh:.2f} TWh).",
+        )
+    )
+    if unmapped_twh > 0:
+        st.warning(
+            _tr(
+                f"Det finns fortfarande {unmapped_twh:.2f} TWh TIMES-rader utan explicit mappingregel. "
+                "Se 'TIMES mapping audit' nedan innan resultaten tolkas som slutliga.",
+                f"There are still {unmapped_twh:.2f} TWh of TIMES rows without an explicit mapping rule. "
+                "See 'TIMES mapping audit' below before treating the results as final.",
+            )
+        )
+if scenario in scenario_desc_map or scenario in scenario_source_map:
+    meta_parts = [_tr(f"Kod: {scenario}", f"Code: {scenario}")]
+    if scenario in scenario_source_map:
+        meta_parts.append(_tr(f"Källdata: {scenario_source_map[scenario]}", f"Source data: {scenario_source_map[scenario]}"))
+    st.caption(_tr("DuckDB-scenariometadata: ", "DuckDB scenario metadata: ") + ". ".join(meta_parts) + f". (`{scenario_meta_status}`)")
+st.caption(f"{_tr('Hexkälla', 'Hex source')}: `{hex_source_status}`. {_tr('Urvalsmetod', 'Selection mode')}: {_selection_mode_label(selection_mode)}.")
+with st.expander(_tr("TIMES-report förhandsvisning", "TIMES report output preview"), expanded=False):
+    st.caption(f"{_tr('Preview-status', 'Preview status')}: `{times_preview_status}`")
+    if times_preview_summary:
+        if "scen" in times_preview_summary:
+            scen_labels = [
+                _scenario_display_label(str(scen), scenario_desc_map) for scen in times_preview_summary["scen"]
+            ]
+            st.write(f"{_tr('Scenarier', 'Scenarios')}:", ", ".join(scen_labels))
+        if "techgroup" in times_preview_summary:
+            st.write(f"{_tr('Techgroup (unika)', 'Techgroup (unique)')}:", ", ".join(times_preview_summary["techgroup"]))
+        if "comgroup" in times_preview_summary:
+            st.write(f"{_tr('Comgroup (unika)', 'Comgroup (unique)')}:", ", ".join(times_preview_summary["comgroup"]))
+        if "units" in times_preview_summary:
+            st.write(f"{_tr('Units (unika)', 'Units (unique)')}:", ", ".join(times_preview_summary["units"]))
+    if times_preview_df is not None:
+        st.dataframe(times_preview_df, use_container_width=True, height=260)
+with st.expander("TIMES mapping audit", expanded=False):
+    st.caption(f"{_tr('Mapping-status', 'Mapping status')}: `{times_mapping_status}`")
+    if not selected_times_coverage.empty:
+        selected_coverage_df = pd.DataFrame(
+            [
+                {
+                    _tr("Scenario", "Scenario"): scenario_label,
+                    _tr("År", "Year"): int(selected_times_coverage.get("year", year)),
+                    "Total TWh": float(selected_times_coverage.get("total_twh", 0.0)),
+                    _tr("Namngivna kategorier TWh", "Named categories TWh"): float(selected_times_coverage.get("named_twh", 0.0)),
+                    _tr("Övrigt-bucket TWh", "Other bucket TWh"): float(selected_times_coverage.get("other_bucket_twh", 0.0)),
+                    _tr("Övrigt-bucket %", "Other bucket %"): float(selected_times_coverage.get("other_bucket_share_pct", 0.0)),
+                    _tr("Omatchat TWh", "Unmapped TWh"): float(selected_times_coverage.get("unmapped_twh", 0.0)),
+                }
+            ]
+        )
+        st.dataframe(selected_coverage_df.round(2), use_container_width=True, hide_index=True)
+    if not selected_times_mix_df.empty:
+        selected_mix_display = selected_times_mix_df.copy()
+        selected_mix_display[_tr("Energislag", "Energy type")] = selected_mix_display["energy_key"].map(_human_tech_name)
+        st.caption(_tr("Valt scenarioår, aggregerat till appens planeringskategorier.", "Selected scenario year, aggregated to the app's planning categories."))
+        st.dataframe(
+            selected_mix_display[[_tr("Energislag", "Energy type"), "value_twh", "share_pct", "row_count"]]
+            .rename(columns={"value_twh": "TWh", "share_pct": _tr("Andel %", "Share %"), "row_count": _tr("Antal rader", "Row count")})
+            .round(2),
+            use_container_width=True,
+            hide_index=True,
+            height=220,
+        )
+    if not times_coverage_df.empty:
+        overview_df = times_coverage_df.copy()
+        overview_df[_tr("Scenario", "Scenario")] = overview_df["scen"].astype(str).map(
+            lambda scen: _scenario_display_label(scen, scenario_desc_map)
+        )
+        st.caption(
+            _tr(
+                "Översikt för alla scenarioår och år. 'Övrigt' är en medveten samlingskategori, inte automatiskt saknad data.",
+                "Overview for all scenario years and years. 'Other' is a deliberate collection category, not automatically missing data.",
+            )
+        )
+        st.dataframe(
+            overview_df[
+                [
+                    _tr("Scenario", "Scenario"),
+                    "year",
+                    "total_twh",
+                    "named_twh",
+                    "other_bucket_twh",
+                    "other_bucket_share_pct",
+                    "unmapped_twh",
+                ]
+            ]
+            .rename(
+                columns={
+                    "year": _tr("År", "Year"),
+                    "total_twh": "Total TWh",
+                    "named_twh": _tr("Namngivna kategorier TWh", "Named categories TWh"),
+                    "other_bucket_twh": _tr("Övrigt-bucket TWh", "Other bucket TWh"),
+                    "other_bucket_share_pct": _tr("Övrigt-bucket %", "Other bucket %"),
+                    "unmapped_twh": _tr("Omatchat TWh", "Unmapped TWh"),
+                }
+            )
+            .round(2),
+            use_container_width=True,
+            hide_index=True,
+            height=260,
+        )
+    if not selected_times_other_df.empty:
+        st.caption(
+            _tr(
+                "'Övrigt' i valt scenarioår består just nu framför allt av dessa råa TIMES-koder.",
+                "'Other' in the selected scenario year currently consists mainly of these raw TIMES codes.",
+            )
+        )
+        st.dataframe(
+            selected_times_other_df[["raw_mapping", "mapping_source", "value_twh", "row_count"]]
+            .rename(
+                columns={
+                    "raw_mapping": _tr("TIMES-kodkombination", "TIMES code combination"),
+                    "mapping_source": _tr("Regeltyp", "Rule type"),
+                    "value_twh": "TWh",
+                    "row_count": _tr("Antal rader", "Row count"),
+                }
+            )
+            .round(3),
+            use_container_width=True,
+            hide_index=True,
+            height=260,
+        )
+    if not selected_times_unmapped_df.empty:
+        st.caption(
+            _tr(
+                "Dessa rader saknar fortfarande explicit mappingregel och bör gå igenom med EML.",
+                "These rows still lack an explicit mapping rule and should be reviewed with EML.",
+            )
+        )
+        st.dataframe(
+            selected_times_unmapped_df[["raw_mapping", "value_twh", "row_count"]]
+            .rename(
+                columns={
+                    "raw_mapping": _tr("TIMES-kodkombination", "TIMES code combination"),
+                    "value_twh": "TWh",
+                    "row_count": _tr("Antal rader", "Row count"),
+                }
+            )
+            .round(3),
+            use_container_width=True,
+            hide_index=True,
+            height=220,
+        )
+with st.expander(_tr("AreaDemand profiler och spann", "AreaDemand profiles and ranges"), expanded=False):
+    st.markdown(
+        _tr(
+            "Scenarierna byggs transparent från `AreaDemand.xlsx`:\n"
+            "- `Lågt markanspråk` = minsta observerade `km2/TWh` per TIMES-teknik.\n"
+            "- `Mellan` = median av mittvärden per TIMES-teknik.\n"
+            "- `Högt` = största observerade `km2/TWh` per TIMES-teknik.\n"
+            "- Intervall och `+-` tolkas i källans egna enheter före konvertering till `km2/TWh`.\n"
+            "- Inga fallback-värden används i denna modell.",
+            "The scenarios are built transparently from `AreaDemand.xlsx`:\n"
+            "- `Low land demand` = the smallest observed `km2/TWh` per TIMES technology.\n"
+            "- `Medium` = the median of mid-values per TIMES technology.\n"
+            "- `High` = the largest observed `km2/TWh` per TIMES technology.\n"
+            "- Ranges and `+-` are interpreted in the source's own units before conversion to `km2/TWh`.\n"
+            "- No fallback values are used in this model.",
+        )
+    )
+    st.caption(
+        _tr(
+            "AreaDemand översätter TIMES-volymer till markbehov. Geografin uppstår först när markbehovet kombineras "
+            "med suitability, byggbara hex och acceptanslager.",
+            "AreaDemand translates TIMES volumes into land demand. Geography only emerges once land demand is combined "
+            "with suitability, buildable hexes, and acceptance layers.",
+        )
+    )
+    if not area_scenario_active_df.empty:
+        st.caption(_tr("Scenario-tabell för aktiva TIMES-tekniker.", "Scenario table for active TIMES technologies."))
+        area_scenario_display_df = _translate_app_category_column(area_scenario_active_df)
+        st.dataframe(
+            area_scenario_display_df[
+                [
+                    "TIMES-teknik",
+                    "Appkategori",
+                    "Workbook-rad",
+                    "Lagt km2/TWh",
+                    "Mellan km2/TWh",
+                    "Hogt km2/TWh",
+                    "Vald scenario km2/TWh",
+                    "Status",
+                    "Motivering",
+                ]
+            ]
+            .rename(
+                columns=_translate_columns(
+                    {
+                        "TIMES-teknik": ("TIMES-teknik", "TIMES technology"),
+                        "Appkategori": ("Appkategori", "App category"),
+                        "Workbook-rad": ("Workbook-rad", "Workbook row"),
+                        "Lagt km2/TWh": ("Lågt km2/TWh", "Low km2/TWh"),
+                        "Mellan km2/TWh": ("Mellan km2/TWh", "Medium km2/TWh"),
+                        "Hogt km2/TWh": ("Högt km2/TWh", "High km2/TWh"),
+                        "Vald scenario km2/TWh": ("Valt scenario km2/TWh", "Selected scenario km2/TWh"),
+                        "Status": ("Status", "Status"),
+                        "Motivering": ("Motivering", "Reason"),
+                    }
+                )
+            )
+            .round(3),
+            use_container_width=True,
+            hide_index=True,
+            height=min(420, 80 + 35 * max(len(area_scenario_active_df), 1)),
+        )
+    if not area_mapping_active_df.empty:
+        st.caption(_tr("Mapping mellan TIMES-tekniker och workbook-rader.", "Mapping between TIMES technologies and workbook rows."))
+        area_mapping_display_df = _translate_app_category_column(area_mapping_active_df)
+        st.dataframe(
+            area_mapping_display_df.rename(
+                columns=_translate_columns(
+                    {
+                        "TIMES-teknik": ("TIMES-teknik", "TIMES technology"),
+                        "Appkategori": ("Appkategori", "App category"),
+                        "Workbook-rad": ("Workbook-rad", "Workbook row"),
+                        "Status": ("Status", "Status"),
+                        "Motivering": ("Motivering", "Reason"),
+                    }
+                )
+            ).round(3),
+            use_container_width=True,
+            hide_index=True,
+            height=min(360, 80 + 35 * max(len(area_mapping_active_df), 1)),
+        )
+    if not active_area_observation_df.empty:
+        st.caption(_tr("Excel-värden som ligger bakom scenarierna för aktiva TIMES-tekniker.", "Excel values behind the scenarios for active TIMES technologies."))
+        active_area_observation_display_df = _translate_app_category_column(active_area_observation_df)
+        st.dataframe(
+            active_area_observation_display_df.rename(
+                columns=_translate_columns(
+                    {
+                        "TIMES-teknik": ("TIMES-teknik", "TIMES technology"),
+                        "Appkategori": ("Appkategori", "App category"),
+                        "Workbook-rad": ("Workbook-rad", "Workbook row"),
+                        "Kalla": ("Källa", "Source"),
+                        "Metrik": ("Metrik", "Metric"),
+                        "Excel-varde": ("Excel-värde", "Excel value"),
+                        "Scenario-anvand": ("Scenario-använd", "Used in scenario"),
+                        "Tolkningsregel": ("Tolkningsregel", "Interpretation rule"),
+                        "Lagt km2/TWh": ("Lågt km2/TWh", "Low km2/TWh"),
+                        "Mellan km2/TWh": ("Mellan km2/TWh", "Medium km2/TWh"),
+                        "Hogt km2/TWh": ("Högt km2/TWh", "High km2/TWh"),
+                        "Notering": ("Notering", "Note"),
+                    }
+                )
+            ).round(3),
+            use_container_width=True,
+            hide_index=True,
+            height=min(480, 80 + 35 * max(len(active_area_observation_df), 1)),
+        )
+    references = [str(ref) for ref in area_demand_bundle.get("references", []) if str(ref).strip()]
+    if references:
+        st.caption(_tr("Referenser som listas i workbooken.", "References listed in the workbook."))
+        st.markdown("\n".join(f"- {ref}" for ref in references))
+    st.caption(_tr("Osäkerheter och caveats.", "Uncertainties and caveats."))
+    st.write(
+        _tr(
+            "- `NRG_WIN` kopplas till landbaserad vind. Offshore-vind exkluderas som inkompatibelt markkoncept för denna karta.",
+            "- `NRG_WIN` is linked to onshore wind. Offshore wind is excluded as an incompatible land-use concept for this map.",
+        )
+    )
+    st.write(_tr("- `NRG_SOL` kopplas till `Solar PV`. CSP exkluderas för att undvika att blanda olika soltekniker.", "- `NRG_SOL` is linked to `Solar PV`. CSP is excluded to avoid mixing different solar technologies."))
+    st.write(_tr("- `NRG_NUK/NRG_NUC` kopplas till `Nuclear`. `SMR` visas i workbooken men blandas inte in automatiskt.", "- `NRG_NUK/NRG_NUC` is linked to `Nuclear`. `SMR` appears in the workbook but is not mixed in automatically."))
+    st.write(_tr("- Tekniker utan tydlig workbook-rad stoppas i strikt läge i stället för att få fallback.", "- Technologies without a clear workbook row are stopped in strict mode instead of receiving fallback values."))
+with st.expander(_tr("AreaDemand-känslighet", "AreaDemand sensitivity"), expanded=False):
+    if area_sensitivity_df.empty:
+        st.caption(_tr("Inga markintensitetsscenarier kunde byggas.", "No land-intensity scenarios could be built."))
+    else:
+        st.caption(_tr("Jämför totalt markanspråk mellan Lågt, Mellan och Högt för nuvarande scenario och elmix.", "Compare total land demand between Low, Medium, and High for the current scenario and electricity mix."))
+        st.dataframe(
+            area_sensitivity_df[["Scenario", "Vald", "Strikt klar", "Total km2", "Delta vs vald %", "Saknade TIMES-tekniker"]]
+            .rename(
+                columns=_translate_columns(
+                    {
+                        "Scenario": ("Scenario", "Scenario"),
+                        "Vald": ("Vald", "Selected"),
+                        "Strikt klar": ("Strikt klar", "Strict-ready"),
+                        "Total km2": ("Total km2", "Total km2"),
+                        "Delta vs vald %": ("Delta vs vald %", "Delta vs selected %"),
+                        "Saknade TIMES-tekniker": ("Saknade TIMES-tekniker", "Missing TIMES technologies"),
+                    }
+                )
+            )
+            .round(2),
+            use_container_width=True,
+            height=260,
+        )
+with st.expander(_tr("AreaDemand transparens", "AreaDemand transparency"), expanded=False):
+    st.caption(_tr("Visar exakt vilka aktiva TIMES-tekniker som driver markbehovet i valt scenario.", "Shows exactly which active TIMES technologies drive land demand in the selected scenario."))
+    area_factor_display_df = _translate_app_category_column(
+        area_factor_detail_df[
+            ["TIMES-teknik", "Appkategori", "TWh", "km2_per_twh", "km2", "Status", "Motivering"]
+        ]
+    ).rename(
+        columns=_translate_columns(
+            {
+                "TIMES-teknik": ("TIMES-teknik", "TIMES technology"),
+                "Appkategori": ("Appkategori", "App category"),
+                "TWh": ("TWh", "TWh"),
+                "km2_per_twh": ("km2 per TWh", "km2 per TWh"),
+                "km2": ("km2", "km2"),
+                "Status": ("Status", "Status"),
+                "Motivering": ("Motivering", "Reason"),
+            }
+        )
+    )
+    st.dataframe(
+        area_factor_display_df.round(3),
+        use_container_width=True,
+        height=min(360, 80 + 35 * max(len(area_factor_detail_df), 1)),
+    )
