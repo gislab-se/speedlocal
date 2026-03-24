@@ -18,12 +18,23 @@ import numpy as np
 import pandas as pd
 import pydeck as pdk
 import streamlit as st
-from apps.gc4.area_demand_scenarios import (
-    SCENARIO_LABELS as AREA_SCENARIO_LABELS,
-    SCENARIO_ORDER as AREA_SCENARIO_ORDER,
-    TIMES_TECH_RULES as AREA_SCENARIO_TIMES_RULES,
-    build_area_demand_scenario_bundle,
-)
+
+try:
+    from apps.gc4.area_demand_scenarios import (
+        SCENARIO_LABELS as AREA_SCENARIO_LABELS,
+        SCENARIO_ORDER as AREA_SCENARIO_ORDER,
+        TIMES_TECH_RULES as AREA_SCENARIO_TIMES_RULES,
+        build_area_demand_scenario_bundle,
+    )
+except ModuleNotFoundError as exc:
+    if exc.name != "apps":
+        raise
+    from area_demand_scenarios import (
+        SCENARIO_LABELS as AREA_SCENARIO_LABELS,
+        SCENARIO_ORDER as AREA_SCENARIO_ORDER,
+        TIMES_TECH_RULES as AREA_SCENARIO_TIMES_RULES,
+        build_area_demand_scenario_bundle,
+    )
 
 try:
     import duckdb
