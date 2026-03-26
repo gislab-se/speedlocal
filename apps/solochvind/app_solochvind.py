@@ -914,7 +914,8 @@ if year is None:
     year = default_year
 st.sidebar.caption(
     "Appen läser bara `NRG_WIN` och `NRG_SOL` från DuckDB i den här förenklade versionen. "
-    "Scenarier och år hämtas direkt från DuckDB-strukturen, så om EML levererar en ny fil följer appen den."
+    "Scenarier och år hämtas direkt från DuckDB-strukturen, så om EML levererar en ny fil följer appen den. "
+    "[Öppna EML-modellen](https://energymodellinglab.up.railway.app/)."
 )
 
 st.sidebar.markdown("### 3.2 Markintensitet")
