@@ -9,3 +9,6 @@ logs/
 out/
 *.qgz
 *.gpkg
+tmp_*
+external/
+START_TOMORROW.md
