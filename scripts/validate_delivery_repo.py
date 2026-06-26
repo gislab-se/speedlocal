@@ -28,6 +28,7 @@ REQUIRED_PATHS = [
     "scripts/validate_static_site.py",
     "scripts/validate_region_readiness.py",
     "scripts/validate_trondelag_runtime_sources.py",
+    "scripts/prepare_trondelag_runtime_metadata.py",
     "docs/SPEEDLOCAL_SLIMDOWN_5_DAY_PLAN.md",
     "docs/SPEEDLOCAL_COPY_LIST.md",
     "docs/SPEEDLOCAL_RUNTIME_IMPORT_PLAN.md",

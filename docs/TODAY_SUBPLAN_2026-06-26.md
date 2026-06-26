@@ -69,6 +69,8 @@ Output: `docs/SPEEDLOCAL_COPY_LIST.md`
 - `scripts/validate_region_readiness.py` exists and passes.
 - `scripts/validate_trondelag_runtime_sources.py` exists and passes against the
   V2 source archive.
+- `scripts/prepare_trondelag_runtime_metadata.py` exists and can emit
+  metadata-only SQL.
 - `docs/SPEEDLOCAL_RUNTIME_IMPORT_PLAN.md` exists for the first DB slice.
 - Validators pass locally.
 - V2 repo remains untouched.

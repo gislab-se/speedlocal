@@ -52,15 +52,17 @@ Expected validation:
 1. Keep the SpeedLocal app on file fallback mode.
 2. Validate the V2 source archive with:
    `python scripts\validate_trondelag_runtime_sources.py`
-3. Add a SpeedLocal DB validation script that can run without importing data.
-4. Import metadata rows into `meta.runtime_datasets`.
-5. Import R7/R6/R5 display geometries into `runtime.h3_display_cells`.
-6. Import LABLAB R7 landscape cells into `runtime.landscape_cells`.
-7. Validate row counts, landscape types, geometry validity, and display/landscape
+3. Prepare metadata-only SQL with:
+   `python scripts\prepare_trondelag_runtime_metadata.py --emit-sql`
+4. Add a SpeedLocal DB validation script that can run without importing data.
+5. Import metadata rows into `meta.runtime_datasets`.
+6. Import R7/R6/R5 display geometries into `runtime.h3_display_cells`.
+7. Import LABLAB R7 landscape cells into `runtime.landscape_cells`.
+8. Validate row counts, landscape types, geometry validity, and display/landscape
    joins.
-8. Add read-only runtime access functions.
-9. Compare file-backed and database-backed outputs for known Trondelag views.
-10. Switch default backend to Postgres only after comparison passes.
+9. Add read-only runtime access functions.
+10. Compare file-backed and database-backed outputs for known Trondelag views.
+11. Switch default backend to Postgres only after comparison passes.
 
 ## Explicit Skips For First Slice
 
