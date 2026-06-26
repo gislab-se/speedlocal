@@ -1,7 +1,11 @@
 name: Publish GitHub Pages
 
 on:
-  # Manual until this private repo is made public or the GitHub plan supports private Pages.
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:

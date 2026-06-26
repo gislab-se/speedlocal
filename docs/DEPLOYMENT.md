@@ -8,14 +8,13 @@ Target path:
 
 The Pages workflow publishes the `site/` directory.
 
-GitHub Pages is static hosting only. If GitHub Pages cannot publish from the
-private repo under the current plan, keep the repo private during development
-and make it public temporarily only when publication is needed.
+The repo is public as of 2026-06-26, so GitHub Pages can publish from this repo.
+The `Publish GitHub Pages` workflow runs on pushes to `main` that touch the
+static site or the workflow, and it can also be run manually.
 
-Current check on 2026-06-26: the GitHub Pages API returned `Your current plan
-does not support GitHub Pages for this repository.` The repo can stay private
-for development. To publish the temporary Pages site, make the repo public or
-upgrade the plan, then run the `Publish GitHub Pages` workflow manually.
+GitHub Pages is static hosting only. If this repo is made private again before
+Flowcore migration, Pages may stop publishing unless the GitHub plan supports
+private Pages.
 
 ## Interactive App
 

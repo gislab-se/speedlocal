@@ -2,9 +2,10 @@
 
 Bare-minimum delivery repo for SpeedLocal landscape potential.
 
-This repo is intentionally slim. The old exploratory material has been removed
-from the delivery tree. The V2 `landskapsanalys` repo remains the source archive:
-when something is missing, copy only the smallest runtime-critical piece.
+This public repo is intentionally slim. The old exploratory material has been
+removed from the delivery tree. The V2 `landskapsanalys` repo remains the source
+archive: when something is missing, copy only the smallest runtime-critical
+piece.
 
 ## Surfaces
 
@@ -60,17 +61,12 @@ remain as fallbacks until the equivalent database tables exist and match.
 
 ## GitHub Pages
 
-The future canonical static page is:
+The canonical static page is:
 
 `https://gislab-se.github.io/speedlocal/landskapspotential/`
 
-The Pages workflow publishes the `site/` directory. If private Pages is not
-available under the current GitHub plan, keep the repo private during
-development and make it public temporarily only when publication is needed.
-
-Current check on 2026-06-26: GitHub returned `Your current plan does not
-support GitHub Pages for this repository.` The workflow is therefore manual
-until the repo is made public or the plan is upgraded.
+The Pages workflow publishes the `site/` directory on pushes to `main` that
+touch the static site or the workflow. The workflow can also be run manually.
 
 GitHub Pages is static hosting only. Interactive Python/Streamlit apps must run
 through Flowcore, Docker/server runtime, or another Streamlit-compatible host.
