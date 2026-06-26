@@ -63,6 +63,6 @@ def selected_backend(region: dict[str, Any]) -> BackendStatus:
         return BackendStatus(
             "file_fallback",
             True,
-            f"Using documented file fallback paths ({fallback_count} entries).",
+            f"Using documented file fallback contract ({fallback_count} entries). Source availability is checked below.",
         )
     return BackendStatus("unavailable", False, "No Postgres connection or file fallbacks.")

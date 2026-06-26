@@ -4,7 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from .catalog import CatalogError, default_region_id, list_regions, load_region
-from .file_runtime import dataset_rows, runtime_source_summary
+from .file_runtime import V2_SOURCE_ROOT_ENV, dataset_rows, runtime_source_summary
 from .runtime import file_fallback_rows, selected_backend
 
 
@@ -34,9 +34,31 @@ def _region_card(region: dict) -> bool:
     cols[1].markdown(f"**CRS**  \n`{region.get('native_crs', 'TBD')}`")
     cols[2].markdown(f"**H3**  \n{_h3_label(region)}")
     if not enabled:
-        st.button("Planerad", key=f"planned_{region_id}", disabled=True)
-        return False
+        return st.button("Visa planerad status", key=f"planned_{region_id}")
     return st.button("Visa runtime-status", key=f"open_{region_id}")
+
+
+def _render_source_summary(region_id: str) -> None:
+    source_summary = runtime_source_summary(region_id)
+    st.subheader("File Runtime Source")
+    if source_summary.datasets:
+        if source_summary.available:
+            st.success(f"{source_summary.message} Source root: {source_summary.source_root}")
+        else:
+            st.warning(f"{source_summary.message} Source root: {source_summary.source_root}")
+        st.dataframe(pd.DataFrame(dataset_rows(source_summary)), use_container_width=True, hide_index=True)
+        return
+
+    if "Source root does not exist" in source_summary.message:
+        st.warning(
+            "Cloud mode: runtime source archive is not mounted here yet. "
+            f"This deployed app can show catalogs and fallback contracts, but validated feature counts require "
+            f"`{V2_SOURCE_ROOT_ENV}` locally or future Postgres/Flowcore runtime."
+        )
+        st.caption(f"Configured source root: {source_summary.source_root}")
+        return
+
+    st.info(source_summary.message)
 
 
 def _region_detail(region_id: str) -> None:
@@ -75,13 +97,7 @@ def _region_detail(region_id: str) -> None:
         else:
             st.caption("No file fallbacks required for this planned region yet.")
 
-    source_summary = runtime_source_summary(region_id)
-    st.subheader("File Runtime Source")
-    if source_summary.datasets:
-        st.caption(f"{source_summary.message} Source root: {source_summary.source_root}")
-        st.dataframe(pd.DataFrame(dataset_rows(source_summary)), use_container_width=True, hide_index=True)
-    else:
-        st.caption(source_summary.message)
+    _render_source_summary(region_id)
 
     st.subheader("Next Runtime Requirement")
     for item in region.get("readiness_requirements") or []:

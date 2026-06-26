@@ -12,6 +12,7 @@ piece.
 - Static landing page: `site/landskapspotential/index.html`
 - GitHub Pages workflow: `.github/workflows/pages.yml`
 - Streamlit app shell: `app.py`
+- Streamlit Cloud status app: `https://speedlocal-landskapspotential.streamlit.app/`
 - Region catalogs: `regions/`
 - Runtime database scaffold: `db/` plus `docker-compose.yml`
 - File fallbacks: documented under `data/runtime/`
@@ -86,3 +87,13 @@ touch the static site or the workflow. The workflow can also be run manually.
 
 GitHub Pages is static hosting only. Interactive Python/Streamlit apps must run
 through Flowcore, Docker/server runtime, or another Streamlit-compatible host.
+
+Current Streamlit Cloud status app:
+
+`https://speedlocal-landskapspotential.streamlit.app/`
+
+Region deep links:
+
+- `https://speedlocal-landskapspotential.streamlit.app/?region=bornholm`
+- `https://speedlocal-landskapspotential.streamlit.app/?region=trondelag`
+- `https://speedlocal-landskapspotential.streamlit.app/?region=skaraborg`

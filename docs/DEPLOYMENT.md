@@ -18,6 +18,16 @@ private Pages.
 
 ## Interactive App
 
+Current Streamlit Cloud status app:
+
+`https://speedlocal-landskapspotential.streamlit.app/`
+
+Region deep links:
+
+- `https://speedlocal-landskapspotential.streamlit.app/?region=bornholm`
+- `https://speedlocal-landskapspotential.streamlit.app/?region=trondelag`
+- `https://speedlocal-landskapspotential.streamlit.app/?region=skaraborg`
+
 Run locally:
 
 ```powershell

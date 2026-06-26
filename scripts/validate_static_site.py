@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SITE_PATH = ROOT / "site" / "landskapspotential" / "index.html"
 EXPECTED_REGIONS = {"bornholm", "trondelag", "skaraborg"}
+STREAMLIT_APP_URL = "https://speedlocal-landskapspotential.streamlit.app"
 
 
 class LandingParser(HTMLParser):
@@ -53,6 +54,10 @@ def main() -> int:
     expected_routes = {f"?region={region}" for region in EXPECTED_REGIONS}
     if parser.app_routes != expected_routes:
         failures.append(f"App route placeholders mismatch: {sorted(parser.app_routes)}")
+    expected_links = {f"{STREAMLIT_APP_URL}/?region={region}" for region in EXPECTED_REGIONS}
+    missing_links = expected_links.difference(parser.hrefs)
+    if missing_links:
+        failures.append(f"Missing Streamlit deep links: {sorted(missing_links)}")
     if "/speedlocal/landskapspotential/" not in html:
         failures.append("Canonical Pages path is not documented in landing page.")
 
@@ -67,10 +72,11 @@ def main() -> int:
     print("\nCHECKS")
     print("- PASS Landing page title names SpeedLocal.")
     print("- PASS Bornholm, Trondelag and Skaraborg cards exist.")
-    print("- PASS Card links stay within the static page until app host exists.")
+    print("- PASS Card links target the Streamlit Cloud app with region query params.")
     print("- PASS App route placeholders are documented as query routes.")
+    print("- PASS Streamlit Cloud deep links exist for all region cards.")
     print("- PASS Canonical Pages path is documented.")
-    print("\nRESULT: PASS (5 passed, 0 blocker(s))")
+    print("\nRESULT: PASS (6 passed, 0 blocker(s))")
     return 0
 
 
