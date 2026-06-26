@@ -1,42 +1,66 @@
 # speedlocal
 
-Bornholm-repo med en ny förenklad Streamlit-app för sol och vind.
+Bare-minimum delivery repo for SpeedLocal landscape potential.
 
-## Aktiv app
+This repo is intentionally slim. The old exploratory material has been removed
+from the delivery tree. The V2 `landskapsanalys` repo remains the source archive:
+when something is missing, copy only the smallest runtime-critical piece.
 
-- Entry point: `app.py`
-- Aktiv app: `apps/solochvind/app_solochvind.py`
-- Legacy/appreferens: `apps/gc4/app_gc4_energy.py`
+## Surfaces
 
-## Data som används av nya appen
+- Static landing page: `site/landskapspotential/index.html`
+- Streamlit app shell: `app.py`
+- Region catalogs: `regions/`
+- Runtime database scaffold: `db/` plus `docker-compose.yml`
+- File fallbacks: documented under `data/runtime/`
 
-- `data/gc4/bornholm_vindacceptans_stage1_v4_res9_hex.geojson`
-- `data/processed/speedlocal_times.duckdb`
-- `data/raw/AreaDemand.xlsx`
+## Regions
 
-## Kör lokalt
+- Bornholm: active catalog, file fallback until database coverage is validated.
+- Trondelag: active catalog, R7/R6/R5 only, file fallback until database coverage is validated.
+- Skaraborg: planned/disabled catalog slot for forward design.
+
+The app must discover regions from `regions/index.json` only. Do not reintroduce
+legacy fallback region manifests that can expose old regions unintentionally.
+
+## Run Locally
 
 ```powershell
-cd C:\gislab\speedlocal
-python -m venv .venv
-.\.venv\Scripts\python -m pip install -r requirements.txt
-.\.venv\Scripts\python -m streamlit run app.py --server.address 127.0.0.1 --server.port 8502
+cd C:\tmp\speedlocal
+python -m pip install -r requirements.txt
+python -m streamlit run app.py --server.address 127.0.0.1 --server.port 8502
 ```
 
-Öppna: http://127.0.0.1:8502
+Open: `http://127.0.0.1:8502`
 
-## Vad nya appen innehåller
+## Validate
 
-- 3.1 Scenario
-- 3.2 Markintensitet
-- 3.3.1 Landskaps-acceptans-vind
-- 3.3.2 Landskaps-acceptans-sol
-- Elmix med bara vind och sol
-- Hexurval med manuella tillägg och borttag
+```powershell
+python scripts\validate_delivery_repo.py
+```
 
-## Noteringar
+Optional database check, after Docker/Postgres is running:
 
-- Den nya appen läser bara `NRG_WIN` och `NRG_SOL` från DuckDB.
-- `res9` är standardkartan. `res8` används inte längre i aktiv app.
-- `HEX_POINTS_PATH` och `DUCKDB_PATH` kan fortfarande användas som explicita overrides.
-- GeoJSON används i repot eftersom det är enklare att deploya än `.gpkg` i Streamlit Cloud.
+```powershell
+python scripts\check_runtime_db.py
+```
+
+## Runtime Database
+
+```powershell
+Copy-Item .env.example .env
+docker compose up -d postgres
+python scripts\check_runtime_db.py
+```
+
+The preferred runtime path is Postgres when available and validated. File paths
+remain as fallbacks until the equivalent database tables exist and match.
+
+## GitHub Pages
+
+The future canonical static page is:
+
+`https://gislab-se.github.io/speedlocal/landskapspotential/`
+
+GitHub Pages is static hosting only. Interactive Python/Streamlit apps must run
+through Flowcore, Docker/server runtime, or another Streamlit-compatible host.

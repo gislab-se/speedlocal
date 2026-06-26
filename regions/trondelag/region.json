@@ -1,0 +1,67 @@
+{
+  "schema_version": "2026-06-26",
+  "region_id": "trondelag",
+  "display_name": "Trondelag",
+  "country": "Norway",
+  "status": "active",
+  "data_status": "file_fallback_until_speedlocal_runtime_import",
+  "native_crs": "EPSG:25832",
+  "web_crs": "EPSG:4326",
+  "available_h3_resolutions": [7, 6, 5],
+  "default_h3_resolution": 7,
+  "landing_card": {
+    "title": "Trondelag",
+    "subtitle": "R7 regional pilot",
+    "description": "Active pilot with R7/R6/R5 only and explicit 250 m population-grid proxy semantics.",
+    "badge": "Active",
+    "enabled": true,
+    "sort_order": 10
+  },
+  "runtime": {
+    "backend_preference": "postgres_then_file",
+    "database": {
+      "required_tables": [
+        "runtime.regions",
+        "runtime.h3_display_cells",
+        "runtime.landscape_cells",
+        "runtime.parameter_sources",
+        "runtime.acceptance_cells"
+      ],
+      "status": "not_imported"
+    },
+    "file_fallbacks": [
+      {
+        "id": "trondelag_region_package",
+        "kind": "manifest",
+        "path": "data/runtime/fallbacks/trondelag/region.json",
+        "required_for_full_runtime": true,
+        "source": "V2 regions/trondelag/region.json"
+      },
+      {
+        "id": "trondelag_h3_display_r7",
+        "kind": "geojson",
+        "path": "data/runtime/fallbacks/trondelag/h3_display_r7.geojson",
+        "required_for_full_runtime": true,
+        "source": "V2 docs/geocontext/potential_framework/data/trondelag_r7_app_bundle/hex.geojson"
+      },
+      {
+        "id": "trondelag_lablab_landscape_r7",
+        "kind": "geojson",
+        "path": "data/runtime/fallbacks/trondelag/landscape_lablab_r7.geojson",
+        "required_for_full_runtime": true,
+        "source": "V2 docs/geocontext/potential_framework/data/trondelag_lablab_landscape_h3_r7"
+      }
+    ]
+  },
+  "constraints": [
+    "Do not expose R8/R9 in the interactive app.",
+    "Use EPSG:25832 for native Trondelag geometry work.",
+    "Population and settlement buffers use dissolved polygon buffers from the 250 m grid/centroid proxy."
+  ],
+  "readiness_requirements": [
+    "R7/R6/R5 display counts validate before enabling full runtime.",
+    "LT01-LT09 landscape types validate, including LT09.",
+    "250 m population-grid proxy label remains visible in metadata and UI."
+  ],
+  "runtime_note": "Trondelag is active, but this slim repo starts with file-fallback paths until the reviewed R7/R6/R5 display and LABLAB landscape runtime imports are available in SpeedLocal Postgres."
+}

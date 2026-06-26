@@ -1,7 +1,5 @@
-from pathlib import Path
-import runpy
+from apps.landskapspotential.app import main
 
 
-APP_PATH = Path(__file__).resolve().parent / "apps" / "solochvind" / "app_solochvind.py"
-
-runpy.run_path(str(APP_PATH), run_name="__main__")
+if __name__ == "__main__":
+    main()

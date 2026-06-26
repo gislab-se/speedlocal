@@ -1,0 +1,39 @@
+{
+  "schema_version": "2026-06-26",
+  "region_id": "skaraborg",
+  "display_name": "Skaraborg",
+  "country": "Sweden",
+  "status": "planned",
+  "data_status": "catalog_slot_only",
+  "native_crs": "EPSG:3006",
+  "web_crs": "EPSG:4326",
+  "available_h3_resolutions": [],
+  "default_h3_resolution": null,
+  "landing_card": {
+    "title": "Skaraborg",
+    "subtitle": "Planned catalog-driven region",
+    "description": "Forward-design slot proving that new regions need catalogs plus validated runtime data, not hardcoded app branches.",
+    "badge": "Planned",
+    "enabled": false,
+    "sort_order": 30
+  },
+  "runtime": {
+    "backend_preference": "postgres_then_file",
+    "database": {
+      "required_tables": [
+        "runtime.regions",
+        "runtime.h3_display_cells",
+        "runtime.landscape_cells"
+      ],
+      "status": "not_ready"
+    },
+    "file_fallbacks": []
+  },
+  "readiness_requirements": [
+    "Define reviewed region boundary and CRS.",
+    "Create display geometry package and expected H3 counts.",
+    "Add landscape, potential, scenario and acceptance manifests or mark them explicitly unavailable.",
+    "Import validated runtime data or document file fallbacks."
+  ],
+  "runtime_note": "Skaraborg is intentionally represented as planned/disabled until reviewed source data and runtime contracts exist."
+}

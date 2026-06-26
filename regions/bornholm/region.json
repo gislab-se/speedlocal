@@ -1,0 +1,62 @@
+{
+  "schema_version": "2026-06-26",
+  "region_id": "bornholm",
+  "display_name": "Bornholm",
+  "country": "Denmark",
+  "status": "active",
+  "data_status": "file_fallback_until_speedlocal_runtime_import",
+  "native_crs": "EPSG:25833",
+  "web_crs": "EPSG:4326",
+  "available_h3_resolutions": [6, 7, 8, 9],
+  "default_h3_resolution": 9,
+  "landing_card": {
+    "title": "Bornholm",
+    "subtitle": "R9 island pilot",
+    "description": "Active pilot retained as a file-fallback runtime until the reviewed data is imported into SpeedLocal Postgres.",
+    "badge": "Active",
+    "enabled": true,
+    "sort_order": 20
+  },
+  "runtime": {
+    "backend_preference": "postgres_then_file",
+    "database": {
+      "required_tables": [
+        "runtime.regions",
+        "runtime.h3_display_cells",
+        "runtime.landscape_cells",
+        "runtime.potential_cells",
+        "runtime.acceptance_cells"
+      ],
+      "status": "not_imported"
+    },
+    "file_fallbacks": [
+      {
+        "id": "bornholm_region_package",
+        "kind": "manifest",
+        "path": "data/runtime/fallbacks/bornholm/region.json",
+        "required_for_full_runtime": true,
+        "source": "V2 regions/bornholm/region.json"
+      },
+      {
+        "id": "bornholm_h3_display_r9",
+        "kind": "geojson",
+        "path": "data/runtime/fallbacks/bornholm/h3_display_r9.geojson",
+        "required_for_full_runtime": true,
+        "source": "V2 exports/v2_multiregion/bornholm/h3_display_geometries"
+      },
+      {
+        "id": "bornholm_potential_r9",
+        "kind": "csv_or_geojson",
+        "path": "data/runtime/fallbacks/bornholm/potential_r9.csv",
+        "required_for_full_runtime": true,
+        "source": "V2 exports/v2_multiregion/bornholm"
+      }
+    ]
+  },
+  "readiness_requirements": [
+    "R10-derived R9 PEY semantics remain labelled until true R9-native runtime exists.",
+    "File fallback paths stay documented until SpeedLocal Postgres imports pass validation.",
+    "Bornholm validation must run independently from Trondelag."
+  ],
+  "runtime_note": "Bornholm remains active through documented file fallbacks until app-ready R9 display, landscape, potential and acceptance data are imported into the shared SpeedLocal runtime schema."
+}

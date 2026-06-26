@@ -1,0 +1,5 @@
+{
+  "schema_version": "2026-06-26",
+  "default_region_id": "trondelag",
+  "regions": ["bornholm", "trondelag", "skaraborg"]
+}

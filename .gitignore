@@ -1,14 +1,23 @@
-﻿.venv/
+# Python
 __pycache__/
 *.pyc
-.Rhistory
-.Rproj.user/
+.venv/
+
+# Local secrets and machine config
 .env
 .env.*
-logs/
-out/
-*.qgz
-*.gpkg
-tmp_*
-external/
-START_TOMORROW.md
+!.env.example
+
+# Local runtime/cache outputs
+.streamlit/*.log
+artifacts/
+tmp/
+
+# Generated or mounted runtime data
+data/runtime/generated/
+data/runtime/mounted/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/*.log
