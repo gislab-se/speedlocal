@@ -9,6 +9,12 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from apps.landskapspotential.file_runtime import (
+    EXPECTED_BORNHOLM_DISPLAY_COUNTS,
+    EXPECTED_BORNHOLM_LANDSCAPE_APP_COUNT,
+    EXPECTED_BORNHOLM_LANDSCAPE_CSV_ROWS,
+    EXPECTED_BORNHOLM_LANDSCAPE_TYPES,
+    EXPECTED_BORNHOLM_SCORE_ROWS,
+    EXPECTED_BORNHOLM_SOCIAL_ROWS,
     EXPECTED_TRONDELAG_DISPLAY_COUNTS,
     EXPECTED_TRONDELAG_LANDSCAPE_COUNT,
     EXPECTED_TRONDELAG_LANDSCAPE_TYPES,
@@ -50,6 +56,66 @@ class Report:
 
 def main() -> int:
     report = Report()
+    bornholm = runtime_source_summary("bornholm")
+    bornholm_rows = dataset_rows(bornholm)
+    bornholm_by_id = {row["dataset_id"]: row for row in bornholm_rows}
+
+    report.check(bornholm.available, "Bornholm file runtime summary is available.", bornholm.message)
+    report.check(len(bornholm_rows) == 12, "Bornholm file runtime summary has twelve datasets.", f"Expected 12 datasets, got {len(bornholm_rows)}.")
+    for resolution, expected_count in EXPECTED_BORNHOLM_DISPLAY_COUNTS.items():
+        row = bornholm_by_id.get(f"bornholm_h3_display_r{resolution}") or {}
+        report.check(
+            row.get("valid") is True and row.get("actual_count") == expected_count,
+            f"Bornholm R{resolution} display dataset validates with {expected_count} features.",
+            f"Bornholm R{resolution} display dataset row is {row!r}.",
+        )
+    report.check(
+        (bornholm_by_id.get("bornholm_dagi_landsdel_runtime_summary") or {}).get("valid") is True,
+        "Bornholm DAGI Landsdel runtime summary validates.",
+        f"Runtime summary row is {bornholm_by_id.get('bornholm_dagi_landsdel_runtime_summary')!r}.",
+    )
+    bornholm_landscape = bornholm_by_id.get("bornholm_lablab_landscape_r9_app_extent") or {}
+    report.check(
+        bornholm_landscape.get("valid") is True and bornholm_landscape.get("actual_count") == EXPECTED_BORNHOLM_LANDSCAPE_APP_COUNT,
+        "Bornholm LABLAB R9 landscape app extent validates with 6,852 features.",
+        f"Bornholm landscape app row is {bornholm_landscape!r}.",
+    )
+    report.check(
+        set(bornholm.metadata.get("landscape_types") or []) == EXPECTED_BORNHOLM_LANDSCAPE_TYPES,
+        "Bornholm landscape summary contains LT01-LT05 exactly.",
+        f"Bornholm landscape types are {bornholm.metadata.get('landscape_types')!r}.",
+    )
+    bornholm_landscape_csv = bornholm_by_id.get("bornholm_lablab_landscape_r9_csv") or {}
+    report.check(
+        bornholm_landscape_csv.get("valid") is True and bornholm_landscape_csv.get("actual_count") == EXPECTED_BORNHOLM_LANDSCAPE_CSV_ROWS,
+        "Bornholm landscape CSV validates with 6,877 rows.",
+        f"Bornholm landscape CSV row is {bornholm_landscape_csv!r}.",
+    )
+    report.check(
+        (bornholm_by_id.get("bornholm_potential_r10_derived_r9_pey_manifest") or {}).get("valid") is True
+        and bornholm.metadata.get("runtime_mode") == "r10_derived_r9_pey"
+        and bornholm.metadata.get("true_r9_native_pey") is False,
+        "Bornholm R10-derived R9 PEY labelling is preserved.",
+        f"Bornholm PEY metadata is {bornholm.metadata!r}.",
+    )
+    score = bornholm_by_id.get("bornholm_establishment_placement_score_r9") or {}
+    report.check(
+        score.get("valid") is True and score.get("actual_count") == EXPECTED_BORNHOLM_SCORE_ROWS,
+        "Bornholm establishment placement score validates with 6,878 rows.",
+        f"Bornholm score row is {score!r}.",
+    )
+    social = bornholm_by_id.get("bornholm_synthetic_social_acceptance_r9") or {}
+    report.check(
+        social.get("valid") is True and social.get("actual_count") == EXPECTED_BORNHOLM_SOCIAL_ROWS,
+        "Bornholm synthetic social acceptance validates with 6,878 rows.",
+        f"Bornholm social row is {social!r}.",
+    )
+    report.check(
+        (bornholm_by_id.get("bornholm_synthetic_social_acceptance_manifest") or {}).get("valid") is True,
+        "Bornholm social acceptance remains labelled synthetic test data.",
+        f"Bornholm social manifest row is {bornholm_by_id.get('bornholm_synthetic_social_acceptance_manifest')!r}.",
+    )
+
     summary = runtime_source_summary("trondelag")
     rows = dataset_rows(summary)
     by_id = {row["dataset_id"]: row for row in rows}

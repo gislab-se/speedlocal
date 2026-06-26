@@ -101,13 +101,23 @@ Extra baseline completed today:
 - `docs/REPO_HYGIENE.md` defines keep/delete rules for keeping the repo slim.
 - Local generated clutter (`__pycache__`, `tmp/`) was removed from the checkout.
 
+## Follow-On Block - Bornholm File Runtime Summary
+
+Complete.
+
+- Bornholm now uses the same file-runtime summary pattern as Trondelag.
+- The summary validates the smallest app-ready V2 sources without copying large
+  generated files into `speedlocal`.
+- R10-derived R9 PEY labelling remains explicit.
+- Validator coverage was added before any real app behavior was promoted.
+
 ## Next Block
 
-Start the next block with Bornholm parity for the status layer:
+Copy the smallest shared app behavior needed for the first real regional
+surface:
 
-1. Add a Bornholm file-runtime summary that validates the smallest app-ready V2
-   sources without copying large generated files.
-2. Keep the same catalog-driven pattern used by Trondelag.
-3. Update validators before adding any real app behavior.
-4. Only after Bornholm and Trondelag status summaries are both clear, copy the
-   smallest shared app behavior needed for the first real regional surface.
+1. Start from shared catalog-driven app behavior, not a Bornholm-only or
+   Trondelag-only branch.
+2. Prefer read-only manifest/path loading before copying generated runtime data.
+3. Keep file fallbacks active until Postgres/Flowcore coverage validates.
+4. Add or update validators before promoting the behavior to the Streamlit UI.

@@ -251,16 +251,29 @@ Do this before copying the full app:
 This keeps the slim repo small while still moving toward a real Postgres-backed
 runtime.
 
+## Completed Slice - Bornholm File Runtime Summary
+
+The Bornholm file-runtime summary is complete.
+
+What was promoted:
+
+- The app reads Bornholm source status from the V2 archive as a file fallback.
+- The validator checks R6/R7/R8/R9 display counts, LABLAB R9 landscape extent,
+  landscape CSV rows, establishment placement score rows, and synthetic social
+  acceptance rows.
+- R10-derived R9 PEY labelling is preserved in metadata and validation output.
+- No large Bornholm GeoJSON, CSV, or report output was copied into this repo.
+
 ## Next Accepted Slice
 
-The next accepted slice is a Bornholm file-runtime summary.
+The next accepted slice is the smallest shared app behavior for the first real
+regional surface.
 
 Rules for that slice:
 
-- Validate the smallest Bornholm app-ready V2 sources first.
-- Do not copy large Bornholm GeoJSON, CSV, or report outputs into this repo.
-- Keep R10-derived R9 PEY labelling visible in the validator/app summary.
-- Reuse the shared file-runtime summary pattern instead of creating a
-  Bornholm-only app branch.
-- Add validator coverage before promoting any Bornholm runtime data or app
-  behavior.
+- Start from shared catalog-driven behavior.
+- Do not copy the full V2 app monolith.
+- Reuse manifests and file-fallback paths before copying generated data.
+- Keep Bornholm and Trondelag validation independent.
+- Add validator coverage before promoting any behavior to the public Streamlit
+  app.

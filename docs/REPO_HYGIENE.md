@@ -13,12 +13,15 @@ The Day-1 baseline is complete:
 - GitHub Pages landing page is live.
 - Streamlit Cloud status app is linked from the landing page.
 - Region catalog discovery is limited to Bornholm, Trondelag, and Skaraborg.
+- Bornholm has a file-backed runtime source summary against the V2 archive,
+  including R10-derived R9 PEY labelling.
 - Trondelag has a file-backed runtime source summary against the V2 archive.
 - Postgres is prepared as the preferred future runtime, but file fallbacks stay
   documented until database-backed reads validate.
 
-Next block: add the Bornholm file-runtime summary, then copy the smallest app
-behavior needed for the first real regional surface.
+Next block: copy the smallest shared app behavior needed for the first real
+regional surface. Keep it catalog-driven and leave generated data in V2 or in
+mounted/database runtime storage until a validator promotes it.
 
 ## Keep In This Repo
 
@@ -75,6 +78,8 @@ python -B scripts\validate_delivery_repo.py
 python -B scripts\validate_static_site.py
 python -B scripts\validate_region_readiness.py
 python -B scripts\validate_file_runtime_summary.py
+python -B scripts\validate_trondelag_runtime_sources.py
+python -B scripts\prepare_trondelag_runtime_metadata.py
 ```
 
 Remove local generated clutter when needed:
