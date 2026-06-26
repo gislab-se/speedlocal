@@ -54,6 +54,7 @@ python scripts\validate_static_site.py
 python scripts\validate_region_readiness.py
 python scripts\validate_trondelag_runtime_sources.py
 python scripts\validate_file_runtime_summary.py
+python scripts\validate_v2_port_guardrails.py
 python scripts\prepare_trondelag_runtime_metadata.py
 ```
 

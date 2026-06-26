@@ -127,3 +127,16 @@ Prepare the V2 quarantine port for the first real regional surface:
 6. Keep file fallbacks active until Postgres/Flowcore coverage validates.
 7. Add or update validators before promoting behavior to the public Streamlit
    UI.
+
+## Follow-On Block - V2 Port Inventory
+
+Complete.
+
+- `docs/V2_QUARANTINE_PORT_INVENTORY_2026-06-26.md` lists V2 imports and
+  required-now/required-later/leave-behind files.
+- `scripts/validate_v2_port_guardrails.py` passes before copying code.
+- The validator is part of the normal delivery validation path.
+
+Next implementation step: copy the first guarded V2 baseline into
+`apps/v2_port/`, patch region discovery before exposure, and verify that the
+guardrail validator still passes.

@@ -147,7 +147,8 @@ The quarantine port is acceptable only when:
 
 ## Next Action
 
-Prepare the quarantine port plan before copying code:
+The quarantine port inventory now lives in
+`docs/V2_QUARANTINE_PORT_INVENTORY_2026-06-26.md`. Before copying code:
 
 1. List exact V2 imports used by `potential_app.py`.
 2. Split them into required-now, required-later, and leave-behind.
@@ -156,3 +157,5 @@ Prepare the quarantine port plan before copying code:
 5. Make the baseline run locally.
 6. Only then start removing panels, layer groups, and technical UI.
 
+Items 1-3 are complete. The next implementation step is the first guarded copy
+into `apps/v2_port/`.

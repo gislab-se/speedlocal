@@ -286,6 +286,10 @@ What was promoted:
 The next accepted slice is the V2 quarantine-port preparation for the first real
 regional surface.
 
+Status: inventory and guardrails are documented in
+`docs/V2_QUARANTINE_PORT_INVENTORY_2026-06-26.md`. Run
+`scripts/validate_v2_port_guardrails.py` before copying any V2 app files.
+
 Rules for that slice:
 
 - Start from the working V2 app behavior, not a new V3-style architecture.

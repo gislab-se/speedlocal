@@ -24,6 +24,11 @@ surface. See `docs/APP_MIGRATION_STRATEGY_2026-06-26.md`. The port should run
 first and then be reduced behind SpeedLocal catalogs; do not rebuild the app
 from scratch and do not copy V3 as the baseline.
 
+The concrete pre-copy inventory is
+`docs/V2_QUARANTINE_PORT_INVENTORY_2026-06-26.md`. Run
+`scripts/validate_v2_port_guardrails.py` before and after any `apps/v2_port/`
+copy.
+
 ## Keep In This Repo
 
 - `site/landskapspotential/index.html` and Pages workflow.
@@ -85,6 +90,7 @@ python -B scripts\validate_delivery_repo.py
 python -B scripts\validate_static_site.py
 python -B scripts\validate_region_readiness.py
 python -B scripts\validate_file_runtime_summary.py
+python -B scripts\validate_v2_port_guardrails.py
 python -B scripts\validate_trondelag_runtime_sources.py
 python -B scripts\prepare_trondelag_runtime_metadata.py
 ```
