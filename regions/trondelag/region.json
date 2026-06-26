@@ -1,7 +1,7 @@
 {
   "schema_version": "2026-06-26",
   "region_id": "trondelag",
-  "display_name": "Trondelag",
+  "display_name": "Tröndelag",
   "country": "Norway",
   "status": "active",
   "data_status": "file_fallback_until_speedlocal_runtime_import",
@@ -10,7 +10,7 @@
   "available_h3_resolutions": [7, 6, 5],
   "default_h3_resolution": 7,
   "landing_card": {
-    "title": "Trondelag",
+    "title": "Tröndelag",
     "subtitle": "R7 regional pilot",
     "description": "Active pilot with R7/R6/R5 only and explicit 250 m population-grid proxy semantics.",
     "badge": "Active",

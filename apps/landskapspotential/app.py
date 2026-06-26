@@ -16,24 +16,42 @@ def _status_label(region: dict) -> str:
     return status
 
 
-def _region_card(region: dict) -> None:
+def _h3_label(region: dict) -> str:
+    values = region.get("available_h3_resolutions") or []
+    return ", ".join(f"R{value}" for value in values) or "TBD"
+
+
+def _region_card(region: dict) -> bool:
     card = region.get("landing_card") or {}
-    st.subheader(card.get("title") or region.get("display_name") or region.get("region_id"))
+    region_id = str(region.get("region_id") or "")
+    enabled = bool(card.get("enabled", region.get("status") == "active"))
+
+    st.subheader(card.get("title") or region.get("display_name") or region_id)
     st.caption(card.get("subtitle") or region.get("data_status") or "")
     st.write(card.get("description") or "")
     cols = st.columns(3)
-    cols[0].metric("Status", _status_label(region))
-    cols[1].metric("CRS", region.get("native_crs", "TBD"))
-    cols[2].metric("H3", ", ".join(str(v) for v in region.get("available_h3_resolutions") or []) or "TBD")
+    cols[0].markdown(f"**Status**  \n{_status_label(region)}")
+    cols[1].markdown(f"**CRS**  \n`{region.get('native_crs', 'TBD')}`")
+    cols[2].markdown(f"**H3**  \n{_h3_label(region)}")
+    if not enabled:
+        st.button("Planerad", key=f"planned_{region_id}", disabled=True)
+        return False
+    return st.button("Visa runtime-status", key=f"open_{region_id}")
 
 
 def _region_detail(region_id: str) -> None:
     region = load_region(region_id)
-    st.header(region.get("display_name") or region_id)
+    display_name = region.get("display_name") or region_id
+    st.header(f"{display_name} runtime-status")
     st.caption(region.get("runtime_note") or "")
 
     backend = selected_backend(region)
     st.info(f"Runtime backend: {backend.backend}. {backend.message}")
+    if backend.backend == "file_fallback":
+        st.warning(
+            "Den fulla interaktiva regionala appen är inte migrerad hit än. "
+            "Den här vyn visar katalog, fallback-sökvägar och validerad källstatus under tiden."
+        )
 
     left, right = st.columns([1, 1])
     with left:
@@ -73,7 +91,10 @@ def _region_detail(region_id: str) -> None:
 def main() -> None:
     st.set_page_config(page_title="SpeedLocal landskapspotential", layout="wide")
     st.title("SpeedLocal landskapspotential")
-    st.caption("Catalog-driven delivery shell for landing page, regional app cards, Postgres runtime and file fallbacks.")
+    st.caption(
+        "Migreringsskal för regionala appytor, Postgres runtime och filfallbacks. "
+        "Publik landing page finns på GitHub Pages; Python/Streamlit körs separat tills Flowcore tar över."
+    )
 
     try:
         regions = list_regions()
@@ -86,12 +107,12 @@ def main() -> None:
     if selected not in {str(region.get("region_id")).lower() for region in regions}:
         selected = default_region_id()
 
-    st.subheader("Regional Cards")
+    st.subheader("Regionala ytor")
+    st.caption("Korten väljer regionens runtime-status i det nya repo-skalet. De öppnar ännu inte den fulla regionala appen.")
     columns = st.columns(len(regions))
     for column, region in zip(columns, regions):
         with column:
-            _region_card(region)
-            if st.button("Open", key=f"open_{region['region_id']}"):
+            if _region_card(region):
                 st.query_params["region"] = region["region_id"]
                 st.rerun()
 

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="sv">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -7,66 +7,200 @@
   <style>
     :root {
       color-scheme: light;
-      --ink: #16201d;
-      --muted: #53615d;
-      --line: #d8dfdc;
-      --paper: #f7f8f6;
-      --white: #ffffff;
-      --green: #1f6f4a;
-      --blue: #2b5d88;
-      --red: #9b3d37;
-      --soft: #edf2ef;
+      --bg: #f7f4ed;
+      --surface: #fffdf8;
+      --surface-soft: #ece6da;
+      --ink: #151915;
+      --muted: #5f665f;
+      --line: rgba(21, 25, 21, 0.16);
+      --green: #2f6b4f;
+      --green-dark: #1f4938;
+      --rust: #b45e3c;
+      --blue: #315f7d;
+      --gold: #c49a3c;
+      --shadow: 0 18px 42px rgba(21, 25, 21, 0.14);
     }
 
     * {
       box-sizing: border-box;
     }
 
-    body {
-      margin: 0;
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      color: var(--ink);
-      background: var(--paper);
+    html {
+      scroll-behavior: smooth;
     }
 
-    header {
-      min-height: 72vh;
-      display: grid;
-      align-items: end;
-      color: white;
-      background:
-        linear-gradient(180deg, rgba(10, 20, 18, 0.16), rgba(10, 20, 18, 0.82)),
-        url("https://tile.openstreetmap.org/5/16/9.png");
-      background-size: cover;
-      background-position: center;
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background: var(--bg);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    a {
+      color: inherit;
     }
 
     .hero {
-      width: min(1120px, calc(100% - 32px));
-      margin: 0 auto;
-      padding: 48px 0 72px;
+      position: relative;
+      display: flex;
+      min-height: 64vh;
+      padding: 34px 28px 42px;
+      overflow: hidden;
+      color: var(--surface);
+      background:
+        linear-gradient(90deg, rgba(14, 23, 18, 0.88) 0%, rgba(14, 23, 18, 0.64) 48%, rgba(14, 23, 18, 0.18) 100%),
+        url("https://gislab-se.github.io/landskapsanalys/snygg_karta.png") center right / contain no-repeat,
+        #24342b;
     }
 
-    h1 {
-      max-width: 760px;
-      margin: 0;
-      font-size: clamp(2.4rem, 5vw, 5.4rem);
-      line-height: 1;
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto 0 0;
+      height: 10px;
+      background: linear-gradient(90deg, var(--green), var(--gold), var(--rust), var(--blue));
+    }
+
+    .hero-inner {
+      position: relative;
+      z-index: 1;
+      width: min(100%, 1120px);
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 54px;
+    }
+
+    .topline {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 18px;
+      font-size: 0.88rem;
+      color: rgba(255, 253, 248, 0.78);
+    }
+
+    .mark {
+      font-weight: 800;
+      color: var(--surface);
+    }
+
+    .hero-copy {
+      max-width: 730px;
+    }
+
+    .eyebrow,
+    .section-kicker {
+      margin: 0 0 14px;
+      color: rgba(255, 253, 248, 0.78);
+      font-size: 0.82rem;
+      font-weight: 800;
+      text-transform: uppercase;
       letter-spacing: 0;
     }
 
-    .hero p {
-      max-width: 720px;
-      margin: 18px 0 0;
-      color: rgba(255, 255, 255, 0.86);
-      font-size: 1.1rem;
-      line-height: 1.55;
+    h1 {
+      margin: 0;
+      max-width: 12ch;
+      font-size: 5.8rem;
+      line-height: 0.94;
+      font-weight: 880;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 660px;
+      margin: 20px 0 0;
+      color: rgba(255, 253, 248, 0.84);
+      font-size: 1.16rem;
+      line-height: 1.62;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 28px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 44px;
+      padding: 11px 16px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      text-decoration: none;
+      font-weight: 800;
+      line-height: 1.2;
+      transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease;
+    }
+
+    .button:hover {
+      transform: translateY(-1px);
+    }
+
+    .button.primary {
+      background: var(--surface);
+      color: var(--green-dark);
+    }
+
+    .button.secondary {
+      border-color: rgba(255, 253, 248, 0.42);
+      background: rgba(255, 253, 248, 0.08);
+      color: var(--surface);
+    }
+
+    .button.disabled {
+      border-color: rgba(21, 25, 21, 0.16);
+      background: rgba(21, 25, 21, 0.04);
+      color: var(--muted);
+      cursor: default;
+      pointer-events: none;
+    }
+
+    .hero-status {
+      max-width: 780px;
+      margin: 0;
+      padding-top: 2px;
+      color: rgba(255, 253, 248, 0.74);
+      font-size: 0.95rem;
+      line-height: 1.58;
+    }
+
+    .hero-status strong {
+      color: var(--surface);
     }
 
     main {
-      width: min(1120px, calc(100% - 32px));
-      margin: -36px auto 0;
-      padding-bottom: 56px;
+      width: min(100%, 1180px);
+      margin: 0 auto;
+      padding: 30px 24px 74px;
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: end;
+      gap: 24px;
+      margin: 14px 0 22px;
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font-size: 2.45rem;
+      line-height: 1.02;
+      letter-spacing: 0;
+    }
+
+    .section-head p {
+      max-width: 540px;
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.58;
     }
 
     .cards {
@@ -76,224 +210,526 @@
     }
 
     .card {
-      overflow: hidden;
-      background: var(--white);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-height: 378px;
+      padding: 20px;
       border: 1px solid var(--line);
       border-radius: 8px;
-      box-shadow: 0 12px 28px rgba(15, 24, 20, 0.10);
+      background: var(--surface);
+      box-shadow: 0 10px 24px rgba(21, 25, 21, 0.08);
     }
 
-    .map {
-      width: 100%;
-      aspect-ratio: 16 / 9;
-      object-fit: cover;
-      display: block;
+    .card.bornholm {
+      border-top: 6px solid var(--green);
     }
 
-    .body {
-      padding: 18px;
+    .card.trondelag {
+      border-top: 6px solid var(--blue);
     }
 
-    .eyebrow {
-      margin: 0 0 10px;
-      color: var(--muted);
-      font-size: 0.78rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      font-weight: 700;
+    .card.skaraborg {
+      border-top: 6px solid var(--rust);
     }
 
-    h2 {
-      margin: 0;
-      font-size: 1.45rem;
-      letter-spacing: 0;
-    }
-
-    .body p {
-      min-height: 74px;
-      margin: 10px 0 16px;
-      color: var(--muted);
-      line-height: 1.45;
-    }
-
-    .meta {
+    .tag-row {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      margin-bottom: 18px;
     }
 
     .tag {
-      border: 1px solid var(--line);
-      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
       padding: 5px 9px;
-      color: var(--muted);
-      font-size: 0.82rem;
-    }
-
-    a.button {
-      display: inline-block;
-      width: 100%;
-      padding: 10px 12px;
       border-radius: 6px;
-      text-align: center;
-      text-decoration: none;
-      color: white;
-      background: var(--green);
-      font-weight: 700;
-    }
-
-    .card:nth-child(2) a.button {
-      background: var(--blue);
-    }
-
-    .card:nth-child(3) a.button {
-      background: var(--red);
-    }
-
-    .runtime {
-      margin-top: 28px;
-      padding: 20px;
-      background: var(--soft);
-      border: 1px solid var(--line);
-      border-radius: 8px;
-    }
-
-    .runtime h2 {
-      font-size: 1.2rem;
-    }
-
-    .runtime p {
-      max-width: 780px;
+      background: var(--surface-soft);
       color: var(--muted);
-      line-height: 1.55;
+      font-size: 0.78rem;
+      font-weight: 800;
     }
 
-    .routes {
-      width: 100%;
-      border-collapse: collapse;
-      background: white;
+    .tag.live {
+      background: rgba(47, 107, 79, 0.12);
+      color: var(--green-dark);
+    }
+
+    .tag.next {
+      background: rgba(180, 94, 60, 0.13);
+      color: #7a3923;
+    }
+
+    .card h3 {
+      margin: 0;
+      font-size: 1.5rem;
+      line-height: 1.1;
+      letter-spacing: 0;
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.62;
+    }
+
+    .button-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: auto;
+      padding-top: 8px;
+    }
+
+    .card .button {
+      min-height: 40px;
+      padding: 9px 12px;
+      border-color: var(--line);
+      background: var(--ink);
+      color: var(--surface);
+      font-size: 0.92rem;
+    }
+
+    .card .button.alt {
+      background: transparent;
+      color: var(--ink);
+    }
+
+    .status-panel,
+    .note {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, 0.42fr);
+      gap: 18px;
+      margin-top: 18px;
+      padding: 18px;
       border: 1px solid var(--line);
       border-radius: 8px;
-      overflow: hidden;
+      background: #ebe8df;
     }
 
-    .routes th,
-    .routes td {
-      padding: 11px 12px;
-      text-align: left;
-      border-bottom: 1px solid var(--line);
+    .status-panel h2,
+    .note h2 {
+      margin: 0 0 8px;
+      font-size: 1.2rem;
+      letter-spacing: 0;
     }
 
-    .routes tr:last-child td {
-      border-bottom: 0;
+    .status-panel p,
+    .note p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    .route-list,
+    .note-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .route-list div,
+    .note-list div {
+      padding: 10px 12px;
+      border: 1px solid rgba(21, 25, 21, 0.12);
+      border-radius: 6px;
+      background: rgba(255, 253, 248, 0.54);
+      font-size: 0.93rem;
+      font-weight: 760;
     }
 
     code {
       padding: 2px 5px;
-      background: rgba(255, 255, 255, 0.72);
-      border: 1px solid var(--line);
+      border: 1px solid rgba(21, 25, 21, 0.14);
       border-radius: 4px;
+      background: rgba(255, 253, 248, 0.7);
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.9em;
     }
 
-    @media (max-width: 860px) {
-      header {
-        min-height: 56vh;
+    .math-section,
+    .research-section {
+      margin-top: 34px;
+      padding: 38px 0 8px;
+      border-top: 1px solid var(--line);
+    }
+
+    .math-layout,
+    .research-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.42fr) minmax(280px, 0.58fr);
+      gap: 34px;
+      align-items: start;
+    }
+
+    .math-copy,
+    .research-copy {
+      max-width: 800px;
+    }
+
+    .section-kicker {
+      color: var(--green-dark);
+    }
+
+    .research-kicker {
+      color: var(--rust);
+    }
+
+    .math-copy h2,
+    .research-copy h2 {
+      margin: 0 0 16px;
+      font-size: 3.05rem;
+      line-height: 0.98;
+      letter-spacing: 0;
+    }
+
+    .math-copy h3,
+    .research-copy h3 {
+      margin: 28px 0 8px;
+      font-size: 1.08rem;
+      letter-spacing: 0;
+    }
+
+    .math-copy p,
+    .research-copy p {
+      margin: 0 0 15px;
+      color: var(--muted);
+      font-size: 1.02rem;
+      line-height: 1.72;
+    }
+
+    .math-copy .opening,
+    .research-copy .opening {
+      color: var(--ink);
+      font-size: 1.14rem;
+    }
+
+    .math-panel,
+    .research-aside {
+      position: sticky;
+      top: 18px;
+      display: grid;
+      gap: 12px;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #eee9de;
+    }
+
+    .math-panel h3,
+    .research-aside h3 {
+      margin: 0;
+      font-size: 1.05rem;
+      letter-spacing: 0;
+    }
+
+    .math-formula {
+      padding: 12px;
+      border: 1px solid rgba(21, 25, 21, 0.12);
+      border-radius: 6px;
+      background: rgba(255, 253, 248, 0.62);
+      color: var(--ink);
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.88rem;
+      line-height: 1.55;
+    }
+
+    .math-panel p,
+    .research-aside ol {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.58;
+    }
+
+    .research-aside ol {
+      padding-left: 1.25rem;
+    }
+
+    .research-aside li + li {
+      margin-top: 8px;
+    }
+
+    .source-link {
+      display: inline-flex;
+      margin-top: 14px;
+      color: var(--green-dark);
+      font-weight: 800;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    footer {
+      width: min(100%, 1180px);
+      margin: 0 auto;
+      padding: 0 24px 38px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    @media (max-width: 1080px) {
+      .cards {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    @media (max-width: 760px) {
+      .hero {
+        min-height: 58vh;
+        padding: 22px 18px 34px;
+        background:
+          linear-gradient(180deg, rgba(14, 23, 18, 0.9) 0%, rgba(14, 23, 18, 0.68) 72%, rgba(14, 23, 18, 0.46) 100%),
+          url("https://gislab-se.github.io/landskapsanalys/snygg_karta.png") center bottom / 112% auto no-repeat,
+          #24342b;
+      }
+
+      h1 {
+        font-size: 3.1rem;
+      }
+
+      .topline,
+      .section-head,
+      .math-layout,
+      .research-layout,
+      .status-panel,
+      .note {
+        display: block;
+      }
+
+      .topline span:last-child {
+        display: block;
+        margin-top: 8px;
       }
 
       .cards {
         grid-template-columns: 1fr;
       }
 
+      .card {
+        min-height: auto;
+      }
+
+      .section-head h2,
+      .math-copy h2,
+      .research-copy h2 {
+        font-size: 2rem;
+      }
+
+      .route-list,
+      .note-list,
+      .research-aside,
+      .math-panel {
+        position: static;
+        margin-top: 20px;
+      }
+
       main {
-        margin-top: -24px;
+        padding: 24px 16px 56px;
       }
 
-      .body p {
-        min-height: 0;
-      }
-
-      .routes {
-        display: block;
-        overflow-x: auto;
+      footer {
+        padding-inline: 16px;
       }
     }
   </style>
 </head>
 <body>
-  <header>
-    <div class="hero">
-      <h1>SpeedLocal landskapspotential</h1>
-      <p>A clean delivery surface for regional solar and wind potential, built around catalogs, validated runtime data, and a staged path from GitHub Pages to Flowcore.</p>
+  <header class="hero">
+    <div class="hero-inner">
+      <div class="topline">
+        <span class="mark">SpeedLocal</span>
+        <span>Regional sol- och vindpotential med landskapet som planeringslager</span>
+      </div>
+
+      <div class="hero-copy">
+        <p class="eyebrow">Leverans under migration</p>
+        <h1>SpeedLocal landskapspotential</h1>
+        <p class="lead">
+          En samlad ingång till regionala potentialytor för Bornholm, Tröndelag och Skaraborg.
+          Sidan är statisk på GitHub Pages nu, och pekar mot katalogstyrda appytor som flyttas vidare till Flowcore.
+        </p>
+        <nav class="hero-actions" aria-label="Snabblänkar">
+          <a class="button primary" href="#regionala-versioner">Välj region</a>
+          <a class="button secondary" href="#runtime">Se runtime-läge</a>
+          <a class="button secondary" href="#matematiken">Se modellen</a>
+          <a class="button secondary" href="#rapportunderlag">Se metod</a>
+        </nav>
+      </div>
+
+      <p class="hero-status" aria-label="Versionsstatus">
+        <strong>Status:</strong> Bornholm och Tröndelag är aktiva kataloger med filfallbacks. Skaraborg är planerad tills data och runtime-kontrakt är validerade.
+      </p>
     </div>
   </header>
 
   <main>
-    <section class="cards" aria-label="Regional apps">
-      <article class="card" id="bornholm" data-region="bornholm">
-        <img class="map" src="https://tile.openstreetmap.org/8/138/80.png" alt="Map tile over Bornholm">
-        <div class="body">
-          <p class="eyebrow">Active region</p>
-          <h2>Bornholm</h2>
-          <p>R9 pilot with documented R10-derived R9 PEY semantics and file fallback until Postgres runtime is validated.</p>
-          <div class="meta"><span class="tag">EPSG:25833</span><span class="tag">R6-R9</span></div>
-          <a class="button" href="#runtime" data-app-route="?region=bornholm">App route placeholder</a>
-        </div>
-      </article>
+    <section id="regionala-versioner" aria-labelledby="regionala-versioner-title">
+      <div class="section-head">
+        <h2 id="regionala-versioner-title">Regionala versioner</h2>
+        <p>
+          Varje kort ska på sikt öppna samma program med rätt region vald. Just nu skiljer sidan på aktiva kataloger,
+          migrationsstatus och planerade regioner så inget ser mer färdigt ut än det är.
+        </p>
+      </div>
 
-      <article class="card" id="trondelag" data-region="trondelag">
-        <img class="map" src="https://tile.openstreetmap.org/6/33/17.png" alt="Map tile over Trondelag">
-        <div class="body">
-          <p class="eyebrow">Active region</p>
-          <h2>Trondelag</h2>
-          <p>Regional R7 pilot with R6/R5 rollups, EPSG:25832, and explicit 250 m population-grid proxy labelling.</p>
-          <div class="meta"><span class="tag">EPSG:25832</span><span class="tag">R7/R6/R5</span></div>
-          <a class="button" href="#runtime" data-app-route="?region=trondelag">App route placeholder</a>
-        </div>
-      </article>
+      <div class="cards">
+        <article class="card bornholm" data-region="bornholm">
+          <div class="tag-row">
+            <span class="tag live">Aktiv</span>
+            <span class="tag">R9 island pilot</span>
+            <span class="tag">EPSG:25833</span>
+          </div>
+          <h3>Bornholm</h3>
+          <p>
+            Referensregionen för etableringsyta, scenariologik och hur landskapspotentialen presenteras.
+            Fallback-sökvägar behålls tills appklar data är importerad och validerad i SpeedLocal Postgres.
+          </p>
+          <div class="button-row">
+            <a class="button" href="#runtime" data-app-route="?region=bornholm">Status i nya repo</a>
+            <a class="button alt" href="https://landskapsanalys-potential-v1.streamlit.app/" target="_blank" rel="noreferrer">Befintlig V1</a>
+          </div>
+        </article>
 
-      <article class="card" id="skaraborg" data-region="skaraborg">
-        <img class="map" src="https://tile.openstreetmap.org/7/68/38.png" alt="Map tile over Skaraborg">
-        <div class="body">
-          <p class="eyebrow">Planned region</p>
-          <h2>Skaraborg</h2>
-          <p>Catalog-driven design slot showing what a new region must provide before it is activated in runtime.</p>
-          <div class="meta"><span class="tag">EPSG:3006</span><span class="tag">Planned</span></div>
-          <a class="button" href="#runtime" data-app-route="?region=skaraborg">App route placeholder</a>
-        </div>
-      </article>
+        <article class="card trondelag" data-region="trondelag">
+          <div class="tag-row">
+            <span class="tag live">Aktiv</span>
+            <span class="tag">R7/R6/R5</span>
+            <span class="tag">EPSG:25832</span>
+          </div>
+          <h3>Tröndelag</h3>
+          <p>
+            Regional pilot i det gemensamma appskalet. Den nya repo-ytan visar först katalog och runtime-status,
+            medan full appfunktion flyttas över stegvis med dokumenterad 250 m befolkningsgrid-proxy.
+          </p>
+          <div class="button-row">
+            <a class="button" href="#runtime" data-app-route="?region=trondelag">Status i nya repo</a>
+            <a class="button alt" href="https://landskapsanalys-potential-v2-test.streamlit.app/" target="_blank" rel="noreferrer">Befintlig V2</a>
+          </div>
+        </article>
+
+        <article class="card skaraborg" data-region="skaraborg">
+          <div class="tag-row">
+            <span class="tag next">Planerad</span>
+            <span class="tag">Katalogstyrd</span>
+            <span class="tag">EPSG:3006</span>
+          </div>
+          <h3>Skaraborg</h3>
+          <p>
+            Nästa region i leveransstrukturen. Kortet finns med för att testa att nya regioner ska kräva korrekt
+            katalog, runtime-data och validering, inte hårdkodade appgrenar.
+          </p>
+          <div class="button-row">
+            <a class="button disabled" href="#runtime" data-app-route="?region=skaraborg" aria-disabled="true">Planerad</a>
+          </div>
+        </article>
+      </div>
     </section>
 
-    <section class="runtime" id="runtime" aria-label="Runtime routes">
-      <h2>Static now, runtime next</h2>
-      <p>The canonical static path is <code>/speedlocal/landskapspotential/</code>. GitHub Pages hosts this landing page only; interactive Python and Streamlit routes should run through Flowcore, Docker/server runtime, or another Streamlit-compatible backend.</p>
-      <table class="routes">
-        <thead>
-          <tr>
-            <th>Region</th>
-            <th>Intended app route</th>
-            <th>Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>Bornholm</td>
-            <td><code>?region=bornholm</code></td>
-            <td>Active catalog, file fallback pending validated Postgres runtime.</td>
-          </tr>
-          <tr>
-            <td>Trondelag</td>
-            <td><code>?region=trondelag</code></td>
-            <td>Active catalog, R7/R6/R5 only, file fallback pending validated Postgres runtime.</td>
-          </tr>
-          <tr>
-            <td>Skaraborg</td>
-            <td><code>?region=skaraborg</code></td>
-            <td>Planned catalog slot until required runtime data contracts pass validation.</td>
-          </tr>
-        </tbody>
-      </table>
+    <section class="status-panel" id="runtime" aria-labelledby="runtime-title">
+      <div>
+        <h2 id="runtime-title">Statisk sida nu, runtime nästa</h2>
+        <p>
+          Den kanoniska Pages-adressen är <code>/speedlocal/landskapspotential/</code>.
+          GitHub Pages kör bara den här statiska landningssidan. Python, Streamlit och databasanslutningar ska köras i
+          Flowcore, Docker/servermiljö eller annan Streamlit-kompatibel backend.
+        </p>
+      </div>
+      <div class="route-list" aria-label="Planerade appvägar">
+        <div>Bornholm: <code>?region=bornholm</code></div>
+        <div>Tröndelag: <code>?region=trondelag</code></div>
+        <div>Skaraborg: <code>?region=skaraborg</code>, planerad</div>
+      </div>
+    </section>
+
+    <section id="matematiken" class="math-section" aria-labelledby="matematiken-title">
+      <div class="math-layout">
+        <article class="math-copy">
+          <p class="section-kicker">Modell</p>
+          <h2 id="matematiken-title">Vad beräknar appen?</h2>
+          <p class="opening">
+            Appen ska inte läsas som en automat som pekar ut en färdig byggplats. Den visar hur ett scenario, ett
+            rutnät, landskapsfaktorer, restriktioner och antaganden tillsammans formar en modellerad potential.
+          </p>
+          <p>
+            Regionen behandlas som en avgränsad yta i sitt native CRS. Den delas upp i H3-celler där varje cell får
+            attribut för landskap, buffertar, restriktioner, möjlig etableringsyta, poängvärde och ibland social
+            acceptans. Resultatet är därför en beräknad relation mellan data, modellval och möjlig yta.
+          </p>
+          <p>
+            Scenarierna lägger till frågan om yta räcker för ett energibehov. Energi räknas om till ytbehov, kandidater
+            filtreras, och kvarvarande yta jämförs mot scenariot. Brist och överskott ska läsas som modellresultat,
+            inte som planbesked.
+          </p>
+        </article>
+
+        <aside class="math-panel" aria-label="Matematisk modell i korthet">
+          <h3>Modellen i korthet</h3>
+          <div class="math-formula">
+            region: &Omega; &subset; &#x211D;<sup>2</sup><br>
+            celler: H = {h<sub>1</sub>, ..., h<sub>n</sub>}<br>
+            kandidater: C &subseteq; H<br>
+            poäng: C &rarr; [0,100]<br>
+            ytbehov = energimål &times; km<sup>2</sup>/TWh
+          </div>
+          <p>
+            Det viktigaste resultatet är relationen mellan modellerad potential, ytbehov, filter och osäkerhet.
+          </p>
+        </aside>
+      </div>
+    </section>
+
+    <section id="rapportunderlag" class="research-section" aria-labelledby="rapportunderlag-title">
+      <div class="research-layout">
+        <article class="research-copy">
+          <p class="section-kicker research-kicker">Metod</p>
+          <h2 id="rapportunderlag-title">Metod i korthet</h2>
+          <p class="opening">
+            Migrationen ska behålla den befintliga metodlogiken men göra leveransen smalare: bara katalog, appskal,
+            runtime-kontrakt och validerade data får följa med in i det nya repo:t.
+          </p>
+          <h3>Från scenario till karta</h3>
+          <p>
+            Ett scenario översätts till ytbehov. Regionens analysceller får landskapstyp, begränsningar, avstånd,
+            möjlig etableringsyta och poäng. Filter tar bort olämpliga ytor och kvarvarande kandidater kan jämföras
+            mot scenariots behov.
+          </p>
+          <h3>Underlag och osäkerhet</h3>
+          <p>
+            Postgres ska föredras när data är importerad och validerad. Filfallbacks ligger kvar tills samma läsning
+            kan göras databasbackat. Placeholder- eller syntetiska data ska vara tydligt markerade.
+          </p>
+          <a class="source-link" href="https://gislab-se.github.io/landskapsanalys/sol-vindpotential/">Ursprungligt rapportunderlag</a>
+        </article>
+
+        <aside class="research-aside" aria-label="Leverans i fyra steg">
+          <h3>Leverans i fyra steg</h3>
+          <ol>
+            <li>Håll Pages-sidan enkel och publik.</li>
+            <li>Välj region via katalog, inte hårdkodning.</li>
+            <li>Föredra Postgres när validerad runtime finns.</li>
+            <li>Falla tillbaka till dokumenterade filer tills importen är klar.</li>
+          </ol>
+        </aside>
+      </div>
+    </section>
+
+    <section class="note" aria-labelledby="status-title">
+      <div>
+        <h2 id="status-title">Versionslogik just nu</h2>
+        <p>
+          Den här sidan är projektets nya nav under migreringen. Den ska kännas som SpeedLocal, men inte låtsas att
+          alla regionala appytor redan är färdigflyttade till den nya runtime-miljön.
+        </p>
+      </div>
+      <div class="note-list" aria-label="Kort status">
+        <div>Bornholm: aktiv referens med filfallback.</div>
+        <div>Tröndelag: aktiv regional fokusyta med R7/R6/R5.</div>
+        <div>Skaraborg: planerad katalogstyrd region.</div>
+      </div>
     </section>
   </main>
+
+  <footer>
+    SpeedLocal landskapspotential · ny leveransyta för <code>gislab-se/speedlocal</code>.
+  </footer>
 </body>
 </html>
