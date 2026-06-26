@@ -113,11 +113,17 @@ Complete.
 
 ## Next Block
 
-Copy the smallest shared app behavior needed for the first real regional
-surface:
+Prepare the V2 quarantine port for the first real regional surface:
 
-1. Start from shared catalog-driven app behavior, not a Bornholm-only or
-   Trondelag-only branch.
-2. Prefer read-only manifest/path loading before copying generated runtime data.
-3. Keep file fallbacks active until Postgres/Flowcore coverage validates.
-4. Add or update validators before promoting the behavior to the Streamlit UI.
+1. Use V2 as the working behavior baseline; do not rebuild the app from
+   scratch.
+2. Do not use V3 as the delivery baseline. Reuse only lessons from
+   `docs/APP_MIGRATION_STRATEGY_2026-06-26.md`.
+3. If `potential_app.py` is copied, put it in quarantine and shrink it after it
+   runs.
+4. Keep the first standard layer groups to roads, population, nature, culture,
+   and grid infrastructure.
+5. Keep regional extras, such as Trondelag reindeer husbandry, catalog-driven.
+6. Keep file fallbacks active until Postgres/Flowcore coverage validates.
+7. Add or update validators before promoting behavior to the public Streamlit
+   UI.

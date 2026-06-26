@@ -40,14 +40,22 @@ Intentional normalization:
 
 ### App Shell And Shared Modules
 
-Do not copy the full V2 `potential_app.py` monolith first. It is useful as
-reference, but too broad for the slim repo.
+Updated decision after inspecting V3:
 
-Copy selectively when needed:
+Do not rebuild the app from scratch and do not copy V3 as the baseline. A full
+V2 `potential_app.py` copy is acceptable only as a quarantined working baseline
+that runs first and is then reduced. It should not be promoted as final
+architecture.
+
+Copy selectively when needed, or copy into a quarantined V2-port area when real
+app behavior is the current slice:
 
 - `potential_app.py`
-  - Reference only for region selection, app behavior, and UI semantics.
-  - First extraction target: small catalog/status helpers, not the whole file.
+  - Candidate quarantine baseline for region selection, app behavior, and UI
+    semantics.
+  - If copied, place under a clearly named V2-port area such as `apps/v2_port/`
+    and immediately disable legacy Vara/skara discovery.
+  - Shrink after it runs; do not build new app abstractions around it first.
 - `apps/potential_model/manifests.py`
   - Candidate for manifest loading and path resolution.
   - Must remove legacy manifest discovery before promoting to SpeedLocal,
@@ -72,6 +80,15 @@ Copy selectively when needed:
   - Wrapper reference only.
 - V2 root `app.py`
   - Old GC4/Bornholm geocontext app. Leave behind.
+
+V3 repo `C:\tmp\landskapspotential`:
+
+- Reference only for lessons learned.
+- Do not copy its `data/incoming/`, `data/regions/`, caches, logs, or app
+  architecture into SpeedLocal.
+- Useful ideas to reuse later: V2-behavior-as-source-of-truth rule, Leaflet
+  renderer direction, visible missing/proxy status, and draft/applied state
+  after the baseline app runs.
 
 ### Region Packages
 
@@ -266,14 +283,17 @@ What was promoted:
 
 ## Next Accepted Slice
 
-The next accepted slice is the smallest shared app behavior for the first real
+The next accepted slice is the V2 quarantine-port preparation for the first real
 regional surface.
 
 Rules for that slice:
 
-- Start from shared catalog-driven behavior.
-- Do not copy the full V2 app monolith.
+- Start from the working V2 app behavior, not a new V3-style architecture.
+- Copy the V2 monolith only into quarantine, then scale it back.
 - Reuse manifests and file-fallback paths before copying generated data.
+- Keep the first standard layer groups to roads, population, nature, culture,
+  and grid infrastructure.
+- Put regional extras such as Trondelag reindeer husbandry in the catalog.
 - Keep Bornholm and Trondelag validation independent.
 - Add validator coverage before promoting any behavior to the public Streamlit
   app.

@@ -41,6 +41,7 @@ REQUIRED_PATHS = [
     "docs/SPEEDLOCAL_COPY_LIST.md",
     "docs/SPEEDLOCAL_RUNTIME_IMPORT_PLAN.md",
     "docs/REPO_HYGIENE.md",
+    "docs/APP_MIGRATION_STRATEGY_2026-06-26.md",
 ]
 
 
