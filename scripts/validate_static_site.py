@@ -8,6 +8,11 @@ ROOT = Path(__file__).resolve().parents[1]
 SITE_PATH = ROOT / "site" / "landskapspotential" / "index.html"
 EXPECTED_REGIONS = {"bornholm", "trondelag", "skaraborg"}
 STREAMLIT_APP_URL = "https://speedlocal-landskapspotential.streamlit.app"
+LEGACY_APP_LINKS = {
+    "https://landskapsanalys-potential-v1.streamlit.app/",
+    "https://landskapsanalys-potential-v2-test.streamlit.app/",
+}
+EXPECTED_BUTTON_TEXT = {"Öppna Bornholm", "Öppna Tröndelag", "Öppna Skaraborg", "Befintlig app V1", "Befintlig app V2"}
 
 
 class LandingParser(HTMLParser):
@@ -18,6 +23,8 @@ class LandingParser(HTMLParser):
         self.region_cards: set[str] = set()
         self.hrefs: list[str] = []
         self.app_routes: set[str] = set()
+        self.link_texts: set[str] = set()
+        self._current_link_parts: list[str] | None = None
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         values = {key: value or "" for key, value in attrs}
@@ -27,16 +34,24 @@ class LandingParser(HTMLParser):
             self.region_cards.add(values["data-region"])
         if tag == "a":
             self.hrefs.append(values.get("href", ""))
+            self._current_link_parts = []
             if values.get("data-app-route"):
                 self.app_routes.add(values["data-app-route"])
 
     def handle_endtag(self, tag: str) -> None:
         if tag == "title":
             self._in_title = False
+        if tag == "a" and self._current_link_parts is not None:
+            text = " ".join("".join(self._current_link_parts).split())
+            if text:
+                self.link_texts.add(text)
+            self._current_link_parts = None
 
     def handle_data(self, data: str) -> None:
         if self._in_title:
             self.title += data
+        if self._current_link_parts is not None:
+            self._current_link_parts.append(data)
 
 
 def main() -> int:
@@ -58,6 +73,12 @@ def main() -> int:
     missing_links = expected_links.difference(parser.hrefs)
     if missing_links:
         failures.append(f"Missing Streamlit deep links: {sorted(missing_links)}")
+    missing_legacy_links = LEGACY_APP_LINKS.difference(parser.hrefs)
+    if missing_legacy_links:
+        failures.append(f"Missing legacy V1/V2 app links: {sorted(missing_legacy_links)}")
+    missing_button_text = EXPECTED_BUTTON_TEXT.difference(parser.link_texts)
+    if missing_button_text:
+        failures.append(f"Missing expected button text: {sorted(missing_button_text)}")
     if "/speedlocal/landskapspotential/" not in html:
         failures.append("Canonical Pages path is not documented in landing page.")
 
@@ -75,8 +96,10 @@ def main() -> int:
     print("- PASS Card links target the Streamlit Cloud app with region query params.")
     print("- PASS App route placeholders are documented as query routes.")
     print("- PASS Streamlit Cloud deep links exist for all region cards.")
+    print("- PASS Existing V1 and V2 app links remain visible.")
+    print("- PASS Region buttons use clear open labels.")
     print("- PASS Canonical Pages path is documented.")
-    print("\nRESULT: PASS (6 passed, 0 blocker(s))")
+    print("\nRESULT: PASS (8 passed, 0 blocker(s))")
     return 0
 
 
