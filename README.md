@@ -68,5 +68,9 @@ The Pages workflow publishes the `site/` directory. If private Pages is not
 available under the current GitHub plan, keep the repo private during
 development and make it public temporarily only when publication is needed.
 
+Current check on 2026-06-26: GitHub returned `Your current plan does not
+support GitHub Pages for this repository.` The workflow is therefore manual
+until the repo is made public or the plan is upgraded.
+
 GitHub Pages is static hosting only. Interactive Python/Streamlit apps must run
 through Flowcore, Docker/server runtime, or another Streamlit-compatible host.

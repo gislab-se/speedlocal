@@ -12,6 +12,11 @@ GitHub Pages is static hosting only. If GitHub Pages cannot publish from the
 private repo under the current plan, keep the repo private during development
 and make it public temporarily only when publication is needed.
 
+Current check on 2026-06-26: the GitHub Pages API returned `Your current plan
+does not support GitHub Pages for this repository.` The repo can stay private
+for development. To publish the temporary Pages site, make the repo public or
+upgrade the plan, then run the `Publish GitHub Pages` workflow manually.
+
 ## Interactive App
 
 Run locally:
