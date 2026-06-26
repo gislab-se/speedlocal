@@ -9,6 +9,7 @@ when something is missing, copy only the smallest runtime-critical piece.
 ## Surfaces
 
 - Static landing page: `site/landskapspotential/index.html`
+- GitHub Pages workflow: `.github/workflows/pages.yml`
 - Streamlit app shell: `app.py`
 - Region catalogs: `regions/`
 - Runtime database scaffold: `db/` plus `docker-compose.yml`
@@ -37,6 +38,7 @@ Open: `http://127.0.0.1:8502`
 
 ```powershell
 python scripts\validate_delivery_repo.py
+python scripts\validate_static_site.py
 ```
 
 Optional database check, after Docker/Postgres is running:
@@ -61,6 +63,10 @@ remain as fallbacks until the equivalent database tables exist and match.
 The future canonical static page is:
 
 `https://gislab-se.github.io/speedlocal/landskapspotential/`
+
+The Pages workflow publishes the `site/` directory. If private Pages is not
+available under the current GitHub plan, keep the repo private during
+development and make it public temporarily only when publication is needed.
 
 GitHub Pages is static hosting only. Interactive Python/Streamlit apps must run
 through Flowcore, Docker/server runtime, or another Streamlit-compatible host.

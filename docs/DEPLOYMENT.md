@@ -6,6 +6,8 @@ Target path:
 
 `https://gislab-se.github.io/speedlocal/landskapspotential/`
 
+The Pages workflow publishes the `site/` directory.
+
 GitHub Pages is static hosting only. If GitHub Pages cannot publish from the
 private repo under the current plan, keep the repo private during development
 and make it public temporarily only when publication is needed.

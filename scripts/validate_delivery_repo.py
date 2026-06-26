@@ -16,6 +16,7 @@ FORBIDDEN_PATHS = [
 ]
 REQUIRED_PATHS = [
     "README.md",
+    ".github/workflows/pages.yml",
     "app.py",
     "requirements.txt",
     "site/landskapspotential/index.html",
@@ -24,6 +25,7 @@ REQUIRED_PATHS = [
     "regions/index.json",
     "db/init/001_runtime_base.sql",
     "db/init/002_runtime_catalog_contract.sql",
+    "scripts/validate_static_site.py",
     "docs/SPEEDLOCAL_SLIMDOWN_5_DAY_PLAN.md",
 ]
 

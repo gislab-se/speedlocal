@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="sv">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -15,30 +15,38 @@
       --green: #1f6f4a;
       --blue: #2b5d88;
       --red: #9b3d37;
+      --soft: #edf2ef;
     }
-    * { box-sizing: border-box; }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       color: var(--ink);
       background: var(--paper);
     }
+
     header {
       min-height: 72vh;
       display: grid;
       align-items: end;
+      color: white;
       background:
         linear-gradient(180deg, rgba(10, 20, 18, 0.16), rgba(10, 20, 18, 0.82)),
         url("https://tile.openstreetmap.org/5/16/9.png");
       background-size: cover;
       background-position: center;
-      color: white;
     }
+
     .hero {
       width: min(1120px, calc(100% - 32px));
       margin: 0 auto;
       padding: 48px 0 72px;
     }
+
     h1 {
       max-width: 760px;
       margin: 0;
@@ -46,39 +54,46 @@
       line-height: 1;
       letter-spacing: 0;
     }
+
     .hero p {
       max-width: 720px;
       margin: 18px 0 0;
-      color: rgba(255,255,255,0.86);
+      color: rgba(255, 255, 255, 0.86);
       font-size: 1.1rem;
       line-height: 1.55;
     }
+
     main {
       width: min(1120px, calc(100% - 32px));
       margin: -36px auto 0;
       padding-bottom: 56px;
     }
+
     .cards {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 16px;
     }
+
     .card {
+      overflow: hidden;
       background: var(--white);
       border: 1px solid var(--line);
       border-radius: 8px;
-      overflow: hidden;
       box-shadow: 0 12px 28px rgba(15, 24, 20, 0.10);
     }
+
     .map {
       width: 100%;
       aspect-ratio: 16 / 9;
       object-fit: cover;
       display: block;
     }
+
     .body {
       padding: 18px;
     }
+
     .eyebrow {
       margin: 0 0 10px;
       color: var(--muted);
@@ -87,23 +102,27 @@
       letter-spacing: 0.08em;
       font-weight: 700;
     }
+
     h2 {
       margin: 0;
       font-size: 1.45rem;
       letter-spacing: 0;
     }
+
     .body p {
       min-height: 74px;
       margin: 10px 0 16px;
       color: var(--muted);
       line-height: 1.45;
     }
+
     .meta {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
       margin-bottom: 18px;
     }
+
     .tag {
       border: 1px solid var(--line);
       border-radius: 999px;
@@ -111,6 +130,7 @@
       color: var(--muted);
       font-size: 0.82rem;
     }
+
     a.button {
       display: inline-block;
       width: 100%;
@@ -122,19 +142,81 @@
       background: var(--green);
       font-weight: 700;
     }
-    .card:nth-child(2) a.button { background: var(--blue); }
-    .card:nth-child(3) a.button { background: var(--red); }
-    .note {
-      margin-top: 20px;
-      color: var(--muted);
-      line-height: 1.5;
-      font-size: 0.95rem;
+
+    .card:nth-child(2) a.button {
+      background: var(--blue);
     }
+
+    .card:nth-child(3) a.button {
+      background: var(--red);
+    }
+
+    .runtime {
+      margin-top: 28px;
+      padding: 20px;
+      background: var(--soft);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    .runtime h2 {
+      font-size: 1.2rem;
+    }
+
+    .runtime p {
+      max-width: 780px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .routes {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .routes th,
+    .routes td {
+      padding: 11px 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .routes tr:last-child td {
+      border-bottom: 0;
+    }
+
+    code {
+      padding: 2px 5px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+    }
+
     @media (max-width: 860px) {
-      header { min-height: 56vh; }
-      .cards { grid-template-columns: 1fr; }
-      main { margin-top: -24px; }
-      .body p { min-height: 0; }
+      header {
+        min-height: 56vh;
+      }
+
+      .cards {
+        grid-template-columns: 1fr;
+      }
+
+      main {
+        margin-top: -24px;
+      }
+
+      .body p {
+        min-height: 0;
+      }
+
+      .routes {
+        display: block;
+        overflow-x: auto;
+      }
     }
   </style>
 </head>
@@ -142,43 +224,76 @@
   <header>
     <div class="hero">
       <h1>SpeedLocal landskapspotential</h1>
-      <p>En ren leveransyta för regional sol- och vindpotential, byggd kring kataloger, validerad runtime-data och en stegvis väg från GitHub Pages till Flowcore.</p>
+      <p>A clean delivery surface for regional solar and wind potential, built around catalogs, validated runtime data, and a staged path from GitHub Pages to Flowcore.</p>
     </div>
   </header>
+
   <main>
-    <section class="cards" aria-label="Regionala appar">
-      <article class="card">
-        <img class="map" src="https://tile.openstreetmap.org/8/138/80.png" alt="Karta över Bornholm">
+    <section class="cards" aria-label="Regional apps">
+      <article class="card" id="bornholm" data-region="bornholm">
+        <img class="map" src="https://tile.openstreetmap.org/8/138/80.png" alt="Map tile over Bornholm">
         <div class="body">
-          <p class="eyebrow">Aktiv region</p>
+          <p class="eyebrow">Active region</p>
           <h2>Bornholm</h2>
-          <p>R9-pilot med dokumenterad R10-derived R9 PEY-semantik och filfallback tills Postgres-runtime är validerad.</p>
+          <p>R9 pilot with documented R10-derived R9 PEY semantics and file fallback until Postgres runtime is validated.</p>
           <div class="meta"><span class="tag">EPSG:25833</span><span class="tag">R6-R9</span></div>
-          <a class="button" href="../../?region=bornholm">Öppna Bornholm</a>
+          <a class="button" href="#runtime" data-app-route="?region=bornholm">App route placeholder</a>
         </div>
       </article>
-      <article class="card">
-        <img class="map" src="https://tile.openstreetmap.org/6/33/17.png" alt="Karta över Trondelag">
+
+      <article class="card" id="trondelag" data-region="trondelag">
+        <img class="map" src="https://tile.openstreetmap.org/6/33/17.png" alt="Map tile over Trondelag">
         <div class="body">
-          <p class="eyebrow">Aktiv region</p>
+          <p class="eyebrow">Active region</p>
           <h2>Trondelag</h2>
-          <p>Regional R7-pilot med R6/R5-rollups, EPSG:25832 och explicit 250 m population-grid proxy.</p>
+          <p>Regional R7 pilot with R6/R5 rollups, EPSG:25832, and explicit 250 m population-grid proxy labelling.</p>
           <div class="meta"><span class="tag">EPSG:25832</span><span class="tag">R7/R6/R5</span></div>
-          <a class="button" href="../../?region=trondelag">Öppna Trondelag</a>
+          <a class="button" href="#runtime" data-app-route="?region=trondelag">App route placeholder</a>
         </div>
       </article>
-      <article class="card">
-        <img class="map" src="https://tile.openstreetmap.org/7/68/38.png" alt="Karta över Skaraborg">
+
+      <article class="card" id="skaraborg" data-region="skaraborg">
+        <img class="map" src="https://tile.openstreetmap.org/7/68/38.png" alt="Map tile over Skaraborg">
         <div class="body">
-          <p class="eyebrow">Planerad region</p>
+          <p class="eyebrow">Planned region</p>
           <h2>Skaraborg</h2>
-          <p>Katalogdriven designplats för att visa vad en ny region behöver innan den aktiveras i runtime.</p>
+          <p>Catalog-driven design slot showing what a new region must provide before it is activated in runtime.</p>
           <div class="meta"><span class="tag">EPSG:3006</span><span class="tag">Planned</span></div>
-          <a class="button" href="../../?region=skaraborg">Visa katalogstatus</a>
+          <a class="button" href="#runtime" data-app-route="?region=skaraborg">App route placeholder</a>
         </div>
       </article>
     </section>
-    <p class="note">GitHub Pages hostar bara denna statiska landningssida. Interaktiva appar körs via Streamlit-kompatibel server, Docker/runtime eller Flowcore när målmiljön är klar.</p>
+
+    <section class="runtime" id="runtime" aria-label="Runtime routes">
+      <h2>Static now, runtime next</h2>
+      <p>The canonical static path is <code>/speedlocal/landskapspotential/</code>. GitHub Pages hosts this landing page only; interactive Python and Streamlit routes should run through Flowcore, Docker/server runtime, or another Streamlit-compatible backend.</p>
+      <table class="routes">
+        <thead>
+          <tr>
+            <th>Region</th>
+            <th>Intended app route</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Bornholm</td>
+            <td><code>?region=bornholm</code></td>
+            <td>Active catalog, file fallback pending validated Postgres runtime.</td>
+          </tr>
+          <tr>
+            <td>Trondelag</td>
+            <td><code>?region=trondelag</code></td>
+            <td>Active catalog, R7/R6/R5 only, file fallback pending validated Postgres runtime.</td>
+          </tr>
+          <tr>
+            <td>Skaraborg</td>
+            <td><code>?region=skaraborg</code></td>
+            <td>Planned catalog slot until required runtime data contracts pass validation.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
   </main>
 </body>
 </html>
