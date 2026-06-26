@@ -1,0 +1,56 @@
+{
+  "technology": "solar",
+  "model_id": "trondelag_solar_potential_rules_placeholder",
+  "status": "placeholder",
+  "uses_landscape_semantic_roles": true,
+  "positive_components": [
+    "open production landscape",
+    "grid and infrastructure feasibility",
+    "low settlement pressure"
+  ],
+  "negative_components": [
+    "coastal_lowland",
+    "steep_valley_relief",
+    "protected_forest_habitat",
+    "settlement_built_structure"
+  ],
+  "score_model": {
+    "base_score": 55,
+    "factor_positive_cap": 2.0,
+    "cluster_terms": [],
+    "role_terms": [
+      {
+        "role": "coastal_lowland",
+        "weight": -12,
+        "transform": "positive_mean",
+        "label": "Kust- och laglandskanslighet"
+      },
+      {
+        "role": "steep_valley_relief",
+        "weight": -12,
+        "transform": "positive_mean",
+        "label": "Terrang- och dalskanslighet"
+      },
+      {
+        "role": "protected_forest_habitat",
+        "weight": -18,
+        "transform": "positive_mean",
+        "label": "Skog och habitatkarnor"
+      },
+      {
+        "role": "settlement_built_structure",
+        "weight": -10,
+        "transform": "positive_mean",
+        "label": "Bebyggelse och byggd struktur"
+      }
+    ],
+    "class_breaks": [
+      {"id": "very_low", "label": "Mycket lag", "min": 0, "max": 25, "color": "#8c3b3b"},
+      {"id": "low", "label": "Lag", "min": 25, "max": 45, "color": "#d88752"},
+      {"id": "medium", "label": "Medel", "min": 45, "max": 65, "color": "#e2c85f"},
+      {"id": "high", "label": "Hog", "min": 65, "max": 80, "color": "#79b46b"},
+      {"id": "very_high", "label": "Mycket hog", "min": 80, "max": 100, "color": "#2f7d50"}
+    ]
+  },
+  "note": "Placeholder. Keep structure stable; replace weights and labels after regional calibration."
+}

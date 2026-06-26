@@ -286,9 +286,11 @@ What was promoted:
 The next accepted slice is the V2 quarantine-port preparation for the first real
 regional surface.
 
-Status: inventory and guardrails are documented in
+Status: first guarded baseline copied to `apps/v2_port/`.
+
+Inventory and guardrails are documented in
 `docs/V2_QUARANTINE_PORT_INVENTORY_2026-06-26.md`. Run
-`scripts/validate_v2_port_guardrails.py` before copying any V2 app files.
+`scripts/validate_v2_port_guardrails.py` after every V2 port change.
 
 Rules for that slice:
 
@@ -301,3 +303,58 @@ Rules for that slice:
 - Keep Bornholm and Trondelag validation independent.
 - Add validator coverage before promoting any behavior to the public Streamlit
   app.
+
+## Completed Slice - Guarded V2 Quarantine Port
+
+The first guarded V2 baseline is copied under `apps/v2_port/`.
+
+Accepted code files:
+
+- `potential_app.py`
+- `apps/potential_model/__init__.py`
+- `apps/potential_model/geometry.py`
+- `apps/potential_model/landscape.py`
+- `apps/potential_model/manifests.py`
+- `apps/potential_model/region_status.py`
+- `apps/potential_model/map_rendering.py`
+- `apps/potential_model/energy_modeling.py`
+- `apps/potential_model/potential.py`
+- `apps/potential_model/social_acceptance.py`
+- `apps/potential_model/wind_acceptance.py`
+- `apps/acceptance_model/__init__.py`
+- `apps/acceptance_model/i18n.py`
+- `apps/acceptance_model/layers.py`
+- `apps/acceptance_model/runtime_geometry.py`
+
+Accepted small runtime metadata:
+
+- `apps/acceptance_model/registry_bornholm.json`
+- `apps/acceptance_model/registry_trondelag.json`
+- selected small manifests under:
+  - `apps/potential_model/manifests/landscape/`
+  - `apps/potential_model/manifests/potential/`
+  - `apps/potential_model/manifests/scenarios/`
+  - `apps/potential_model/manifests/social_acceptance/`
+
+Guardrail patches applied in the copied port:
+
+- `potential_model.manifests` reads region discovery from the SpeedLocal
+  `regions/index.json` only.
+- V2 legacy region manifest discovery is removed.
+- `acceptance_model.layers` has explicit Bornholm/Trondelag registry selection
+  and fails closed for planned or unknown regions.
+- `acceptance_model.runtime_geometry` does not run the old generated R runtime.
+
+Still intentionally left behind:
+
+- `apps/potential_model/manifests/regions/`
+- `apps/acceptance_model/registry.json`
+- V2 `regions/`
+- V2 `data/`, `exports/`, `artifacts/`, `tmp/`, and generated GIS output
+
+Validation status:
+
+- `scripts/validate_v2_port_guardrails.py` passes after the copy.
+- Syntax parsing passes for all copied port Python files.
+- Manifest import resolves the SpeedLocal region index as
+  `bornholm,trondelag,skaraborg`.

@@ -1,0 +1,29 @@
+{
+  "region_id": "bornholm",
+  "potential_model_id": "bornholm_energy_potential_v0",
+  "display_name": "Bornholm sol- och vindpotential v0",
+  "status": "r10_derived_r9_pey",
+  "data_status": "r10_derived_r9_pey",
+  "runtime_contract": {
+    "mode": "r10_derived_r9_pey",
+    "analysis_h3_resolution": 9,
+    "default_display_h3_resolution": 8,
+    "available_display_h3_resolutions": [6, 7, 8, 9],
+    "runtime_base_h3_resolution": 10,
+    "source_status": "The V2 app displays Bornholm on R9/R8/R7/R6, and current potential/PEY behavior is intentionally derived by rolling R10 source/runtime semantics up to R9 where available.",
+    "true_r9_native_pey": false,
+    "requires_rebuild_for_true_r9_native": true,
+    "allowed_r10_references": [
+      "R10 source aggregation provenance in R9 manifests",
+      "legacy v1 runtime manifests",
+      "potential_app.py WIND_RUNTIME_BASE_RESOLUTION until a Bornholm R9-native PEY rebuild replaces it"
+    ]
+  },
+  "technologies": ["solar", "wind"],
+  "vector_layers": [],
+  "h3_rollups": [],
+  "rules": {
+    "solar": "apps/potential_model/manifests/potential/bornholm_solar_rules_v0.json",
+    "wind": "apps/potential_model/manifests/potential/bornholm_wind_rules_v0.json"
+  }
+}

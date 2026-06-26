@@ -1,0 +1,53 @@
+{
+  "analysis_id": "landskapsanalys_v3_2_contourterrain68_res9",
+  "display_name": "Landskapsanalys Bornholm v4",
+  "region_id": "bornholm",
+  "native_crs": "EPSG:25833",
+  "web_crs": "EPSG:4326",
+  "default_h3_resolution": 9,
+  "available_h3_resolutions": [9],
+  "hex_gpkg": "docs/geocontext/model_comparisons/data/landskapsanalys_v3_2_contourterrain68_res9/landskapsanalys_v3_2_contourterrain68_res9_hex.gpkg",
+  "hex_layer": "landskapsanalys_v3_2_contourterrain68_res9",
+  "factor_scores": "docs/geocontext/model_comparisons/data/landskapsanalys_v3_2_contourterrain68_res9/landskapsanalys_v3_2_contourterrain68_res9_factor_scores.csv",
+  "cluster_profile": "docs/geocontext/model_comparisons/data/landskapsanalys_v3_2_contourterrain68_res9/landskapsanalys_v3_2_contourterrain68_res9_cluster_profile.csv",
+  "cluster_sizes": "docs/geocontext/model_comparisons/data/landskapsanalys_v3_2_contourterrain68_res9/landskapsanalys_v3_2_contourterrain68_res9_cluster_sizes.csv",
+  "factor_variance": "docs/geocontext/model_comparisons/data/landskapsanalys_v3_2_contourterrain68_res9/landskapsanalys_v3_2_contourterrain68_res9_factor_variance.csv",
+  "run_summary": "docs/geocontext/model_comparisons/data/landskapsanalys_v3_2_contourterrain68_res9/landskapsanalys_v3_2_contourterrain68_res9_run_summary.csv",
+  "factor_labels": {
+    "F1": "Flygsands- och låglänta kustmiljöer",
+    "F2": "Brant relief och sprickdalspräglad terräng",
+    "F3": "Skogligt skyddsinland och habitatkärnor",
+    "F4": "Bosättning och byggd struktur",
+    "F5": "Marina sand- och gruskuster"
+  },
+  "factor_explanations": {
+    "F1": "Domineras av flygsand, låga höjdband och låg konturhärledd medelhöjd över flera skalor.",
+    "F2": "Drivs av konturhärledd lutning, relief och lokal daldjupssignal.",
+    "F3": "Domineras av skog, fredskov och Natura-habitat- och fågelskydd.",
+    "F4": "Drivs främst av fastboende, låg bebyggelse, centrumfunktioner, vägar och verksamhetsmark.",
+    "F5": "Kopplar marina sand- och grusavlagringar till låga kustsedimentära miljöer."
+  },
+  "cluster_labels": {
+    "1": "Tätorts- och verksamhetskärnor",
+    "2": "Vardagslandskap med blandad bakgrundskaraktär",
+    "3": "Flygsands- och låglänta kuststråk",
+    "4": "Brant relief och dalpräglat inland",
+    "5": "Skogligt skyddsinland och habitatkärnor"
+  },
+  "cluster_explanations": {
+    "1": "Öns tydligaste tätorts- och verksamhetskärnor.",
+    "2": "Öns breda bakgrundslandskap där flera signaler blandas utan stark specialisering.",
+    "3": "Låglänta sand- och kuststråk där flygsand, låga höjder och kustnära lågland samverkar.",
+    "4": "Branta, terrängkontrasterade och dalpräglade inlandslägen.",
+    "5": "Skogliga, habitatpräglade och skyddsinriktade inlandsmiljöer."
+  },
+  "semantic_roles": {
+    "coastal_lowland": ["F1", "F5"],
+    "steep_valley_relief": ["F2"],
+    "protected_forest_habitat": ["F3"],
+    "settlement_built_structure": ["F4"],
+    "mixed_everyday_matrix": ["class_km:2"]
+  },
+  "method_note": "This manifest describes the current Bornholm v4 publication interpretation. Future landscape-analysis versions should update this manifest instead of app code."
+}
+

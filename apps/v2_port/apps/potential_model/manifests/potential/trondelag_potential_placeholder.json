@@ -1,0 +1,14 @@
+{
+  "region_id": "trondelag",
+  "potential_model_id": "trondelag_energy_potential_placeholder",
+  "display_name": "Trondelag sol- och vindpotential placeholder",
+  "status": "placeholder",
+  "technologies": ["solar", "wind"],
+  "vector_layers": [],
+  "h3_rollups": [],
+  "rules": {
+    "solar": "apps/potential_model/manifests/potential/trondelag_solar_rules_placeholder.json",
+    "wind": "apps/potential_model/manifests/potential/trondelag_wind_rules_placeholder.json"
+  },
+  "note": "Placeholder manifest so the UI can expose the same controls before regional data exists."
+}

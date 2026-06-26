@@ -1,0 +1,76 @@
+{
+  "analysis_id": "trondelag_lablab_landscape_r7_app_extent_2026_06_23",
+  "display_name": "Trondelag LABLAB landskapstyper R7",
+  "region_id": "trondelag",
+  "status": "app_ready_after_qgis_review",
+  "data_status": "reviewed_pdf_derived_app_extent",
+  "is_lablab_landscape": true,
+  "native_crs": "EPSG:25832",
+  "web_crs": "EPSG:4326",
+  "source_h3_resolution": 7,
+  "default_h3_resolution": 7,
+  "available_h3_resolutions": [7, 6, 5],
+  "use_region_display_geometries": true,
+  "expected_feature_counts": {
+    "7": 13735,
+    "6": 2163,
+    "5": 365
+  },
+  "landscape_geojson": "docs/geocontext/potential_framework/data/trondelag_lablab_landscape_h3_r7/trondelag_lablab_landskapsanalys_h3_r7_app_extent.geojson",
+  "factor_scores": "docs/geocontext/potential_framework/data/trondelag_lablab_landscape_h3_r7/trondelag_lablab_landskapsanalys_h3_r7_app_extent.geojson",
+  "full_lablab_source_geojson": "docs/geocontext/potential_framework/data/trondelag_lablab_landscape_h3_r7/trondelag_lablab_landskapsanalys_h3_r7.geojson",
+  "outside_app_extent_review_geojson": "exports/qgis_review/landscape_baselayers/trondelag_lablab_r7_outside_current_app_extent.geojson",
+  "data_driven_geocontext_manifest": "apps/potential_model/manifests/landscape/trondelag_landscape_placeholder.json",
+  "landscape_type_labels": {
+    "LT01": "Ytterkustlandskap",
+    "LT02": "Fjordlandskap",
+    "LT03": "Fjordnära jordbrukslandskap",
+    "LT04": "Fjällnära skogslandskap",
+    "LT05": "Dalgångslandskap",
+    "LT06": "Lågfjällslandskap",
+    "LT07": "Högfjällslandskap",
+    "LT08": "Sjö- och våtmarkslandskap",
+    "LT09": "Vidsträckt fjällandskap"
+  },
+  "landscape_type_colors": {
+    "LT01": "#4e79a7",
+    "LT02": "#59a14f",
+    "LT03": "#f28e2b",
+    "LT04": "#76b7b2",
+    "LT05": "#9c755f",
+    "LT06": "#b07aa1",
+    "LT07": "#edc948",
+    "LT08": "#8cd17d",
+    "LT09": "#e15759"
+  },
+  "cluster_labels": {
+    "1": "Ytterkustlandskap",
+    "2": "Fjordlandskap",
+    "3": "Fjordnära jordbrukslandskap",
+    "4": "Fjällnära skogslandskap",
+    "5": "Dalgångslandskap",
+    "6": "Lågfjällslandskap",
+    "7": "Högfjällslandskap",
+    "8": "Sjö- och våtmarkslandskap",
+    "9": "Vidsträckt fjällandskap"
+  },
+  "semantic_roles": {
+    "coastal_lowland": ["class_km:1", "class_km:2", "class_km:3"],
+    "steep_valley_relief": ["class_km:5"],
+    "protected_forest_habitat": ["class_km:4", "class_km:6", "class_km:7", "class_km:8", "class_km:9"],
+    "settlement_built_structure": ["class_km:1", "class_km:3", "class_km:5"],
+    "mixed_everyday_matrix": ["class_km:2", "class_km:3", "class_km:5"]
+  },
+  "review": {
+    "qgis_reviewed": true,
+    "review_date": "2026-06-23",
+    "review_note": "User reviewed the clipped current-app-extent LABLAB layer in QGIS and confirmed LT09 and boundary/gap behavior are acceptable.",
+    "runtime_extent_decision": "Keep current offshore-trimmed app extent. Do not expand to the full LABLAB extent until a later extent-expansion audit confirms all baselayers support it.",
+    "current_app_extent_feature_count": 13735,
+    "full_lablab_feature_count": 18530,
+    "outside_current_app_extent_feature_count": 4795,
+    "lt09_current_app_extent_feature_count": 359,
+    "handoff": "docs/LANDSCAPE_QGIS_REVIEW_AND_BASELAYER_AUDIT_2026-06-23.md"
+  },
+  "method_note": "Default Trondelag landscape basis switched from data-driven geocontext clusters to LABLAB PDF-derived landscape types after QGIS review on 2026-06-23. The runtime layer is clipped to the existing offshore-trimmed R7 app display extent (13,735 cells) to preserve the validated Trondelag R7/R6/R5 display family. The full LABLAB source layer remains review/reference material and should not redefine runtime geography without a separate extent-expansion audit."
+}

@@ -137,6 +137,24 @@ Complete.
 - `scripts/validate_v2_port_guardrails.py` passes before copying code.
 - The validator is part of the normal delivery validation path.
 
-Next implementation step: copy the first guarded V2 baseline into
-`apps/v2_port/`, patch region discovery before exposure, and verify that the
-guardrail validator still passes.
+## Follow-On Block - Guarded V2 Baseline Copy
+
+Complete.
+
+- The first guarded V2 baseline was copied into `apps/v2_port/`.
+- The port includes the V2 `potential_app.py`, selected `potential_model`
+  modules, selected `acceptance_model` modules, active Bornholm/Trondelag
+  acceptance registries, and small linked manifests.
+- The port does not include V2 `data/`, `exports/`, `artifacts/`, `tmp/`,
+  `apps/potential_model/manifests/regions/`, `regions/skara/`, or generic
+  `apps/acceptance_model/registry.json`.
+- Region discovery is patched to use the SpeedLocal `regions/index.json`.
+- Acceptance registry selection is patched to fail closed for planned or
+  unknown regions.
+- V2 generated acceptance geometry runtime is disabled until deliberately
+  ported.
+- `scripts/validate_v2_port_guardrails.py` passes after the copy.
+
+Next implementation step: start the quarantine app locally, make Bornholm and
+Trondelag open through the SpeedLocal region catalog, then reduce panels and
+layer groups behind validators.

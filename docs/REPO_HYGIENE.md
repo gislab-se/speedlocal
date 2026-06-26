@@ -18,16 +18,14 @@ The Day-1 baseline is complete:
 - Trondelag has a file-backed runtime source summary against the V2 archive.
 - Postgres is prepared as the preferred future runtime, but file fallbacks stay
   documented until database-backed reads validate.
+- A guarded V2 app baseline now exists under `apps/v2_port/`.
 
-Next block: prepare a quarantined V2 app port for the first real regional
-surface. See `docs/APP_MIGRATION_STRATEGY_2026-06-26.md`. The port should run
-first and then be reduced behind SpeedLocal catalogs; do not rebuild the app
-from scratch and do not copy V3 as the baseline.
+The quarantined V2 port is a working baseline to reduce, not final
+architecture. See `docs/APP_MIGRATION_STRATEGY_2026-06-26.md` and
+`docs/V2_QUARANTINE_PORT_INVENTORY_2026-06-26.md`.
 
-The concrete pre-copy inventory is
-`docs/V2_QUARANTINE_PORT_INVENTORY_2026-06-26.md`. Run
-`scripts/validate_v2_port_guardrails.py` before and after any `apps/v2_port/`
-copy.
+Run `scripts/validate_v2_port_guardrails.py` after any `apps/v2_port/` change.
+If it fails, fix the port before adding more files.
 
 ## Keep In This Repo
 
@@ -40,6 +38,8 @@ copy.
 - `docs/` files that explain delivery, deployment, runtime import, region
   onboarding, and copy/leave-behind decisions.
 - `data/runtime/README.md` and small runtime contract notes.
+- `apps/v2_port/` only while it remains quarantined, guarded, and useful for
+  shrinking V2 behavior into SpeedLocal.
 
 ## Keep Out
 
@@ -60,6 +60,12 @@ Delete or leave out:
   validator are added first.
 - V3 `data/incoming/`, promoted runtime GeoJSON/CSV, caches, logs, or its new
   app architecture as a delivery baseline.
+- V2 generated data under `apps/v2_port/data`, `apps/v2_port/exports`,
+  `apps/v2_port/artifacts`, or `apps/v2_port/tmp`.
+- V2 legacy region discovery under
+  `apps/v2_port/apps/potential_model/manifests/regions`.
+- Generic V2 acceptance fallback registry at
+  `apps/v2_port/apps/acceptance_model/registry.json`.
 
 ## Copy Rule
 
@@ -79,6 +85,10 @@ archive or file fallback.
 If `potential_app.py` is copied, copy it only as a quarantined baseline under a
 clearly named V2-port area. It is allowed as a working source to shrink, not as
 clean final architecture.
+
+The current V2 port baseline has been copied. Future V2 additions must still be
+added to `docs/SPEEDLOCAL_COPY_LIST.md` before copying and must keep the
+guardrail validator green.
 
 ## Cleanup Checklist
 

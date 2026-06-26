@@ -145,17 +145,23 @@ The quarantine port is acceptable only when:
 - The port can be deleted or reduced module-by-module without losing the public
   landing page or SpeedLocal catalogs.
 
-## Next Action
+## Current Status
 
-The quarantine port inventory now lives in
-`docs/V2_QUARANTINE_PORT_INVENTORY_2026-06-26.md`. Before copying code:
+The quarantine port inventory lives in
+`docs/V2_QUARANTINE_PORT_INVENTORY_2026-06-26.md`.
 
-1. List exact V2 imports used by `potential_app.py`.
-2. Split them into required-now, required-later, and leave-behind.
-3. Add a validator that fails if legacy Vara/skara discovery is reintroduced.
-4. Copy the V2 app baseline into `apps/v2_port/`.
-5. Make the baseline run locally.
-6. Only then start removing panels, layer groups, and technical UI.
+Completed:
 
-Items 1-3 are complete. The next implementation step is the first guarded copy
-into `apps/v2_port/`.
+- Exact V2 imports used by `potential_app.py` are listed.
+- Required-now, required-later, and leave-behind files are documented.
+- `scripts/validate_v2_port_guardrails.py` fails if legacy Vara/skara discovery
+  is reintroduced.
+- The first guarded V2 app baseline is copied into `apps/v2_port/`.
+- Region discovery and acceptance registry selection are patched fail-closed.
+
+Next action:
+
+1. Start the quarantine app locally from `apps/v2_port/app.py`.
+2. Make Bornholm and Trondelag open through SpeedLocal's region catalog.
+3. Keep Skaraborg planned/disabled until runtime data is complete.
+4. Then start removing panels, layer groups, and technical UI behind validators.

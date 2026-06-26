@@ -1,0 +1,54 @@
+{
+  "analysis_id": "bornholm_v10_landscape_types",
+  "display_name": "Bornholm v10 landskapstyper",
+  "region_id": "bornholm",
+  "native_crs": "EPSG:25833",
+  "web_crs": "EPSG:4326",
+  "source_h3_resolution": 10,
+  "default_h3_resolution": 10,
+  "available_h3_resolutions": [10, 9, 8, 7, 6],
+  "landscape_geojson": "docs/geocontext/model_comparisons/bornholm_v10_landscape_types/map/bornholm_v10_landscape_types_map_data.geojson",
+  "factor_scores": "docs/geocontext/model_comparisons/bornholm_v10_landscape_types/map/bornholm_v10_landscape_types_map_data.geojson",
+  "cluster_profile": "docs/geocontext/model_comparisons/bornholm_v10_landscape_types/model/bornholm_v10_landscape_types_source_v9_cluster_legend.csv",
+  "cluster_sizes": "docs/geocontext/model_comparisons/bornholm_v10_landscape_types/model/bornholm_v10_landscape_types_landscape_type_counts.csv",
+  "run_summary": "docs/geocontext/model_comparisons/bornholm_v10_landscape_types/model/bornholm_v10_landscape_types_run_summary.csv",
+  "factor_labels": {
+    "F1": "Sprickdal och brant relief",
+    "F2": "Flygsand och sandpräglad kust",
+    "F3": "Skog och skyddad natur",
+    "F4": "Tätort och byggd struktur",
+    "F5": "Låglänt öppet land"
+  },
+  "cluster_labels": {
+    "1": "Tätorts- och verksamhetskärnor",
+    "2": "Sprickdalspåverkat övergångslandskap",
+    "3": "Blandat vardagslandskap med låg faktorprofil",
+    "4": "Flygsand och sandkust - kärnzon",
+    "5": "Sprickdal och brant relief - kärnzon med sand/kust",
+    "6": "Öppet och låglänt blandlandskap",
+    "7": "Skog och skyddad natur - kärnzon",
+    "8": "Sand- och kustpräglat landskap"
+  },
+  "landscape_type_labels": {
+    "LT01": "Klippigt kustlandskap",
+    "LT02": "Sandigt kustlandskap",
+    "LT03": "Jordbruksdominerat sprickdalslandskap",
+    "LT04": "Skogsklätt sprickdalslandskap",
+    "LT05": "Slätt- och jordbrukslandskap"
+  },
+  "landscape_type_colors": {
+    "LT01": "#5F625C",
+    "LT02": "#E2DB9B",
+    "LT03": "#5B4938",
+    "LT04": "#183D24",
+    "LT05": "#EFE36F"
+  },
+  "semantic_roles": {
+    "coastal_lowland": ["F2", "F5"],
+    "steep_valley_relief": ["F1"],
+    "protected_forest_habitat": ["F3"],
+    "settlement_built_structure": ["F4"],
+    "mixed_everyday_matrix": ["class_km:3", "class_km:6"]
+  },
+  "method_note": "v10 använder v9 K=8 på H3 R10 som källhexagoner. Appen rullar upp från R10 till grövre visningsnivåer när användaren väljer lägre H3-resolution."
+}

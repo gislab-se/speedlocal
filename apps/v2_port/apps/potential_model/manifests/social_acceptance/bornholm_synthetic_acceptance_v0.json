@@ -1,0 +1,32 @@
+{
+  "acceptance_id": "bornholm_synthetic_social_acceptance_v0",
+  "display_name": "Bornholm syntetisk social acceptans v0",
+  "region_id": "bornholm",
+  "status": "synthetic_test_data",
+  "synthetic": true,
+  "hex_resolution": 10,
+  "source_hex_geojson": "docs/geocontext/model_comparisons/bornholm_v10_landscape_types/map/bornholm_v10_landscape_types_map_data.geojson",
+  "hex_geometry_path": "docs/geocontext/model_comparisons/bornholm_v10_landscape_types/map/bornholm_v10_landscape_types_map_data.geojson",
+  "acceptance_csv": "docs/geocontext/potential_framework/data/social_acceptance/bornholm_synthetic_social_acceptance_r10.csv",
+  "random_seed": 20260519,
+  "scenarios": [
+    {
+      "id": "low",
+      "label": "Låg acceptans",
+      "value_column": "acceptance_low"
+    },
+    {
+      "id": "medium",
+      "label": "Mellanacceptans",
+      "value_column": "acceptance_medium"
+    },
+    {
+      "id": "high",
+      "label": "Hög acceptans",
+      "value_column": "acceptance_high"
+    }
+  ],
+  "value_range": [0, 1],
+  "max_decimals": 3,
+  "method_note": "Synthetic test data for UI and integration only. Bornholm is the reference implementation. Values use landscape factors as proxies for NIMBY pressure, landscape sensitivity, local benefit, random human irregularity and self-interest. This is not IVL research data."
+}

@@ -1,0 +1,19 @@
+{
+  "technology": "wind",
+  "model_id": "bornholm_wind_potential_rules_v0",
+  "status": "draft",
+  "uses_landscape_semantic_roles": true,
+  "positive_components": [
+    "grid and infrastructure feasibility",
+    "scenario relevance",
+    "remaining land after hard restrictions"
+  ],
+  "negative_components": [
+    "settlement_built_structure",
+    "coastal_lowland",
+    "protected_forest_habitat",
+    "aviation and military restrictions"
+  ],
+  "migration_note": "This evolves the existing geometry-first wind acceptance app into wind potential terminology and structure."
+}
+

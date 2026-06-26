@@ -1,0 +1,534 @@
+{
+  "analysis_id": "bornholm_wind_acceptance_prototype_dagi_landsdel",
+  "source_config_csv": "script/acceptance/generated/bornholm_r9_geocontext_layers_dagi_landsdel.csv",
+  "hex_gpkg": "exports/v2_multiregion/bornholm/bornholm_lablab_landscape_r9_dagi_landsdel_app.geojson",
+  "acceptance_hex_gpkg": "docs/geocontext/acceptance_framework/data/bornholm_vindacceptans_stage1_v4_res9/bornholm_vindacceptans_stage1_v4_res9_hex.gpkg",
+  "acceptance_hex_layer": "bornholm_vindacceptans_stage1_v4_res9",
+  "asset_dir": "docs/geocontext/acceptance_framework/data/prototype_assets_dagi_landsdel",
+  "groups": [
+    {
+      "id": "settlement",
+      "label": "Settlement / population / built environment",
+      "analysis_kind": "distance_conflict",
+      "analysis_label": "Minimum clearance",
+      "analysis_min_m": 100,
+      "analysis_max_m": 3000,
+      "analysis_step_m": 50,
+      "analysis_default_m": 100,
+      "blend_default": 50,
+      "group_color": [
+        183,
+        83,
+        45
+      ],
+      "interpretation": "Too close is bad. The prototype uses the minimum distance across selected settlement proxies so overlapping settlement layers are not naively added together."
+    },
+    {
+      "id": "transport",
+      "label": "Transport infrastructure",
+      "analysis_kind": "distance_conflict",
+      "analysis_label": "Minimum clearance",
+      "analysis_min_m": 100,
+      "analysis_max_m": 2000,
+      "analysis_step_m": 25,
+      "analysis_default_m": 100,
+      "blend_default": 50,
+      "group_color": [
+        177,
+        132,
+        33
+      ],
+      "interpretation": "Too close is bad. The transport source is split into small, medium, and large roads using the existing vejkategor road-class mapping from the semi-manual workflow. Some classes may still be empty in the current simplified source."
+    },
+    {
+      "id": "electrical",
+      "label": "Electrical infrastructure / grid connection",
+      "analysis_kind": "proximity_feasibility",
+      "analysis_label": "Maximum connection distance",
+      "analysis_min_m": 500,
+      "analysis_max_m": 15000,
+      "analysis_step_m": 250,
+      "analysis_default_m": 2000,
+      "blend_default": 50,
+      "group_color": [
+        34,
+        115,
+        113
+      ],
+      "interpretation": "Too far is bad. The group layer shows the land area that remains within the selected maximum connection distance of the chosen electrical infrastructure, including lines, cables, substations, and existing wind turbines when selected. The default is kept lower so the feasible area does not visually collapse into almost the whole island."
+    },
+    {
+      "id": "culture",
+      "label": "Valuable cultural environments",
+      "analysis_kind": "hard_exclusion",
+      "analysis_label": "Optional buffer",
+      "analysis_min_m": 0,
+      "analysis_max_m": 1500,
+      "analysis_step_m": 50,
+      "analysis_default_m": 0,
+      "blend_default": 60,
+      "group_color": [
+        132,
+        78,
+        148
+      ],
+      "interpretation": "Treated as a hard exclusion in this first prototype because that matches the current balanced-stage logic. A later scenario layer could relax this into a graded avoidance rule."
+    },
+    {
+      "id": "protected",
+      "label": "Protected areas",
+      "analysis_kind": "hard_exclusion",
+      "analysis_label": "Optional buffer",
+      "analysis_min_m": 0,
+      "analysis_max_m": 2000,
+      "analysis_step_m": 50,
+      "analysis_default_m": 0,
+      "blend_default": 60,
+      "group_color": [
+        64,
+        119,
+        73
+      ],
+      "interpretation": "Hard exclusion. This keeps statutory nature designations separate from settlement and transport so the combined result can intersect them cleanly instead of baking them into one opaque score."
+    },
+    {
+      "id": "aviation_approach",
+      "label": "Airport approach / aviation restrictions",
+      "analysis_kind": "hard_exclusion",
+      "analysis_label": "Optional buffer",
+      "analysis_min_m": 0,
+      "analysis_max_m": 3000,
+      "analysis_step_m": 100,
+      "analysis_default_m": 0,
+      "blend_default": 60,
+      "group_color": [
+        59,
+        92,
+        142
+      ],
+      "interpretation": "Hard exclusion. Approach zones behave like planning constraints rather than a soft preference surface."
+    },
+    {
+      "id": "aviation_bird",
+      "label": "Aviation bird-collision sensitivity",
+      "analysis_kind": "distance_conflict",
+      "analysis_label": "Minimum clearance",
+      "analysis_min_m": 0,
+      "analysis_max_m": 4000,
+      "analysis_step_m": 100,
+      "analysis_default_m": 2000,
+      "blend_default": 60,
+      "group_color": [
+        165,
+        74,
+        102
+      ],
+      "interpretation": "Distance-based conflict. The current stage-1 model already treats this layer as a graded clearance factor in the balanced scenario, so it should not be collapsed into generic aviation hard-stop logic."
+    },
+    {
+      "id": "military",
+      "label": "Military areas",
+      "analysis_kind": "hard_exclusion",
+      "analysis_label": "Optional buffer",
+      "analysis_min_m": 0,
+      "analysis_max_m": 2000,
+      "analysis_step_m": 50,
+      "analysis_default_m": 0,
+      "blend_default": 60,
+      "group_color": [
+        95,
+        92,
+        99
+      ],
+      "interpretation": "Hard exclusion. These areas are better handled as a clean mask than as a weighted sensitivity."
+    },
+    {
+      "id": "coastal",
+      "label": "Coastal / strand protection",
+      "analysis_kind": "hard_exclusion",
+      "analysis_label": "Optional buffer",
+      "analysis_min_m": 0,
+      "analysis_max_m": 1000,
+      "analysis_step_m": 50,
+      "analysis_default_m": 0,
+      "blend_default": 60,
+      "group_color": [
+        47,
+        134,
+        163
+      ],
+      "interpretation": "Hard exclusion. This group can now show both the direct strand-protection no-go layer and the broader Kystnaerhedszonen 3 km coastal planning zone as separate selectable coastal constraints."
+    }
+  ],
+  "layers": [
+    {
+      "id": "population_points",
+      "group_id": "settlement",
+      "layer_key": "fastboendebefolkningmapinfo",
+      "label": "Population points",
+      "note": "Privacy-safe permanent-population representation.",
+      "source_color": [
+        208,
+        94,
+        60
+      ],
+      "point_radius": 70
+    },
+    {
+      "id": "buildings_low",
+      "group_id": "settlement",
+      "layer_key": "buildings_low_gd_v_buildings_low_bol_33",
+      "label": "Buildings Low",
+      "note": "General lower building structure.",
+      "source_color": [
+        220,
+        131,
+        79
+      ],
+      "point_radius": 45
+    },
+    {
+      "id": "buildings_high",
+      "group_id": "settlement",
+      "layer_key": "buildings_high_gd_v_buildings_high_bol_33",
+      "label": "Buildings High",
+      "note": "Higher building structure, already used in the current hard-settlement logic.",
+      "source_color": [
+        173,
+        64,
+        33
+      ],
+      "point_radius": 45
+    },
+    {
+      "id": "built_centre",
+      "group_id": "settlement",
+      "layer_key": "built_centre_gd_v_bykerne_built_centre_bol_33",
+      "label": "Built Centre",
+      "note": "Town-centre footprint.",
+      "source_color": [
+        148,
+        56,
+        30
+      ],
+      "point_radius": 45
+    },
+    {
+      "id": "built_low_selection",
+      "group_id": "settlement",
+      "layer_key": "built_low_gd_v_buildings_low_selection_by_bol_33",
+      "label": "Built - Low (Selection)",
+      "note": "Selection-based low built area proxy.",
+      "source_color": [
+        236,
+        160,
+        116
+      ],
+      "point_radius": 45
+    },
+    {
+      "id": "roads_small",
+      "group_id": "transport",
+      "layer_key": "roads_simplified_gd_v_vej_road_merged_bol_33",
+      "label": "Small roads",
+      "note": "Derived from vejkategor using the existing road-class mapping. May be empty if local roads are absent from the simplified source.",
+      "source_color": [
+        209,
+        180,
+        102
+      ],
+      "point_radius": 40,
+      "filter_field": "vejkategor",
+      "filter_value": "small",
+      "filter_mode": "derived_road_class"
+    },
+    {
+      "id": "roads_medium",
+      "group_id": "transport",
+      "layer_key": "roads_simplified_gd_v_vej_road_merged_bol_33",
+      "label": "Medium roads",
+      "note": "Derived from vejkategor using the existing road-class mapping.",
+      "source_color": [
+        177,
+        132,
+        33
+      ],
+      "point_radius": 40,
+      "filter_field": "vejkategor",
+      "filter_value": "medium",
+      "filter_mode": "derived_road_class"
+    },
+    {
+      "id": "roads_large",
+      "group_id": "transport",
+      "layer_key": "roads_simplified_gd_v_vej_road_merged_bol_33",
+      "label": "Large roads",
+      "note": "Derived from vejkategor using the existing road-class mapping.",
+      "source_color": [
+        133,
+        89,
+        19
+      ],
+      "point_radius": 40,
+      "filter_field": "vejkategor",
+      "filter_value": "large",
+      "filter_mode": "derived_road_class"
+    },
+    {
+      "id": "high_voltage_lines",
+      "group_id": "electrical",
+      "layer_key": "high_voltage_line_osm_high_voltage_line_jf_181224_bor",
+      "label": "High-voltage lines",
+      "note": "Primary grid-connection line source.",
+      "source_color": [
+        17,
+        108,
+        106
+      ],
+      "point_radius": 40
+    },
+    {
+      "id": "underground_cables",
+      "group_id": "electrical",
+      "layer_key": "underground_cable_osm_underground_cable_land_jf_181224_bor",
+      "label": "Underground cables",
+      "note": "Secondary connection source.",
+      "source_color": [
+        57,
+        152,
+        150
+      ],
+      "point_radius": 40
+    },
+    {
+      "id": "power_substations",
+      "group_id": "electrical",
+      "layer_key": "power_substation_osm_power_substation_edit_jf_1812_bor_33",
+      "label": "Power substations",
+      "note": "Substation point source.",
+      "source_color": [
+        23,
+        139,
+        136
+      ],
+      "point_radius": 95
+    },
+    {
+      "id": "existing_wind_turbines",
+      "group_id": "electrical",
+      "layer_key": "windturbine_rated_power_kw_ens_vindkraftanlaeg_bol_33",
+      "label": "Existing wind turbines",
+      "note": "Existing wind turbines / windmills from ENS. Included here as an optional electrical-infrastructure source.",
+      "source_color": [
+        30,
+        170,
+        150
+      ],
+      "point_radius": 85
+    },
+    {
+      "id": "cultural_preservation",
+      "group_id": "culture",
+      "layer_key": "pdk_kulturhistoriskbevaringsvaerdi_vedtaget_wfs",
+      "label": "Cultural preservation",
+      "note": "Adopted cultural preservation polygons.",
+      "source_color": [
+        132,
+        78,
+        148
+      ],
+      "point_radius": 45
+    },
+    {
+      "id": "valuable_cultural_environment",
+      "group_id": "culture",
+      "layer_key": "valuable_cultural_environment_slks",
+      "label": "Valuable cultural environment",
+      "note": "Valuable cultural-environment polygons.",
+      "source_color": [
+        156,
+        101,
+        171
+      ],
+      "point_radius": 45
+    },
+    {
+      "id": "cultural_conservation_values",
+      "group_id": "culture",
+      "layer_key": "cultural_and_historical_conservation_values_kulturhistoriske_bevaringsvardier_pdk_kulturhistoriskebevaringsvardier_bor_32",
+      "label": "Cultural conservation values",
+      "note": "Cultural and historical conservation values.",
+      "source_color": [
+        108,
+        60,
+        122
+      ],
+      "point_radius": 45
+    },
+    {
+      "id": "protected_areas",
+      "group_id": "protected",
+      "layer_key": "protected_areas_fredede_omrader_miljostyrelsen_st_mp_arealdata_fredede_omr_121224_diss_bor_32",
+      "label": "Protected areas",
+      "note": "Protected-areas baseline source.",
+      "source_color": [
+        64,
+        119,
+        73
+      ],
+      "point_radius": 45
+    },
+    {
+      "id": "natura_designated_land",
+      "group_id": "protected",
+      "layer_key": "natura_2000_specially_designated_land_areas",
+      "label": "Natura 2000 designated land",
+      "note": "Specially designated land areas.",
+      "source_color": [
+        78,
+        135,
+        86
+      ],
+      "point_radius": 45
+    },
+    {
+      "id": "natura_bird_protection",
+      "group_id": "protected",
+      "layer_key": "natura_2000_bird_protection",
+      "label": "Natura bird protection",
+      "note": "Bird-protection polygons.",
+      "source_color": [
+        93,
+        150,
+        100
+      ],
+      "point_radius": 45
+    },
+    {
+      "id": "natura_habitat_areas",
+      "group_id": "protected",
+      "layer_key": "natura_2000_habitat_areas_dai",
+      "label": "Natura habitat areas",
+      "note": "Habitat-area polygons.",
+      "source_color": [
+        51,
+        104,
+        61
+      ],
+      "point_radius": 45
+    },
+    {
+      "id": "natura_ramsar",
+      "group_id": "protected",
+      "layer_key": "natura_2000_ramsar",
+      "label": "Natura Ramsar",
+      "note": "Ramsar polygons.",
+      "source_color": [
+        96,
+        159,
+        105
+      ],
+      "point_radius": 45
+    },
+    {
+      "id": "nature_wildlife_reserve",
+      "group_id": "protected",
+      "layer_key": "natur_vildt_reservat",
+      "label": "Nature and wildlife reserve",
+      "note": "Nature and wildlife reserve polygons.",
+      "source_color": [
+        44,
+        90,
+        54
+      ],
+      "point_radius": 45
+    },
+    {
+      "id": "nature_area_forest",
+      "group_id": "protected",
+      "layer_key": "nature_area_forest_dk_sn_label_nature_area_bol_33",
+      "label": "Nature-area forest",
+      "note": "Danish nature-area label source filtered to naturareal = skovPlantage.",
+      "source_color": [
+        34,
+        112,
+        57
+      ],
+      "point_radius": 45,
+      "filter_field": "naturareal",
+      "filter_value": "skovPlantage",
+      "filter_mode": "field_equals"
+    },
+    {
+      "id": "aviation_approach_zones",
+      "group_id": "aviation_approach",
+      "layer_key": "aviation_approach_zones_tst",
+      "label": "Aviation approach zones",
+      "note": "Approach-zone restriction polygons.",
+      "source_color": [
+        59,
+        92,
+        142
+      ],
+      "point_radius": 45
+    },
+    {
+      "id": "aviation_bird_collision",
+      "group_id": "aviation_bird",
+      "layer_key": "aviation_bird_collision_zones_tst",
+      "label": "Aviation bird-collision zones",
+      "note": "Bird-collision sensitivity polygons.",
+      "source_color": [
+        165,
+        74,
+        102
+      ],
+      "point_radius": 45
+    },
+    {
+      "id": "military_areas",
+      "group_id": "military",
+      "layer_key": "militara_omraden_plst",
+      "label": "Military areas",
+      "note": "Military training or protected-use polygons.",
+      "source_color": [
+        95,
+        92,
+        99
+      ],
+      "point_radius": 45
+    },
+    {
+      "id": "coastal_zone_3km",
+      "group_id": "coastal",
+      "layer_key": "coastal_zone_kystnarhedszonen_3_km_miljoministeriet_plst_pdk_kystnaerhedszone_polygon_bor_32",
+      "label": "Coastal zone 3 km",
+      "note": "Kystnaerhedszonen 3 km planning-zone polygon from Miljoeministeriet / PLST.",
+      "source_color": [
+        104,
+        164,
+        191
+      ],
+      "point_radius": 45
+    },
+    {
+      "id": "strand_protection",
+      "group_id": "coastal",
+      "layer_key": "strandbeskyttelse_miljostyrelsen_gds_mat2_strandbeskyttelse_merge_bor_32",
+      "label": "Strand protection",
+      "note": "Current stage-1 strand-protection no-go layer.",
+      "source_color": [
+        47,
+        134,
+        163
+      ],
+      "point_radius": 45
+    }
+  ],
+  "landmask_layer_key": "dagi_landsdel_bornholm",
+  "native_crs_epsg": 25833,
+  "landmask_label": "Bornholm DAGI Landsdel landmass",
+  "landmask_source_path": "D:/LABLAB_Energiforsk/Projekt SL01/Geodatakatalog_SL01/Utkommande_SL01/UT_Bornholm_SL01/Basmap_BOR/DAGI_Landsdel_Scale10000_BOL_33.shp",
+  "asset_method_note": "Acceptance source GeoJSON, analysis RDS and distance tables are rebuilt from the LABLAB Bornholm raw sources and clipped to DAGI_Landsdel_Scale10000_BOL_33.",
+  "created_at": "2026-06-23"
+}

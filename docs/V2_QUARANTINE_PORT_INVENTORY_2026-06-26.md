@@ -22,6 +22,13 @@ Suggested location:
 Nothing in `apps/v2_port/` should grow new product features. It is a baseline
 to run, patch, validate, and shrink.
 
+Status:
+
+- First guarded copy complete.
+- Copied files are documented in `docs/SPEEDLOCAL_COPY_LIST.md`.
+- Guardrail patches have been applied before public exposure.
+- `scripts/validate_v2_port_guardrails.py` passes after the copy.
+
 ## Direct Imports From `potential_app.py`
 
 Standard library:
@@ -197,7 +204,7 @@ Regional or advanced groups:
 
 ## Acceptance For Copying Code
 
-Before copying code into `apps/v2_port/`:
+For every code copy into `apps/v2_port/`:
 
 1. `scripts/validate_v2_port_guardrails.py` must pass.
 2. `scripts/validate_delivery_repo.py` must pass.
@@ -206,3 +213,9 @@ Before copying code into `apps/v2_port/`:
 5. The first copied version must be runnable locally before any shrinking work
    starts.
 
+Current status:
+
+- Items 1-4 pass for the first guarded copy.
+- Item 5 is the next task: start the quarantine app locally and make Bornholm
+  and Trondelag open through the SpeedLocal region catalog before shrinking UI
+  panels or layer groups.

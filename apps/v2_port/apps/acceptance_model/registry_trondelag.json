@@ -1,0 +1,293 @@
+{
+  "analysis_id": "trondelag_wind_acceptance_prototype",
+  "source_config_csv": "Trondelag/projects/trondelag/config/potential_app_acceptance_layers.csv",
+  "hex_gpkg": "",
+  "acceptance_hex_gpkg": "",
+  "acceptance_hex_layer": "",
+  "native_crs_epsg": 25832,
+  "landmask_label": "Trondelag landmass",
+  "asset_dir": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets",
+  "groups": [
+    {
+      "id": "settlement",
+      "label": "Settlement / population / built environment",
+      "analysis_kind": "distance_conflict",
+      "analysis_label": "Minimum clearance",
+      "analysis_min_m": 100,
+      "analysis_max_m": 3000,
+      "analysis_step_m": 50,
+      "analysis_default_m": 100,
+      "blend_default": 50,
+      "group_color": [183, 83, 45],
+      "interpretation": "Too close is bad. For Trondelag the default source is a dissolved 250 m occupied grid-cell proxy derived from population centroids until true population points are available. Tettsted/built-centre and holiday-house centroids are optional advanced proxies."
+    },
+    {
+      "id": "transport",
+      "label": "Transport infrastructure",
+      "analysis_kind": "distance_conflict",
+      "analysis_label": "Minimum clearance",
+      "analysis_min_m": 100,
+      "analysis_max_m": 2000,
+      "analysis_step_m": 25,
+      "analysis_default_m": 100,
+      "blend_default": 50,
+      "group_color": [177, 132, 33],
+      "interpretation": "Too close is bad. Trondelag mirrors Bornholm by splitting the N500 road network into medium and large road classes from vegkategor. N500 is used for light runtime; N250 remains a richer source candidate for later refinement."
+    },
+    {
+      "id": "electrical",
+      "label": "Electrical infrastructure / grid connection",
+      "analysis_kind": "proximity_feasibility",
+      "analysis_label": "Maximum connection distance",
+      "analysis_min_m": 500,
+      "analysis_max_m": 15000,
+      "analysis_step_m": 250,
+      "analysis_default_m": 2000,
+      "blend_default": 50,
+      "group_color": [34, 115, 113],
+      "interpretation": "Too far is bad. Trondelag mirrors Bornholm's grid-connection feasibility pattern with verified UTM32 NVE transmission lines, underwater cables and existing wind turbines. Substations are not wired until a verified Trondelag source is found."
+    },
+    {
+      "id": "culture",
+      "label": "Valuable cultural environments",
+      "analysis_kind": "hard_exclusion",
+      "analysis_label": "Optional buffer",
+      "analysis_min_m": 0,
+      "analysis_max_m": 1500,
+      "analysis_step_m": 50,
+      "analysis_default_m": 0,
+      "blend_default": 60,
+      "group_color": [132, 78, 148],
+      "interpretation": "Culture layers mirror the Bornholm hard-exclusion pattern. Trondelag wires RA cultural heritage environments and NEA cultural landscapes as separate selectable sources; the merged NW layer remains QA-only to avoid duplicate scoring."
+    },
+    {
+      "id": "protected",
+      "label": "Protected areas",
+      "analysis_kind": "hard_exclusion",
+      "analysis_label": "Optional buffer",
+      "analysis_min_m": 0,
+      "analysis_max_m": 2000,
+      "analysis_step_m": 50,
+      "analysis_default_m": 0,
+      "blend_default": 60,
+      "group_color": [64, 119, 73],
+      "interpretation": "Protected nature is treated as a hard exclusion following the Bornholm controller pattern. Trondelag currently wires the NEA Naturvern layer as the first protected-nature source; protected watercourses and water protection remain next-step candidates. Land-use classes such as forest, agriculture and wetland are intentionally kept out of this group for a later land-use controller."
+    },
+    {
+      "id": "land_use",
+      "label": "Land use / markdekke",
+      "analysis_kind": "hard_exclusion",
+      "analysis_label": "Optional buffer",
+      "analysis_min_m": 0,
+      "analysis_max_m": 1000,
+      "analysis_step_m": 50,
+      "analysis_default_m": 0,
+      "blend_default": 60,
+      "group_color": [22, 101, 52],
+      "interpretation": "Separate land-use controller for Trondelag. Forest uses N500 markdekke polygons filtered to objtype = Skog and is intentionally kept separate from protected nature."
+    },
+    {
+      "id": "reindeer",
+      "label": "Reindeer husbandry / reindrift",
+      "analysis_kind": "hard_exclusion",
+      "analysis_label": "Optional buffer",
+      "analysis_min_m": 0,
+      "analysis_max_m": 5000,
+      "analysis_step_m": 100,
+      "analysis_default_m": 0,
+      "blend_default": 65,
+      "group_color": [190, 73, 82],
+      "interpretation": "Trondelag-specific controller for reindeer husbandry interests. There is no Bornholm equivalent; this follows the same hard-exclusion/optional-buffer pattern used for protected nature and culture, while documenting the regional deviation explicitly."
+    },
+    {
+      "id": "aviation_approach",
+      "label": "Airport approach / aviation restrictions",
+      "analysis_kind": "hard_exclusion",
+      "analysis_label": "Optional buffer",
+      "analysis_min_m": 0,
+      "analysis_max_m": 3000,
+      "analysis_step_m": 100,
+      "analysis_default_m": 0,
+      "blend_default": 60,
+      "group_color": [59, 92, 142],
+      "interpretation": "Aviation layers are not wired for the Trondelag prototype yet."
+    },
+    {
+      "id": "aviation_bird",
+      "label": "Aviation bird-collision sensitivity",
+      "analysis_kind": "distance_conflict",
+      "analysis_label": "Minimum clearance",
+      "analysis_min_m": 0,
+      "analysis_max_m": 4000,
+      "analysis_step_m": 100,
+      "analysis_default_m": 2000,
+      "blend_default": 60,
+      "group_color": [165, 74, 102],
+      "interpretation": "Aviation bird-collision layers are not wired for the Trondelag prototype yet."
+    },
+    {
+      "id": "military",
+      "label": "Military areas",
+      "analysis_kind": "hard_exclusion",
+      "analysis_label": "Optional buffer",
+      "analysis_min_m": 0,
+      "analysis_max_m": 2000,
+      "analysis_step_m": 50,
+      "analysis_default_m": 0,
+      "blend_default": 60,
+      "group_color": [95, 92, 99],
+      "interpretation": "Military layers are not wired for the Trondelag prototype yet."
+    },
+    {
+      "id": "coastal",
+      "label": "Coastal / strand protection",
+      "analysis_kind": "hard_exclusion",
+      "analysis_label": "Optional buffer",
+      "analysis_min_m": 0,
+      "analysis_max_m": 1000,
+      "analysis_step_m": 50,
+      "analysis_default_m": 0,
+      "blend_default": 60,
+      "group_color": [47, 134, 163],
+      "interpretation": "Coastal layers are not wired for the Trondelag prototype yet."
+    }
+  ],
+  "layers": [
+    {
+      "id": "population_points",
+      "group_id": "settlement",
+      "layer_key": "trl_population_250m_centroids",
+      "label": "Befolkning 250 m rutor (centroidproxy)",
+      "note": "Default Trondelag settlement source. Built as dissolved 250 m occupied grid cells from population-grid centroids, until true population points are available.",
+      "source_color": [208, 94, 60],
+      "point_radius": 70
+    },
+    {
+      "id": "built_centre",
+      "group_id": "settlement",
+      "layer_key": "trl_built_centre_tettsted",
+      "label": "Tettsted / built centre",
+      "note": "Advanced optional built-centre proxy. Off by default.",
+      "source_color": [148, 56, 30],
+      "point_radius": 45
+    },
+    {
+      "id": "built_low_selection",
+      "group_id": "settlement",
+      "layer_key": "trl_holiday_house_centroids",
+      "label": "Fritidshus centroid",
+      "note": "Advanced optional holiday-house proxy. Off by default.",
+      "source_color": [236, 160, 116],
+      "point_radius": 45
+    },
+    {
+      "id": "roads_medium",
+      "group_id": "transport",
+      "layer_key": "trl_roads_n500",
+      "label": "Mellanvägar",
+      "note": "Derived from Norwegian N500 vegkategor F. Mirrors Bornholm roads_medium for solar and wind filters.",
+      "source_color": [177, 132, 33],
+      "point_radius": 40,
+      "filter_field": "vegkategor",
+      "filter_value": "F",
+      "filter_mode": "field_equals"
+    },
+    {
+      "id": "roads_large",
+      "group_id": "transport",
+      "layer_key": "trl_roads_n500",
+      "label": "Stora vägar",
+      "note": "Derived from Norwegian N500 vegkategor E and R. Mirrors Bornholm roads_large for solar and wind filters.",
+      "source_color": [133, 89, 19],
+      "point_radius": 40,
+      "filter_field": "vegkategor",
+      "filter_value": ["E", "R"],
+      "filter_mode": "field_in"
+    },
+    {
+      "id": "high_voltage_lines",
+      "group_id": "electrical",
+      "layer_key": "trl_transmission_network",
+      "label": "Kraftnät - transmission",
+      "note": "NVE transmission network from the cleaner UTM32 source NVE1_Kraftnett_Transmission_TRL_32. Used as the primary grid-connection feasibility source for wind and solar.",
+      "source_color": [17, 108, 106],
+      "point_radius": 40
+    },
+    {
+      "id": "underground_cables",
+      "group_id": "electrical",
+      "layer_key": "trl_underwater_cable",
+      "label": "Sjö-/undervattenskabel",
+      "note": "NVE underwater cable source. Kept as an optional grid-connection source; the runtime clips its feasibility buffer back to the Trondelag landmass.",
+      "source_color": [57, 152, 150],
+      "point_radius": 40
+    },
+    {
+      "id": "existing_wind_turbines",
+      "group_id": "electrical",
+      "layer_key": "trl_wind_turbines",
+      "label": "Befintliga vindturbiner",
+      "note": "NVE wind turbine points. Mirrors Bornholm's optional existing-wind-turbine electrical source.",
+      "source_color": [30, 170, 150],
+      "point_radius": 85
+    },
+    {
+      "id": "cultural_preservation",
+      "group_id": "culture",
+      "layer_key": "trl_cultural_heritage",
+      "label": "Kulturmiljoer och kulturminnen",
+      "note": "Norwegian RA cultural heritage environments. Mirrors Bornholm cultural_preservation as a culture hard-exclusion source.",
+      "source_color": [132, 78, 148],
+      "point_radius": 45
+    },
+    {
+      "id": "valuable_cultural_environment",
+      "group_id": "culture",
+      "layer_key": "trl_cultural_landscapes",
+      "label": "Vardefulla kulturlandskap",
+      "note": "Norwegian NEA cultural landscapes. Mirrors Bornholm valuable_cultural_environment as a culture hard-exclusion source.",
+      "source_color": [156, 101, 171],
+      "point_radius": 45
+    },
+    {
+      "id": "protected_areas",
+      "group_id": "protected",
+      "layer_key": "trl_nature_protection_areas",
+      "label": "Naturvernområden",
+      "note": "Norwegian NEA Naturvern layer clipped and dissolved as the first Trondelag protected-nature controller. Forest, agriculture, wetland and other land-use classes are deliberately reserved for a later land-use controller.",
+      "source_color": [64, 119, 73],
+      "point_radius": 45
+    },
+    {
+      "id": "forest_land_cover",
+      "group_id": "land_use",
+      "layer_key": "trl_landcover_n500",
+      "label": "Skog (N500 markdekke)",
+      "note": "Norwegian N500 markdekke polygons filtered to objtype = Skog. Separate land-use controller for large-scale solar.",
+      "source_color": [22, 101, 52],
+      "point_radius": 45,
+      "filter_field": "objtype",
+      "filter_value": "Skog",
+      "filter_mode": "field_equals"
+    },
+    {
+      "id": "reindeer_grazing_merged",
+      "group_id": "reindeer",
+      "layer_key": "trl_reindeer_grazing_merged",
+      "label": "Reindrift - arstidsbete sammanlagt",
+      "note": "Landbruksdirektoratet seasonal grazing polygons, merged NW source. Trondelag-specific reindeer husbandry controller; no Bornholm equivalent exists.",
+      "source_color": [190, 73, 82],
+      "point_radius": 45
+    },
+    {
+      "id": "reindeer_migration_routes",
+      "group_id": "reindeer",
+      "layer_key": "trl_reindeer_migration_routes",
+      "label": "Reindrift - flyttleier",
+      "note": "Landbruksdirektoratet migration-route polygons. Treated as broad corridors, not center lines.",
+      "source_color": [216, 100, 93],
+      "point_radius": 45
+    }
+  ],
+  "landmask_layer_key": "trl_landmask"
+}

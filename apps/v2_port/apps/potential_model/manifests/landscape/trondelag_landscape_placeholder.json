@@ -1,0 +1,108 @@
+{
+  "analysis_id": "trondelag_potential_app_landscape_r7_rollups_original_labels_offshore_trim_2026_05_18",
+  "display_name": "Trondelag data-driven landscape R7 offshore-trimmed",
+  "region_id": "trondelag",
+  "status": "app_ready",
+  "native_crs": "EPSG:25832",
+  "web_crs": "EPSG:4326",
+  "source_h3_resolution": 7,
+  "default_h3_resolution": 7,
+  "available_h3_resolutions": [7, 6, 5],
+  "landscape_geojson": "docs/geocontext/potential_framework/data/trondelag_r7_app_bundle/hex.geojson",
+  "pdf_landscape_geojson": "docs/geocontext/potential_framework/data/trondelag_lablab_landscape_h3_r7/trondelag_lablab_landskapsanalys_h3_r7.geojson",
+  "pdf_landscape_display_name": "LABLAB:s Landskapsanalys",
+  "pdf_landscape_source_h3_resolution": 7,
+  "pdf_landscape_available_h3_resolutions": [7, 6, 5],
+  "pdf_landscape_use_region_display_geometries": false,
+  "pdf_landscape_type_labels": {
+    "LT01": "Ytterkustlandskap",
+    "LT02": "Fjordlandskap",
+    "LT03": "Fjordnära jordbrukslandskap",
+    "LT04": "Fjällnära skogslandskap",
+    "LT05": "Dalgångslandskap",
+    "LT06": "Lågfjällslandskap",
+    "LT07": "Högfjällslandskap",
+    "LT08": "Sjö- och våtmarkslandskap",
+    "LT09": "Vidsträckt fjällandskap"
+  },
+  "pdf_landscape_type_colors": {
+    "LT01": "#4e79a7",
+    "LT02": "#59a14f",
+    "LT03": "#f28e2b",
+    "LT04": "#76b7b2",
+    "LT05": "#9c755f",
+    "LT06": "#b07aa1",
+    "LT07": "#edc948",
+    "LT08": "#8cd17d",
+    "LT09": "#e15759"
+  },
+  "factor_scores": "docs/geocontext/potential_framework/data/trondelag_r7_app_bundle/hex.geojson",
+  "cluster_profile": "docs/geocontext/potential_framework/data/trondelag_r7_app_bundle/cluster_profiles.csv",
+  "run_summary": "docs/geocontext/potential_framework/data/trondelag_r7_app_bundle/rollup_summary.csv",
+  "factor_metadata": "docs/geocontext/potential_framework/data/trondelag_r7_app_bundle/factor_metadata.csv",
+  "factor_loadings_top12": "docs/geocontext/potential_framework/data/trondelag_r7_app_bundle/factor_loadings_top12.csv",
+  "cluster_label_table": "docs/geocontext/potential_framework/data/trondelag_r7_app_bundle/landscape_cluster_labels.csv",
+  "factor_labels": {
+    "F1": "Settlement roads and holiday-home intensity",
+    "F2": "Rivered inland relief versus sea coast",
+    "F3": "Urban and built-up centres",
+    "F4": "Cultural-holiday belts versus inland water",
+    "F5": "Schist-phyllite and heritage versus granitic gneiss"
+  },
+  "factor_descriptions": {
+    "F1": "Strongest variables separate settlement, roads and holiday-home intensity from quieter upland contexts.",
+    "F2": "Contrasts rivered inland relief with sea-facing coastal expression.",
+    "F3": "Captures urban and built-up centre intensity.",
+    "F4": "Contrasts cultural and holiday-home belts with inland water patterns.",
+    "F5": "Contrasts schist/phyllite and heritage signals with granitic gneiss contexts."
+  },
+  "cluster_labels": {
+    "1": "Coastal settlement and infrastructure mosaic",
+    "2": "Open inland geology and protection landscape",
+    "3": "Forested roaded valley landscape",
+    "4": "Low fjord and island coastal fringe",
+    "5": "High open protected mountain landscape",
+    "6": "Coastal fjord forest-open mosaic",
+    "7": "Small near-sea settlement and heritage outliers",
+    "8": "Inland upland water and geology belt"
+  },
+  "landscape_type_labels": {
+    "LT01": "Coastal settlement and infrastructure mosaic",
+    "LT02": "Open inland geology and protection landscape",
+    "LT03": "Forested roaded valley landscape",
+    "LT04": "Low fjord and island coastal fringe",
+    "LT05": "High open protected mountain landscape",
+    "LT06": "Coastal fjord forest-open mosaic",
+    "LT07": "Small near-sea settlement and heritage outliers",
+    "LT08": "Inland upland water and geology belt"
+  },
+  "landscape_type_descriptions": {
+    "LT01": "Coastal settlement and infrastructure mosaic with strong road, settlement and coast/fjord signals.",
+    "LT02": "Open inland geology and protection landscape with strong geology and protection signals.",
+    "LT03": "Forested roaded valley landscape with roaded valley and forested context.",
+    "LT04": "Low-relief sea-facing fringe with strong coastal-water expression.",
+    "LT05": "High open protected mountain landscape with strong relief and protected nature signals.",
+    "LT06": "Coastal fjord forest-open mosaic with mixed forest, open land and coast/fjord context.",
+    "LT07": "Small near-sea settlement and heritage outliers with small settlement and heritage signals.",
+    "LT08": "Inland upland water and geology belt with upland water and geology signals."
+  },
+  "landscape_type_colors": {
+    "LT01": "#4e79a7",
+    "LT02": "#f28e2b",
+    "LT03": "#59a14f",
+    "LT04": "#e15759",
+    "LT05": "#76b7b2",
+    "LT06": "#edc948",
+    "LT07": "#b07aa1",
+    "LT08": "#9c755f"
+  },
+  "semantic_roles": {
+    "coastal_lowland": ["F2", "F4"],
+    "steep_valley_relief": ["F2"],
+    "protected_forest_habitat": ["F4"],
+    "settlement_built_structure": ["F1", "F3"],
+    "mixed_everyday_matrix": ["F1", "F4"]
+  },
+  "semantic_roles_note": "Provisional mapping from the R7 factor labels so Trondelag can mirror Bornholm app logic. Recalibrate when regional controller layers and reviewed Norwegian landscape semantics replace placeholders.",
+  "method_note": "Offshore-trimmed data-driven geocontext R7 app bundle generated 2026-05-18 from outputs/trondelag/potential_app_landscape_r7_rollups_original_labels_offshore_trim_2026-05-18/app_bundle and mirrored into docs/geocontext/potential_framework/data/trondelag_r7_app_bundle for Streamlit Cloud runtime. The bundle keeps the original R7 factor and landscape labels but trims offshore cells against the landmask handoff: R7 13735, R6 2163, R5 365. R7 is the interactive app level, with R6/R5 as lightweight rollups. Earlier R8 handoff (89312 hexes) and R9 minimal package (625387 hexes) are too large for light runtime and are intentionally not exposed or required. LABLAB:s Landskapsanalys is exposed as a separate experimental R7 landscape-type layer from the fylke-boundary GPKG and is not used as the base landscape_geojson or factor_scores."
+}

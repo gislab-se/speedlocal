@@ -1,0 +1,108 @@
+{
+  "region_id": "trondelag",
+  "scenario_set_id": "trondelag_bornholm_energy_model_placeholder",
+  "status": "placeholder",
+  "scenario_levels": ["low", "medium", "high"],
+  "layers": [],
+  "energy_model": {
+    "duckdb": {
+      "path": "data/processed/speedlocal_times.duckdb",
+      "source_tables": ["timesreport", "timesreport_raw"],
+      "description_tables": ["scen_desc"],
+      "columns": {
+        "scenario": ["scen", "scenario"],
+        "year": ["year"],
+        "value": ["value"],
+        "unit": ["unit", "units"],
+        "time_slice": ["all_ts", "timeslice"],
+        "topic": ["topic"],
+        "attribute": ["attr", "attribute"],
+        "technology": ["comgroup", "techgroup", "prc", "com", "technology", "tech"]
+      },
+      "filters": {
+        "topic": ["energy"],
+        "attribute": ["f_out", "comnet"],
+        "time_slice": ["annual"]
+      },
+      "technology_map": {
+        "NRG_WIN": "wind",
+        "NRG_SOL": "solar"
+      },
+      "scenario_description": {
+        "scenario_column": ["scen", "id", "scenario"],
+        "description_column": ["description", "label", "name"]
+      }
+    },
+    "area_demand": {
+      "path": "data/raw/AreaDemand.xlsx",
+      "times_technology_map": {
+        "NRG_WIN": {
+          "energy_key": "wind",
+          "literature_key": "wind",
+          "literature_label": "Wind (onshore)"
+        },
+        "NRG_SOL": {
+          "energy_key": "solar",
+          "literature_key": "solar",
+          "literature_label": "Solar PV"
+        }
+      },
+      "technology_rows": {
+        "wind": "Wind (onshore)",
+        "solar": "Solar PV"
+      },
+      "quality_rules": {
+        "gwh_per_km2": {
+          "wind": {"min": 0.1, "max": 500.0},
+          "solar": {"min": 0.1, "max": 500.0}
+        },
+        "w_per_m2": {
+          "wind": {"min": 0.01, "max": 100.0},
+          "solar": {"min": 0.01, "max": 200.0}
+        }
+      },
+      "scenario_factor_caps": {
+        "high_km2_per_twh": {
+          "wind": 100.0
+        }
+      }
+    },
+    "planning": {
+      "primary_technology": "wind",
+      "planning_year": 2050,
+      "default_scenario": "medium",
+      "scenarios": [
+        {
+          "id": "low",
+          "label": "Lag",
+          "source_scenario": "ENERGYISLAND2050",
+          "planning_year": 2050,
+          "energy_scale": 0.65,
+          "area_demand_scenario": "low",
+          "note": "Trondelag placeholder using Bornholm ENERGYISLAND2050 source data until EML or a Norwegian equivalent provides regional TIMES/export data."
+        },
+        {
+          "id": "medium",
+          "label": "Mellan",
+          "source_scenario": "ENERGYISLAND2050",
+          "planning_year": 2050,
+          "energy_scale": 1.0,
+          "area_demand_scenario": "mid",
+          "note": "Trondelag placeholder using Bornholm ENERGYISLAND2050 source data until EML or a Norwegian equivalent provides regional TIMES/export data."
+        },
+        {
+          "id": "high",
+          "label": "Hog",
+          "source_scenario": "ENERGYISLAND2050",
+          "planning_year": 2050,
+          "energy_scale": 1.25,
+          "area_demand_scenario": "high",
+          "note": "Trondelag placeholder using Bornholm ENERGYISLAND2050 source data until EML or a Norwegian equivalent provides regional TIMES/export data."
+        }
+      ],
+      "placement_modes": ["auto", "manual"],
+      "auto_min_potential_share_pct": 65.0
+    }
+  },
+  "note": "Temporary Trondelag placeholder: uses Bornholm TIMES/AreaDemand files so the potential app has functioning low/medium/high scenarios until EML or a Norwegian equivalent provides regional inputs."
+}
