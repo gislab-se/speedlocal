@@ -13,6 +13,12 @@ FORBIDDEN_PATHS = [
     "apps/gc4",
     "apps/solochvind",
     "MIGRATION_PLAN.md",
+    "tmp",
+    "artifacts",
+    "apps/__pycache__",
+    "apps/landskapspotential/__pycache__",
+    "data/runtime/generated",
+    "data/runtime/mounted",
 ]
 REQUIRED_PATHS = [
     "README.md",
@@ -34,6 +40,7 @@ REQUIRED_PATHS = [
     "docs/SPEEDLOCAL_SLIMDOWN_5_DAY_PLAN.md",
     "docs/SPEEDLOCAL_COPY_LIST.md",
     "docs/SPEEDLOCAL_RUNTIME_IMPORT_PLAN.md",
+    "docs/REPO_HYGIENE.md",
 ]
 
 

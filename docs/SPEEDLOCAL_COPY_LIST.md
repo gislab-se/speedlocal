@@ -27,6 +27,7 @@ Already present in `speedlocal`:
 - Shared Postgres schema skeleton in `db/init`.
 - File fallback policy in `data/runtime/README.md`.
 - Delivery and static-site validators.
+- Repo hygiene rules in `docs/REPO_HYGIENE.md`.
 
 Intentional normalization:
 
@@ -249,3 +250,17 @@ Do this before copying the full app:
 
 This keeps the slim repo small while still moving toward a real Postgres-backed
 runtime.
+
+## Next Accepted Slice
+
+The next accepted slice is a Bornholm file-runtime summary.
+
+Rules for that slice:
+
+- Validate the smallest Bornholm app-ready V2 sources first.
+- Do not copy large Bornholm GeoJSON, CSV, or report outputs into this repo.
+- Keep R10-derived R9 PEY labelling visible in the validator/app summary.
+- Reuse the shared file-runtime summary pattern instead of creating a
+  Bornholm-only app branch.
+- Add validator coverage before promoting any Bornholm runtime data or app
+  behavior.

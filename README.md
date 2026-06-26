@@ -26,6 +26,16 @@ piece.
 The app must discover regions from `regions/index.json` only. Do not reintroduce
 legacy fallback region manifests that can expose old regions unintentionally.
 
+## Repo Hygiene
+
+This repo should stay delivery-focused. Do not copy broad V2 folders, generated
+GIS outputs, QGIS review packages, rendered reports, caches, or local scratch
+files. Before copying anything from V2, record the decision in
+`docs/SPEEDLOCAL_COPY_LIST.md` and add or update a validator when behavior or
+runtime contracts change.
+
+See `docs/REPO_HYGIENE.md` for the keep/delete rules and cleanup checklist.
+
 ## Run Locally
 
 ```powershell

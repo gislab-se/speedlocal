@@ -78,3 +78,36 @@ Output: `docs/SPEEDLOCAL_COPY_LIST.md`
 - Validators pass locally.
 - V2 repo remains untouched.
 - `speedlocal` remains small and delivery-focused.
+
+## Status Update - 2026-06-26
+
+All four blocks are complete.
+
+- Block 1 is complete: Pages publishes from `site/` and the public landing page
+  is live at `/speedlocal/landskapspotential/`.
+- Block 2 is complete: `docs/SPEEDLOCAL_COPY_LIST.md` records copy candidates
+  and leave-behind decisions.
+- Block 3 is complete: region readiness validation covers Bornholm, Trondelag,
+  Skaraborg, CRS, H3 exposure, planned status, and Postgres-then-file runtime
+  policy.
+- Block 4 is complete: the first runtime slice is the catalog/status app shell
+  with Trondelag file-backed source validation and metadata-only import seeds.
+
+Extra baseline completed today:
+
+- Streamlit Cloud status app is linked from the landing page:
+  `https://speedlocal-landskapspotential.streamlit.app/`
+- Region deep links are live for Bornholm, Trondelag, and Skaraborg.
+- `docs/REPO_HYGIENE.md` defines keep/delete rules for keeping the repo slim.
+- Local generated clutter (`__pycache__`, `tmp/`) was removed from the checkout.
+
+## Next Block
+
+Start the next block with Bornholm parity for the status layer:
+
+1. Add a Bornholm file-runtime summary that validates the smallest app-ready V2
+   sources without copying large generated files.
+2. Keep the same catalog-driven pattern used by Trondelag.
+3. Update validators before adding any real app behavior.
+4. Only after Bornholm and Trondelag status summaries are both clear, copy the
+   smallest shared app behavior needed for the first real regional surface.
