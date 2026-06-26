@@ -8,6 +8,10 @@ Import runtime data into shared `runtime` tables keyed by `region_id`. Keep file
 fallback paths available until database-backed reads validate against the file
 baseline.
 
+PostGIS/Flowcore is not required for the current app baseline. Until database
+capabilities are confirmed, the app can read a validated file-backed source
+summary from the V2 archive using `SPEEDLOCAL_V2_SOURCE_ROOT`.
+
 Do not create region-specific runtime schemas. Do not import placeholder,
 synthetic, QGIS review, or generated exploratory outputs unless they are clearly
 marked and required for a validation slice.

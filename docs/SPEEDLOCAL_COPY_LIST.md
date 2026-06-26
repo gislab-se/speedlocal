@@ -239,9 +239,11 @@ Do this before copying the full app:
    - Postgres is preferred and file fallbacks remain documented.
 3. Add a `scripts/validate_trondelag_runtime_sources.py` validator that checks
    the V2 source archive without copying large GeoJSON. Done.
-4. Add a `docs/SPEEDLOCAL_RUNTIME_IMPORT_PLAN.md` for Trondelag first, based on
+4. Add a file-backed Trondelag runtime summary in the app so Docker/PostGIS is
+   not required for the first runtime slice. Done.
+5. Add a `docs/SPEEDLOCAL_RUNTIME_IMPORT_PLAN.md` for Trondelag first, based on
    V2 `prepare_trondelag_runtime_import.py`. Done.
-5. Only then copy or adapt the Trondelag metadata/import script.
+6. Only then copy or adapt the Trondelag metadata/import script.
    `scripts/prepare_trondelag_runtime_metadata.py` now covers the metadata-only
    seed step without copying large GeoJSON.
 

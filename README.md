@@ -42,12 +42,15 @@ python scripts\validate_delivery_repo.py
 python scripts\validate_static_site.py
 python scripts\validate_region_readiness.py
 python scripts\validate_trondelag_runtime_sources.py
+python scripts\validate_file_runtime_summary.py
 python scripts\prepare_trondelag_runtime_metadata.py
 ```
 
 `validate_trondelag_runtime_sources.py` reads the V2 source archive without
 copying large data files. Override the default source path with
 `SPEEDLOCAL_V2_SOURCE_ROOT` if needed.
+The Streamlit app uses the same file-backed source archive for Trondelag runtime
+status until Postgres/Flowcore is available.
 
 To emit metadata-only SQL for the first Trondelag runtime import:
 

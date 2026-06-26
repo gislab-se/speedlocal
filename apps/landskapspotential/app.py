@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from .catalog import CatalogError, default_region_id, list_regions, load_region
+from .file_runtime import dataset_rows, runtime_source_summary
 from .runtime import file_fallback_rows, selected_backend
 
 
@@ -55,6 +56,14 @@ def _region_detail(region_id: str) -> None:
             st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
         else:
             st.caption("No file fallbacks required for this planned region yet.")
+
+    source_summary = runtime_source_summary(region_id)
+    st.subheader("File Runtime Source")
+    if source_summary.datasets:
+        st.caption(f"{source_summary.message} Source root: {source_summary.source_root}")
+        st.dataframe(pd.DataFrame(dataset_rows(source_summary)), use_container_width=True, hide_index=True)
+    else:
+        st.caption(source_summary.message)
 
     st.subheader("Next Runtime Requirement")
     for item in region.get("readiness_requirements") or []:
