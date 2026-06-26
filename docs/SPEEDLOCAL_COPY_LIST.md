@@ -231,15 +231,17 @@ specific file:
 
 Do this before copying the full app:
 
-1. Add a `scripts/validate_region_readiness.py` validator in SpeedLocal.
+1. Add a `scripts/validate_region_readiness.py` validator in SpeedLocal. Done.
 2. Validate only the current SpeedLocal catalogs:
    - Bornholm is active, EPSG:25833, R6/R7/R8/R9.
    - Trondelag is active, EPSG:25832, R7/R6/R5 only.
    - Skaraborg is planned/disabled.
    - Postgres is preferred and file fallbacks remain documented.
-3. Add a `docs/SPEEDLOCAL_RUNTIME_IMPORT_PLAN.md` for Trondelag first, based on
-   V2 `prepare_trondelag_runtime_import.py`.
-4. Only then copy or adapt the Trondelag metadata/import script.
+3. Add a `scripts/validate_trondelag_runtime_sources.py` validator that checks
+   the V2 source archive without copying large GeoJSON. Done.
+4. Add a `docs/SPEEDLOCAL_RUNTIME_IMPORT_PLAN.md` for Trondelag first, based on
+   V2 `prepare_trondelag_runtime_import.py`. Done.
+5. Only then copy or adapt the Trondelag metadata/import script.
 
 This keeps the slim repo small while still moving toward a real Postgres-backed
 runtime.

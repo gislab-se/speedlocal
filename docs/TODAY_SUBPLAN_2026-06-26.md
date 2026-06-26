@@ -67,6 +67,8 @@ Output: `docs/SPEEDLOCAL_COPY_LIST.md`
   path.
 - `docs/SPEEDLOCAL_COPY_LIST.md` exists with copy and leave-behind decisions.
 - `scripts/validate_region_readiness.py` exists and passes.
+- `scripts/validate_trondelag_runtime_sources.py` exists and passes against the
+  V2 source archive.
 - `docs/SPEEDLOCAL_RUNTIME_IMPORT_PLAN.md` exists for the first DB slice.
 - Validators pass locally.
 - V2 repo remains untouched.

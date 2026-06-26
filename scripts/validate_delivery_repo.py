@@ -27,6 +27,7 @@ REQUIRED_PATHS = [
     "db/init/002_runtime_catalog_contract.sql",
     "scripts/validate_static_site.py",
     "scripts/validate_region_readiness.py",
+    "scripts/validate_trondelag_runtime_sources.py",
     "docs/SPEEDLOCAL_SLIMDOWN_5_DAY_PLAN.md",
     "docs/SPEEDLOCAL_COPY_LIST.md",
     "docs/SPEEDLOCAL_RUNTIME_IMPORT_PLAN.md",

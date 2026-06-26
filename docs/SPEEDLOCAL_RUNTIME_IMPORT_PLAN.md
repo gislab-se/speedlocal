@@ -50,7 +50,8 @@ Expected validation:
 ## Import Sequence
 
 1. Keep the SpeedLocal app on file fallback mode.
-2. Port or adapt the Trondelag metadata validator from V2.
+2. Validate the V2 source archive with:
+   `python scripts\validate_trondelag_runtime_sources.py`
 3. Add a SpeedLocal DB validation script that can run without importing data.
 4. Import metadata rows into `meta.runtime_datasets`.
 5. Import R7/R6/R5 display geometries into `runtime.h3_display_cells`.
@@ -62,6 +63,9 @@ Expected validation:
 10. Switch default backend to Postgres only after comparison passes.
 
 ## Explicit Skips For First Slice
+
+The source validator defaults to `C:\tmp\landskapsanalys-v2-multiregion`.
+Set `SPEEDLOCAL_V2_SOURCE_ROOT` to validate another V2 archive checkout.
 
 - Trondelag placeholder potential manifests.
 - Trondelag placeholder scenario manifests.
