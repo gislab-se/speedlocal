@@ -40,6 +40,7 @@ Open: `http://127.0.0.1:8502`
 ```powershell
 python scripts\validate_delivery_repo.py
 python scripts\validate_static_site.py
+python scripts\validate_region_readiness.py
 ```
 
 Optional database check, after Docker/Postgres is running:

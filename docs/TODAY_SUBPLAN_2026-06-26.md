@@ -36,6 +36,8 @@ bringing generated clutter back into the repo.
 - Identify required assets and static files.
 - Identify runtime file fallback paths that must remain available.
 
+Output: `docs/SPEEDLOCAL_COPY_LIST.md`
+
 ## Block 3 - Region Contract Tightening
 
 - Compare current `regions/index.json` and each `region.json` against the V2
@@ -64,6 +66,8 @@ bringing generated clutter back into the repo.
 - Static landing page is reachable at the new `/speedlocal/landskapspotential/`
   path.
 - `docs/SPEEDLOCAL_COPY_LIST.md` exists with copy and leave-behind decisions.
+- `scripts/validate_region_readiness.py` exists and passes.
+- `docs/SPEEDLOCAL_RUNTIME_IMPORT_PLAN.md` exists for the first DB slice.
 - Validators pass locally.
 - V2 repo remains untouched.
 - `speedlocal` remains small and delivery-focused.
