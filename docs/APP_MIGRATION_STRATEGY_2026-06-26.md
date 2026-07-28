@@ -165,3 +165,15 @@ Next action:
 2. Make Bornholm and Trondelag open through SpeedLocal's region catalog.
 3. Keep Skaraborg planned/disabled until runtime data is complete.
 4. Then start removing panels, layer groups, and technical UI behind validators.
+
+Status update 2026-07-28:
+
+- `SPEEDLOCAL_V2_SOURCE_ROOT` now connects the quarantine port to detailed
+  Bornholm and Trondelag manifests in the external V2 archive.
+- Bornholm and Trondelag execute without uncaught Streamlit exceptions.
+- The root `app.py` now launches the regional quarantine app.
+- The former catalog/runtime status shell remains available as `status_app.py`.
+- The static landing page keeps public Cloud links and rewrites its region
+  buttons to the local regional app on port 8503 when served from localhost.
+- The next implementation slice is to simplify the running V2 baseline behind
+  validators, beginning with the five standard public layer groups.

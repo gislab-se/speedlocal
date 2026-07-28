@@ -18,7 +18,7 @@ private Pages.
 
 ## Interactive App
 
-Current Streamlit Cloud status app:
+Current Streamlit Cloud regional app:
 
 `https://speedlocal-landskapspotential.streamlit.app/`
 
@@ -31,9 +31,12 @@ Region deep links:
 Run locally:
 
 ```powershell
+$env:SPEEDLOCAL_V2_SOURCE_ROOT = "C:\path\to\landskapsanalys-v2-multiregion"
 python -m pip install -r requirements.txt
 python -m streamlit run app.py --server.address 127.0.0.1 --server.port 8502
 ```
+
+The technical runtime status view remains available through `status_app.py`.
 
 Future hosting should use Flowcore, Docker/server runtime, or a compatible
 Streamlit app host.

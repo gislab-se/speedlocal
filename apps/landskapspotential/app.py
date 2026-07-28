@@ -46,7 +46,7 @@ def _render_source_summary(region_id: str) -> None:
             st.success(f"{source_summary.message} Source root: {source_summary.source_root}")
         else:
             st.warning(f"{source_summary.message} Source root: {source_summary.source_root}")
-        st.dataframe(pd.DataFrame(dataset_rows(source_summary)), use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(dataset_rows(source_summary)), width="stretch", hide_index=True)
         return
 
     if "Source root does not exist" in source_summary.message:
@@ -93,7 +93,7 @@ def _region_detail(region_id: str) -> None:
         st.subheader("Runtime Fallbacks")
         rows = file_fallback_rows(region)
         if rows:
-            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
         else:
             st.caption("No file fallbacks required for this planned region yet.")
 

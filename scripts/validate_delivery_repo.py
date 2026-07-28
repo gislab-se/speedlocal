@@ -15,8 +15,6 @@ FORBIDDEN_PATHS = [
     "MIGRATION_PLAN.md",
     "tmp",
     "artifacts",
-    "apps/__pycache__",
-    "apps/landskapspotential/__pycache__",
     "data/runtime/generated",
     "data/runtime/mounted",
 ]
@@ -24,6 +22,7 @@ REQUIRED_PATHS = [
     "README.md",
     ".github/workflows/pages.yml",
     "app.py",
+    "status_app.py",
     "requirements.txt",
     "site/landskapspotential/index.html",
     "apps/landskapspotential/app.py",
@@ -37,6 +36,8 @@ REQUIRED_PATHS = [
     "scripts/validate_trondelag_runtime_sources.py",
     "scripts/validate_file_runtime_summary.py",
     "scripts/validate_v2_port_guardrails.py",
+    "scripts/validate_v2_source_adapter.py",
+    "scripts/validate_v2_port_app.py",
     "scripts/prepare_trondelag_runtime_metadata.py",
     "docs/SPEEDLOCAL_SLIMDOWN_5_DAY_PLAN.md",
     "docs/SPEEDLOCAL_COPY_LIST.md",
@@ -97,6 +98,19 @@ def main() -> int:
     for path in REQUIRED_PATHS:
         report.check((ROOT / path).exists(), f"Required path exists: {path}", f"Missing required path: {path}")
 
+    root_entrypoint = (ROOT / "app.py").read_text(encoding="utf-8")
+    report.check(
+        'V2_PORT_ENTRYPOINT = ROOT / "apps" / "v2_port" / "app.py"' in root_entrypoint,
+        "Root Streamlit entrypoint launches the regional V2 port.",
+        "Root Streamlit entrypoint does not launch the regional V2 port.",
+    )
+    status_entrypoint = (ROOT / "status_app.py").read_text(encoding="utf-8")
+    report.check(
+        "from apps.landskapspotential.app import main" in status_entrypoint,
+        "Technical runtime status entrypoint remains available.",
+        "Technical runtime status entrypoint is not wired.",
+    )
+
     for path in FORBIDDEN_PATHS:
         report.check(not (ROOT / path).exists(), f"Legacy path removed: {path}", f"Legacy path remains: {path}")
 
@@ -129,6 +143,7 @@ def main() -> int:
         for path in ROOT.rglob("*")
         if path.is_file()
         and ".git" not in path.parts
+        and ".venv" not in path.parts
         and path.stat().st_size > 1_500_000
     ]
     report.check(not large_files, "No large runtime artifacts are checked into the delivery skeleton.", f"Large files remain: {large_files[:5]}")

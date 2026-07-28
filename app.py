@@ -1,5 +1,10 @@
-from apps.landskapspotential.app import main
+from __future__ import annotations
+
+from pathlib import Path
+import runpy
 
 
-if __name__ == "__main__":
-    main()
+ROOT = Path(__file__).resolve().parent
+V2_PORT_ENTRYPOINT = ROOT / "apps" / "v2_port" / "app.py"
+
+runpy.run_path(str(V2_PORT_ENTRYPOINT), run_name="__main__")

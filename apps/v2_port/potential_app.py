@@ -1552,7 +1552,7 @@ def _render_tutorial_component(region: dict[str, Any], force_open: bool = False)
     return (afterMarker[0] || frames[0]).container;
   };
 
-  const normalizedText = (value) => String(value || "").replace(/\s+/g, " ").trim().toLowerCase();
+    const normalizedText = (value) => String(value || "").replace(/\\s+/g, " ").trim().toLowerCase();
   const rightPanelScope = () => parentDocument.querySelector('div[data-testid="column"]:has(#right-panel-content-anchor)') || parentDocument;
   const scopeForStep = (step) => (step && step.scope === "rightPanel" ? rightPanelScope() : parentDocument);
   const isVisible = (node) => {
@@ -3343,9 +3343,10 @@ def _render_energy_modeling_panel(
 
     manifest_json = _energy_model_manifest_json(scenario_manifest)
     state: dict[str, Any] = {"available": False, "manifest": scenario_manifest}
+    runtime_root = Path(str(region.get("_v2_source_root") or ROOT))
     try:
-        times_rows, scenario_descriptions, source_status = _cached_energy_inputs(manifest_json, str(ROOT))
-        area_payload = _cached_area_demand(manifest_json, str(ROOT))
+        times_rows, scenario_descriptions, source_status = _cached_energy_inputs(manifest_json, str(runtime_root))
+        area_payload = _cached_area_demand(manifest_json, str(runtime_root))
     except Exception as exc:
         panel.warning(f"Energimodellering kunde inte laddas: {exc}")
         panel.caption("Kontrollera DuckDB/AreaDemand-sökvägar, schema i manifestet och Pythonpaketen duckdb/openpyxl.")
@@ -11235,6 +11236,8 @@ def _wind_polygon_preview_state(
                 runtime_result = _wind_runtime_result(ui_params, layer_selection=selected)
         except Exception as exc:
             runtime_error = str(exc)
+        if not isinstance(runtime_result, dict):
+            runtime_result = {"groups": {}, "combined": None, "cache_key": None}
 
     layers: list[dict[str, Any]] = []
     hex_layers: list[dict[str, Any]] = []

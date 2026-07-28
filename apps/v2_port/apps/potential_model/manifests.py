@@ -9,6 +9,21 @@ from typing import Any
 
 REGIONAL_LANDSCAPE_PIPELINE_ROOT_ENV = "REGIONAL_LANDSCAPE_PIPELINE_ROOT"
 DEFAULT_REGIONAL_LANDSCAPE_PIPELINE_ROOT = Path(r"C:\gislab\regional-landscape-pipeline")
+V2_SOURCE_ROOT_ENV = "SPEEDLOCAL_V2_SOURCE_ROOT"
+V2_SOURCE_REGION_IDS = {"bornholm", "trondelag"}
+DELIVERY_REGION_KEYS = {
+    "country",
+    "data_status",
+    "display_name",
+    "landing_card",
+    "native_crs",
+    "readiness_requirements",
+    "region_id",
+    "runtime",
+    "runtime_note",
+    "status",
+    "web_crs",
+}
 
 
 def repo_root() -> Path:
@@ -44,6 +59,30 @@ def _regional_landscape_pipeline_root() -> Path:
     )
 
 
+def v2_source_root() -> Path | None:
+    value = os.environ.get(V2_SOURCE_ROOT_ENV, "").strip()
+    if not value:
+        return None
+    return Path(value).expanduser().resolve()
+
+
+def _path_within(root: Path, path: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+    except ValueError:
+        return False
+    return True
+
+
+def resolve_v2_source_path(path_value: str | None) -> Path | None:
+    root = v2_source_root()
+    if root is None or not root.is_dir() or not path_value:
+        return None
+    path = Path(str(path_value).strip())
+    candidate = path.resolve() if path.is_absolute() else (root / path).resolve()
+    return candidate if _path_within(root, candidate) else None
+
+
 def _expand_path_tokens(path_value: str) -> str:
     value = str(path_value).strip()
     token_values = [
@@ -71,6 +110,9 @@ def resolve_repo_path(path_value: str | None) -> Path | None:
     port_path = port_root() / path
     if port_path.exists():
         return port_path
+    source_path = resolve_v2_source_path(path_value)
+    if source_path is not None:
+        return source_path
     return repo_path
 
 
@@ -173,7 +215,25 @@ def _load_region_manifest(path: Path) -> dict[str, Any]:
     manifest = read_manifest(str(path)).copy()
     manifest["_manifest_path"] = str(path)
     manifest["_region_package_dir"] = str(path.parent) if path.name == "region.json" else ""
-    return _with_legacy_region_aliases(manifest)
+    manifest = _with_legacy_region_aliases(manifest)
+    region_id = str(manifest.get("region_id") or "").strip().lower()
+    if region_id not in V2_SOURCE_REGION_IDS:
+        manifest["_v2_source_available"] = False
+        return manifest
+
+    source_path = resolve_v2_source_path(f"regions/{region_id}/region.json")
+    if source_path is None or not source_path.is_file():
+        manifest["_v2_source_available"] = False
+        return manifest
+
+    source_manifest = _with_legacy_region_aliases(read_manifest(str(source_path)).copy())
+    source_manifest.update({key: manifest[key] for key in DELIVERY_REGION_KEYS if key in manifest})
+    source_manifest["_manifest_path"] = str(source_path)
+    source_manifest["_region_package_dir"] = str(source_path.parent)
+    source_manifest["_speedlocal_manifest_path"] = str(path)
+    source_manifest["_v2_source_root"] = str(v2_source_root())
+    source_manifest["_v2_source_available"] = True
+    return source_manifest
 
 
 def list_regions() -> list[dict[str, Any]]:
@@ -198,7 +258,15 @@ def resolve_region_path(region: dict[str, Any], path_value: str | None) -> Path 
     expanded = _expand_path_tokens(path_value)
     path = Path(expanded)
     if path.is_absolute():
+        source_root = region.get("_v2_source_root")
+        if source_root and not _path_within(Path(str(source_root)), path):
+            return None
         return path
+    source_root = region.get("_v2_source_root")
+    if source_root:
+        source_path = (Path(str(source_root)) / path).resolve()
+        if _path_within(Path(str(source_root)), source_path):
+            return source_path
     package_dir = region.get("_region_package_dir")
     if package_dir:
         package_path = Path(str(package_dir)) / path

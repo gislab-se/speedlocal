@@ -81,6 +81,10 @@ def main() -> int:
         failures.append(f"Missing expected button text: {sorted(missing_button_text)}")
     if "/speedlocal/landskapspotential/" not in html:
         failures.append("Canonical Pages path is not documented in landing page.")
+    if 'const localAppBase = "http://127.0.0.1:8503/";' not in html:
+        failures.append("Local landing-page routing does not target the regional app on port 8503.")
+    if 'document.querySelectorAll("[data-app-route]")' not in html:
+        failures.append("Local landing-page routing does not update region links.")
 
     print("SpeedLocal static site validation")
     print("=" * 33)
@@ -99,7 +103,8 @@ def main() -> int:
     print("- PASS Existing V1 and V2 app links remain visible.")
     print("- PASS Region buttons use clear open labels.")
     print("- PASS Canonical Pages path is documented.")
-    print("\nRESULT: PASS (8 passed, 0 blocker(s))")
+    print("- PASS Local landing page routes region buttons to port 8503.")
+    print("\nRESULT: PASS (9 passed, 0 blocker(s))")
     return 0
 
 

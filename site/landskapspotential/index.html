@@ -629,8 +629,8 @@
         <h2 id="runtime-title">Statisk sida nu, runtime nästa</h2>
         <p>
           Den kanoniska Pages-adressen är <code>/speedlocal/landskapspotential/</code>.
-          GitHub Pages kör bara den här statiska landningssidan. Korten ovan öppnar Streamlit Cloud som ett publikt
-          katalog- och runtime-statusskal tills Flowcore eller annan serverruntime tar över.
+          GitHub Pages kör bara den här statiska landningssidan. Korten ovan öppnar den regionala SpeedLocal-appen
+          med vald region. Lokalt kopplas knapparna automatiskt till appen på port 8503.
         </p>
       </div>
       <div class="route-list" aria-label="Planerade appvägar">
@@ -731,5 +731,18 @@
   <footer>
     SpeedLocal landskapspotential · ny leveransyta för <code>gislab-se/speedlocal</code>.
   </footer>
+  <script>
+    (() => {
+      const localHosts = new Set(["127.0.0.1", "localhost"]);
+      if (!localHosts.has(window.location.hostname)) {
+        return;
+      }
+      const localAppBase = "http://127.0.0.1:8503/";
+      document.querySelectorAll("[data-app-route]").forEach((link) => {
+        const route = link.getAttribute("data-app-route") || "";
+        link.href = `${localAppBase}${route}`;
+      });
+    })();
+  </script>
 </body>
 </html>
