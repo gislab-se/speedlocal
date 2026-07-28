@@ -7,7 +7,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 PORT_ROOT = ROOT / "apps" / "v2_port"
-PLAN_DOC = ROOT / "docs" / "V2_QUARANTINE_PORT_INVENTORY_2026-06-26.md"
+PLAN_DOC = ROOT / "docs" / "archive" / "V2_QUARANTINE_PORT_INVENTORY_2026-06-26.md"
 FORBIDDEN_REGION_IDS = {"vara", "skara"}
 REQUIRED_DOC_PHRASES = [
     "## Required Now",

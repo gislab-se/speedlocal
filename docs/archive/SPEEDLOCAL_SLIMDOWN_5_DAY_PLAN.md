@@ -1,4 +1,7 @@
-# Speedlocal Bare-Minimum Delivery Repo: 5-Day Migration Plan
+# Archived: Speedlocal Bare-Minimum Delivery Repo: 5-Day Migration Plan
+
+Historical migration plan. The authoritative plan is now
+`../GENERAL_PROGRAM_PLAN.md`.
 
 ## Summary
 

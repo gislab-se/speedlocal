@@ -21,7 +21,8 @@ The Day-1 baseline is complete:
 - A guarded V2 app baseline now exists under `apps/v2_port/`.
 
 The quarantined V2 port is a working baseline to reduce, not final
-architecture. See `docs/APP_MIGRATION_STRATEGY_2026-06-26.md` and
+architecture. See `docs/GENERAL_PROGRAM_PLAN.md` and the historical note under
+`docs/archive/APP_MIGRATION_STRATEGY_2026-06-26.md`.
 `docs/V2_QUARANTINE_PORT_INVENTORY_2026-06-26.md`.
 
 Run `scripts/validate_v2_port_guardrails.py` after any `apps/v2_port/` change.

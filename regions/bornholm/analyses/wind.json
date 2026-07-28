@@ -1,0 +1,30 @@
+{
+  "schema_version": "1.0",
+  "analysis_id": "wind",
+  "region_id": "bornholm",
+  "groups": ["roads", "population", "nature", "culture", "grid_infrastructure"],
+  "layers": [
+    {
+      "id": "roads_large",
+      "label": "Stora vägar",
+      "group_id": "roads",
+      "source": {
+        "provider": "v2_archive",
+        "asset_manifest": "docs/geocontext/acceptance_framework/data/prototype_assets_dagi_landsdel/asset_manifest.csv",
+        "layer_id": "roads_large",
+        "expected_geometry_families": ["line"],
+        "data_representation": "network"
+      },
+      "operation": "distance_exclusion",
+      "parameters": {
+        "buffer_m": {
+          "type": "number",
+          "unit": "m",
+          "default": 100,
+          "minimum": 0,
+          "maximum": 2000
+        }
+      }
+    }
+  ]
+}

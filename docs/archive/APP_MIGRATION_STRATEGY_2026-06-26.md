@@ -1,4 +1,7 @@
-# SpeedLocal App Migration Strategy
+# Archived: SpeedLocal App Migration Strategy
+
+Historical document. The authoritative plan is now
+`../GENERAL_PROGRAM_PLAN.md`.
 
 Date: 2026-06-26
 

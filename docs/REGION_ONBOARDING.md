@@ -3,6 +3,10 @@
 Adding a new region such as Skane should not require hardcoded app branches.
 It does require a complete catalog and runtime contract.
 
+The authoritative migration sequence is in `GENERAL_PROGRAM_PLAN.md`.
+Onboarding currently covers only the five standard groups: roads, population,
+nature, culture, and grid infrastructure. Regional exceptions are deferred.
+
 Minimum catalog:
 
 - `regions/index.json` entry.
@@ -13,7 +17,7 @@ Minimum catalog:
 - Runtime backend preference.
 - Required Postgres tables.
 - File fallback paths while Postgres imports are incomplete.
-- Readiness requirements and known regional exceptions.
+- Readiness requirements and known data limitations.
 
 Minimum data:
 
@@ -22,11 +26,15 @@ Minimum data:
 - Landscape cells or explicit unavailable status.
 - Potential/scenario/acceptance manifests or explicit planned/placeholder status.
 - Region-specific CRS and proxy notes.
+- Declared acceptable geometry families per layer.
+- Data representation metadata where geometry alone is insufficient, such as a
+  population point source versus a population grid.
 
 Validation:
 
 - Region appears from `regions/index.json` only.
 - Planned regions stay disabled until required runtime data exists.
 - Active regions pass independent validation.
-- Trondelag-like constraints are documented in the region package, not hidden in
-  app code.
+- Algorithms dispatch from validated data characteristics, not region ids.
+- Point, grid, and polygon representations of the same theme pass independent
+  adapter validation.

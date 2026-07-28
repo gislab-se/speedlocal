@@ -38,13 +38,12 @@ REQUIRED_PATHS = [
     "scripts/validate_v2_port_guardrails.py",
     "scripts/validate_v2_source_adapter.py",
     "scripts/validate_v2_port_app.py",
+    "scripts/validate_generic_engine.py",
     "scripts/prepare_trondelag_runtime_metadata.py",
-    "docs/SPEEDLOCAL_SLIMDOWN_5_DAY_PLAN.md",
-    "docs/SPEEDLOCAL_COPY_LIST.md",
-    "docs/SPEEDLOCAL_RUNTIME_IMPORT_PLAN.md",
+    "AGENTS.md",
+    "docs/README.md",
+    "docs/GENERAL_PROGRAM_PLAN.md",
     "docs/REPO_HYGIENE.md",
-    "docs/APP_MIGRATION_STRATEGY_2026-06-26.md",
-    "docs/V2_QUARANTINE_PORT_INVENTORY_2026-06-26.md",
 ]
 
 

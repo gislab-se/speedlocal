@@ -36,13 +36,16 @@ files. Before copying anything from V2, record the decision in
 runtime contracts change.
 
 See `docs/REPO_HYGIENE.md` for the keep/delete rules and cleanup checklist.
+The authoritative product and implementation direction is
+`docs/GENERAL_PROGRAM_PLAN.md`.
 
 ## Run Locally
 
 ```powershell
-cd C:\tmp\speedlocal
-python -m pip install -r requirements.txt
-python -m streamlit run app.py --server.address 127.0.0.1 --server.port 8502
+cd C:\gislab\projekt\speedlocal
+& ".\.venv\Scripts\python.exe" -m pip install -r requirements.txt
+$env:SPEEDLOCAL_V2_SOURCE_ROOT = "C:\gislab\data\landskapsanalys-v2-multiregion"
+& ".\.venv\Scripts\python.exe" -m streamlit run app.py --server.address 127.0.0.1 --server.port 8502
 ```
 
 Open: `http://127.0.0.1:8502`
@@ -64,6 +67,7 @@ python scripts\validate_trondelag_runtime_sources.py
 python scripts\validate_file_runtime_summary.py
 python scripts\validate_v2_port_guardrails.py
 python scripts\prepare_trondelag_runtime_metadata.py
+python scripts\validate_generic_engine.py
 ```
 
 `validate_trondelag_runtime_sources.py` and `validate_file_runtime_summary.py`

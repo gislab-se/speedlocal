@@ -1,4 +1,7 @@
-# V2 Quarantine Port Inventory
+# Archived: V2 Quarantine Port Inventory
+
+Historical migration inventory. The authoritative plan is now
+`../GENERAL_PROGRAM_PLAN.md`.
 
 Date: 2026-06-26
 

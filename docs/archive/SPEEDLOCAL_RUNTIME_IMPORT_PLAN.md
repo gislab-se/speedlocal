@@ -1,4 +1,7 @@
-# SpeedLocal Runtime Import Plan
+# Archived: SpeedLocal Runtime Import Plan
+
+Database import is deferred. The authoritative plan is now
+`../GENERAL_PROGRAM_PLAN.md`.
 
 Date: 2026-06-26
 

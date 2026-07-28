@@ -1,4 +1,7 @@
-# SpeedLocal Today Subplan - 2026-06-26
+# Archived: SpeedLocal Today Subplan - 2026-06-26
+
+Historical daily plan. The authoritative plan is now
+`../GENERAL_PROGRAM_PLAN.md`.
 
 ## Goal
 

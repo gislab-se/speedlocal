@@ -1,4 +1,7 @@
-# PostGIS Runtime Import Agent Prompt - 2026-06-26
+# Archived: PostGIS Runtime Import Agent Prompt - 2026-06-26
+
+PostGIS work is deferred. The authoritative plan is now
+`../GENERAL_PROGRAM_PLAN.md`.
 
 Use this prompt for an implementation agent that will import the first
 SpeedLocal runtime data into Postgres/PostGIS.

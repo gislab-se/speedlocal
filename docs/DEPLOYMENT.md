@@ -28,6 +28,10 @@ Region deep links:
 - `https://speedlocal-landskapspotential.streamlit.app/?region=trondelag`
 - `https://speedlocal-landskapspotential.streamlit.app/?region=skaraborg`
 
+The current product and migration sequence is defined in
+`GENERAL_PROGRAM_PLAN.md`. PostGIS is deferred until the generic file-backed
+engine has parity for the five standard public groups.
+
 Run locally:
 
 ```powershell

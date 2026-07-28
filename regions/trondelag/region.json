@@ -9,6 +9,9 @@
   "web_crs": "EPSG:4326",
   "available_h3_resolutions": [7, 6, 5],
   "default_h3_resolution": 7,
+  "analysis_manifests": {
+    "wind": "regions/trondelag/analyses/wind.json"
+  },
   "landing_card": {
     "title": "Tröndelag",
     "subtitle": "R7 regional pilot",

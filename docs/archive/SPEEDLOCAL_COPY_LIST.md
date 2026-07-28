@@ -1,4 +1,7 @@
-# SpeedLocal Copy List And Leave-Behind Decisions
+# Archived: SpeedLocal Copy List And Leave-Behind Decisions
+
+Historical migration inventory. The authoritative plan is now
+`../GENERAL_PROGRAM_PLAN.md`.
 
 Date: 2026-06-26
 
