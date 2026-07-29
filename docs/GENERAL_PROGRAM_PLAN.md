@@ -1,148 +1,171 @@
-# SpeedLocal general program plan
+# SpeedLocal V2 Final plan
 
 Status: authoritative
-Started: 2026-07-28
+Strategy selected: 2026-07-29
 
-## Objective
+## Product goal
 
-Build one manifest-driven geospatial analysis program that can run the same
-analysis for any region whose data can be transformed into the common
-contracts. Bornholm and Trondelag are the initial behavior references.
-Skaraborg is the first planned onboarding target.
+Deliver one landscape-analysis program for Bornholm, Trøndelag, and Skaraborg
+that shows how:
 
-The program is configured with:
+- wind and solar allocation;
+- energy-model scenarios;
+- landscape restrictions;
+- proximity to grid infrastructure; and
+- social acceptance
 
-- a public region catalog;
-- one region package per region;
-- dynamic analysis and layer manifests;
-- shared group, source, parameter, operation, and result contracts;
-- one source resolver for external files and later PostGIS;
-- validators that fail closed before data reaches the UI.
+change possible establishment area and landscape impact.
 
-The target API is:
+The same program must later accept another bounded area mainly through data
+mapping, manifests, and validation rather than copied application code.
 
-```python
-result = run_analysis(
-    region="bornholm",
-    analysis="wind",
-    layers=["roads_large"],
-    parameters={"roads_large": {"buffer_m": 500}},
-    scenario="high",
-)
-```
+## Chosen strategy: V2 Final
 
-Streamlit is a client of this API. Analysis code must not depend on Streamlit.
+V2 remains the running behavior reference while it is dismantled one complete
+user-visible slice at a time.
 
-## Standard public groups
+For each slice:
 
-Implement only these groups until the common baseline works:
+1. characterize the current V2 behavior for Bornholm and Trøndelag;
+2. identify every function, UI control, data source, parameter, and regional
+   assumption involved;
+3. classify code as keep, extract, configure, rewrite, or remove;
+4. move reusable analysis out of Streamlit and into `speedlocal/`;
+5. replace hardcoded data choices with validated manifests or data adapters;
+6. compare the new result with V2;
+7. connect the generic result to the existing UI;
+8. remove the replaced V2 path after parity is proven.
+
+We do not mechanically clean all 14,000 lines function by function. We inspect
+functions within a complete behavior slice so that obsolete features can be
+deleted instead of polished.
+
+## Product baseline
+
+Implement the common baseline in this order:
 
 1. roads;
-2. population;
+2. population and settlement;
 3. nature;
 4. culture;
-5. grid infrastructure.
+5. grid infrastructure;
+6. combined restriction result;
+7. wind potential;
+8. solar potential;
+9. continuous wind/solar allocation;
+10. energy scenarios;
+11. social acceptance;
+12. result explanation, map, and summary.
 
-Regional exceptions and additional groups are deferred. Do not add
-region-id-based analysis branches in this phase.
+Regional extra groups are deferred until the common baseline works. They must
+later use common operations or explicit capabilities rather than region-name
+branches.
 
-## Data-driven adaptation
-
-Algorithms may branch on validated data characteristics, not geography names.
-The layer contract declares acceptable geometry families, and the validator
-checks the actual data.
-
-Examples:
-
-- line roads use line-distance processing;
-- point population uses point-distance or aggregation processing;
-- population grids use grid-cell coverage or aggregation processing;
-- population polygons use polygon intersection or aggregation processing.
-
-Unsupported or ambiguous geometry fails closed. Adding a new data adapter must
-extend the common operation contract and its validator.
-
-## Architecture
+## Architecture destination
 
 ```text
-Streamlit UI
-    -> run_analysis(...)
-        -> region + analysis catalogs
-        -> contract validation
-        -> shared source resolver
-        -> geometry-aware operation executor
-        -> AnalysisResult
+Region manifests + mapped source data
+                 ↓
+      contracts and validation
+                 ↓
+       run_analysis(request)
+                 ↓
+    wind, solar, scenario, acceptance
+                 ↓
+          AnalysisResult
+                 ↓
+         thin Streamlit UI
 ```
 
-Current modules:
+The final Streamlit flow should approach:
 
-- `speedlocal/contracts.py`: common contracts and supported capabilities.
-- `speedlocal/catalogs.py`: public region and analysis manifest loading.
-- `speedlocal/paths.py`: provider roots and traversal-safe path resolution.
-- `speedlocal/sources.py`: runtime asset lookup and geometry detection.
-- `speedlocal/validation.py`: contract and runtime validation.
-- `speedlocal/engine.py`: Streamlit-independent public analysis API.
+```python
+request = build_analysis_request(ui_state)
+result = run_analysis(request)
+render_result(result)
+```
 
-## Migration sequence
+Streamlit owns interaction and presentation. `speedlocal/` owns contracts,
+source resolution, validation, and analysis.
 
-### Slice 1: large roads — implemented
+## Data-driven rules
 
-- Bornholm and Trondelag declare `roads_large` in `analyses/wind.json`.
-- Runtime assets resolve from the external V2 archive.
-- Actual GeoJSON geometry is detected and validated as line data.
-- `distance_exclusion` runs against the existing V2 H3 distance tables.
-- `scripts/validate_generic_engine.py` validates both regions and monotonic
-  buffer behavior.
+- Public regions come only from `regions/index.json`.
+- Region and analysis availability come from manifests.
+- Algorithms may branch on validated geometry and data representation, never
+  on region names.
+- Population may select point, grid, or polygon processing.
+- CRS normalization belongs in shared source/adaptation code.
+- Missing or ambiguous data fails closed.
+- Large runtime data remains outside Git.
+- V2 remains read-only.
 
-This is not yet wired into the public Streamlit surface. V2 remains the visible
-behavior while the generic engine gains parity.
+## Code classification
 
-### Slice 2: complete roads
+Every function touched by a slice receives one decision:
 
-- Add the remaining public road layers through manifests.
-- Make the dynamic layer list replace the Python road allowlist.
-- Compare generic results with V2 for both active regions.
-- Expose the generic roads controller in Streamlit behind a temporary parity
-  flag.
-- Remove the old road path only after validation.
+- **Keep:** already small, general, and testable.
+- **Extract:** reusable analysis that belongs outside Streamlit.
+- **Configure:** paths, layers, labels, or parameters that belong in manifests.
+- **Rewrite:** mixed UI/analysis code or code with unclear responsibilities.
+- **Remove:** duplicate, debug, prototype, obsolete, or nonessential behavior.
 
-### Slice 3: population
+## Current status
 
-- Define point, grid, and polygon population adapters.
-- Dispatch by validated geometry/data representation.
-- Run equivalent fixtures for at least point and grid inputs.
-- Migrate Bornholm and Trondelag without region-specific algorithm branches.
+Implemented foundation:
 
-### Slices 4–6
+- generic contracts, catalog loading, source resolution, and validation under
+  `speedlocal/`;
+- manifest-driven `roads_large` for Bornholm and Trøndelag;
+- geometry-driven line adapter;
+- generic distance-exclusion execution;
+- validation against both V2 runtime archives.
 
-Migrate nature, culture, and grid infrastructure one group at a time. Each
-slice follows the same contract, parity, UI, and removal cycle.
+Current slice:
 
-### Slice 7: onboarding proof
+- complete the public roads behavior;
+- characterize the V2 road path before changing it;
+- add remaining valid road layers dynamically;
+- prove result parity;
+- connect the generic road result to Streamlit;
+- remove only the replaced road code.
 
-- Add a small synthetic region using only manifests and test data.
-- Prove that no app or engine code changes are required.
-- Use the proven onboarding contract for Skaraborg.
+## Definition of done for a slice
 
-### Later
-
-- Add PostGIS as another source provider after file-backed parity is stable.
-- Consider additional groups and regional capabilities only after all five
-  standard groups work.
-
-## Definition of done for each slice
-
-- No region-name branch selects the algorithm.
+- Current V2 inputs and outputs are documented.
+- Code classification is recorded in the daily log.
+- No region name selects the new algorithm.
+- All paths use the shared resolver.
 - Contract and runtime validators pass.
-- Missing data fails closed with a useful message.
-- Results match the V2 behavior reference where V2 coverage exists.
-- Streamlit receives a serializable result rather than performing analysis.
-- The replaced V2 path can be removed without losing validated behavior.
+- V2 parity passes within a documented tolerance.
+- The public UI still works for both active regions.
+- Obsolete code is removed after parity.
+- Documentation and the daily log describe what changed.
+
+## Delivery plan and daily control
+
+- `DELIVERY_PLAN.md` contains the dated route to delivery.
+- `DAILY_WORKFLOW.md` defines the daily planning and handoff routine.
+- `daily/YYYY-MM-DD.md` records each workday's subplan, decisions, completed
+  work, validation, blockers, and next starting point.
+
+If work reveals that the delivery sequence or estimate is wrong, update
+`DELIVERY_PLAN.md` explicitly. Do not silently drift from the plan.
+
+## Stop and reassess when
+
+- a slice cannot reproduce V2 behavior;
+- two consecutive workdays pass without a testable slice result;
+- every new layer requires new UI code;
+- region names enter the generic analysis engine;
+- contract work grows without visible functionality;
+- required Skaraborg data is unavailable;
+- the same old and new implementation remain active after parity.
 
 ## Explicit non-goals
 
-- Importing V3.
-- Rewriting the whole application before a working vertical slice exists.
-- Copying large V2 runtime files into this repository.
-- PostGIS migration before file-backed engine parity.
-- Regional exception handling before the five standard groups work.
+- A line-by-line beautification of the complete monolith.
+- Importing V3 as the product baseline.
+- Copying large runtime datasets into this repository.
+- PostGIS work before file-backed feature parity.
+- Regional extras before the common baseline works.

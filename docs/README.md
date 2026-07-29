@@ -3,6 +3,9 @@
 ## Current
 
 - `GENERAL_PROGRAM_PLAN.md` — authoritative product and implementation plan.
+- `DELIVERY_PLAN.md` — dated milestones from current work to acceptance review.
+- `DAILY_WORKFLOW.md` — required daily planning and handoff routine.
+- `daily/` — dated subplans, decisions, validation, and next starting points.
 - `REGION_ONBOARDING.md` — region and data onboarding contract.
 - `DEPLOYMENT.md` — current local and hosted runtime instructions.
 - `REPO_HYGIENE.md` — repository boundaries and cleanup rules.

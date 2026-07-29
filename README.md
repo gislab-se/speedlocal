@@ -38,6 +38,8 @@ runtime contracts change.
 See `docs/REPO_HYGIENE.md` for the keep/delete rules and cleanup checklist.
 The authoritative product and implementation direction is
 `docs/GENERAL_PROGRAM_PLAN.md`.
+The dated route to delivery and daily working routine are documented in
+`docs/DELIVERY_PLAN.md` and `docs/DAILY_WORKFLOW.md`.
 
 ## Run Locally
 

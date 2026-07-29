@@ -43,6 +43,9 @@ REQUIRED_PATHS = [
     "AGENTS.md",
     "docs/README.md",
     "docs/GENERAL_PROGRAM_PLAN.md",
+    "docs/DELIVERY_PLAN.md",
+    "docs/DAILY_WORKFLOW.md",
+    "docs/daily/2026-07-29.md",
     "docs/REPO_HYGIENE.md",
 ]
 
