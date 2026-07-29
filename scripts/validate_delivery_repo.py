@@ -39,6 +39,7 @@ REQUIRED_PATHS = [
     "scripts/validate_v2_source_adapter.py",
     "scripts/validate_v2_port_app.py",
     "scripts/validate_generic_engine.py",
+    "scripts/validate_generic_roads_app.py",
     "scripts/prepare_trondelag_runtime_metadata.py",
     "AGENTS.md",
     "docs/README.md",
@@ -46,6 +47,7 @@ REQUIRED_PATHS = [
     "docs/DELIVERY_PLAN.md",
     "docs/DAILY_WORKFLOW.md",
     "docs/daily/2026-07-29.md",
+    "docs/slices/roads.md",
     "docs/REPO_HYGIENE.md",
 ]
 

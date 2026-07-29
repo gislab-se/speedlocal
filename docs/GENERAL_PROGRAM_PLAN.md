@@ -124,11 +124,12 @@ Implemented foundation:
 Current slice:
 
 - complete the public roads behavior;
-- characterize the V2 road path before changing it;
-- add remaining valid road layers dynamically;
-- prove result parity;
-- connect the generic road result to Streamlit;
-- remove only the replaced road code.
+- characterization: complete;
+- dynamic medium and large road layers: complete;
+- generic group result and V2 parity: complete;
+- temporary Streamlit parity surface: complete;
+- remaining promotion work: connect the result to the public V2 flow, then
+  remove only the replaced road code.
 
 ## Definition of done for a slice
 

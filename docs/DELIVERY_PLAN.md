@@ -40,6 +40,14 @@ The delivery is complete when:
 | 25 Aug | Product cleanup | Remove replaced V2 paths, simplify UI, update copy and labels |
 | 26 Aug | Acceptance review | Full regression, delivery docs, known limitations, release candidate |
 
+Current milestone status:
+
+- Roads characterization: complete.
+- Roads generic gate: complete.
+- Roads parity gate: complete for Bornholm and Trøndelag.
+- Roads promotion gate: temporary parity UI complete; public V2 integration
+  and old-path removal remain.
+
 ## Slice gates
 
 Each slice has four gates:

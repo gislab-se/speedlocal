@@ -16,6 +16,7 @@ class SourceContract:
     layer_id: str
     expected_geometry_families: tuple[str, ...]
     data_representation: str = "auto"
+    source_geometry_required: bool = True
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,7 @@ def source_contract(raw: dict[str, Any]) -> SourceContract:
         layer_id=str(raw["layer_id"]),
         expected_geometry_families=tuple(str(item) for item in raw["expected_geometry_families"]),
         data_representation=str(raw.get("data_representation") or "auto"),
+        source_geometry_required=bool(raw.get("source_geometry_required", True)),
     )
 
 

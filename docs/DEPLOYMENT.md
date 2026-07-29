@@ -32,6 +32,16 @@ The current product and migration sequence is defined in
 `GENERAL_PROGRAM_PLAN.md`. PostGIS is deferred until the generic file-backed
 engine has parity for the five standard public groups.
 
+Temporary roads parity surface:
+
+```powershell
+$env:SPEEDLOCAL_V2_SOURCE_ROOT = "C:\gislab\data\landskapsanalys-v2-multiregion"
+$env:SPEEDLOCAL_GENERIC_ROADS_PARITY = "1"
+& ".\.venv\Scripts\python.exe" -m streamlit run app.py --server.port 8503
+```
+
+Unset `SPEEDLOCAL_GENERIC_ROADS_PARITY` to run the ordinary V2 surface.
+
 Run locally:
 
 ```powershell

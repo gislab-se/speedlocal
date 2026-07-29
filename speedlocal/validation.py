@@ -18,6 +18,7 @@ class ValidatedLayer:
     assets: LayerAssets
     geometry_family: str
     processing_adapter: str
+    geometry_validation: str
 
 
 def select_processing_adapter(
@@ -61,7 +62,19 @@ def validate_layer(layer: LayerContract) -> ValidatedLayer:
         raise ValueError(f"Layer {layer.id} asset status is {assets.manifest_status!r}")
     if not assets.geojson_path.is_file() or not assets.distance_path.is_file():
         raise FileNotFoundError(f"Layer {layer.id} runtime assets are incomplete")
-    detected = detect_geojson_geometry_family(assets.geojson_path)
+    try:
+        detected = detect_geojson_geometry_family(assets.geojson_path)
+        geometry_validation = "detected"
+    except ValueError:
+        if layer.source.source_geometry_required:
+            raise
+        if len(layer.source.expected_geometry_families) != 1:
+            raise ValueError(
+                f"Layer {layer.id} needs exactly one declared geometry family "
+                "when source geometry is optional"
+            )
+        detected = layer.source.expected_geometry_families[0]
+        geometry_validation = "declared_from_validated_distance_artifact"
     if detected not in layer.source.expected_geometry_families:
         raise ValueError(
             f"Layer {layer.id} geometry is {detected}; expected {layer.source.expected_geometry_families}"
@@ -80,4 +93,5 @@ def validate_layer(layer: LayerContract) -> ValidatedLayer:
         assets=assets,
         geometry_family=detected,
         processing_adapter=adapter,
+        geometry_validation=geometry_validation,
     )

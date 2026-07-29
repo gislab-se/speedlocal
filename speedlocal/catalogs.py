@@ -24,6 +24,11 @@ def load_region(region_id: str) -> dict[str, Any]:
     return region
 
 
+def list_regions() -> list[dict[str, Any]]:
+    index = _read_json(repo_root() / "regions" / "index.json")
+    return [load_region(str(region_id)) for region_id in index.get("regions") or []]
+
+
 def load_analysis(region_id: str, analysis_id: str) -> AnalysisContract:
     region = load_region(region_id)
     manifest_rel = (region.get("analysis_manifests") or {}).get(analysis_id)

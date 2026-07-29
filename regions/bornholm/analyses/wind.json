@@ -5,6 +5,29 @@
   "groups": ["roads", "population", "nature", "culture", "grid_infrastructure"],
   "layers": [
     {
+      "id": "roads_medium",
+      "label": "Mellanstora vägar",
+      "group_id": "roads",
+      "source": {
+        "provider": "v2_archive",
+        "asset_manifest": "docs/geocontext/acceptance_framework/data/prototype_assets_dagi_landsdel/asset_manifest.csv",
+        "layer_id": "roads_medium",
+        "expected_geometry_families": ["line"],
+        "data_representation": "precomputed_distance",
+        "source_geometry_required": false
+      },
+      "operation": "distance_exclusion",
+      "parameters": {
+        "buffer_m": {
+          "type": "number",
+          "unit": "m",
+          "default": 100,
+          "minimum": 0,
+          "maximum": 2000
+        }
+      }
+    },
+    {
       "id": "roads_large",
       "label": "Stora vägar",
       "group_id": "roads",
