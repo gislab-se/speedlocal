@@ -66,6 +66,11 @@ in
 The 45-file package is a V2 Final data transport, not a copy or replacement of
 the frozen V2 reference app.
 
+Published Trøndelag runtime prerelease:
+`https://github.com/gislab-se/speedlocal/releases/tag/v2-final-runtime-trondelag-r7-2026-07-30.1`.
+The Streamlit Cloud app may require explicit reviewer access even though the
+repository and runtime package are public.
+
 The start script refuses to launch a second server when port `8502` already
 has an active listener. Stop the existing V2 Final server before restarting it.
 

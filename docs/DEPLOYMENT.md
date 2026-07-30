@@ -135,6 +135,34 @@ fixtures for diagnostics. These are not part of the active deployment gate.
 Before Bornholm activation, its V1 reference must be technically pinned and a
 cloud provider must satisfy the separately accepted regional runtime contract.
 
+## Current runtime publication
+
+The Trøndelag runtime prerelease is published at:
+
+`https://github.com/gislab-se/speedlocal/releases/tag/v2-final-runtime-trondelag-r7-2026-07-30.1`
+
+It contains exactly the ZIP, canonical manifest, and two-line checksum
+sidecar declared by the tracked contract. Anonymous redownload verification
+passed for all three assets. The ZIP and manifest hashes are respectively:
+
+- `43e6ccc8cae99c7a7e15f85d92a8e3e9c15a077abfb9b28bd4c12a92fc63202c`;
+- `079fa695287141026ba5bf6b288986904d3bc75c388cf9c0f2e30e0854cef894`.
+
+Transport checkpoint `d914563f49e95c65d13c79d6a66b08b4bc26392b`
+contains the contract and bootstrap. Application checkpoint
+`72f1783d03166434ad5e35e1a8a85b27312d5e33` adds the verified Windows
+directory-promotion fix. A clean machine-style run with no local V2 source
+variable downloaded the public ZIP, verified and materialized it, rendered the
+real root app, and passed the 20/20 interactive gate including the
+300 -> 1000 m road change.
+
+The Streamlit Cloud app is currently access-controlled: anonymous requests to
+both the app and its health endpoint redirect to Streamlit authentication.
+Therefore an authorized user must confirm the deployed commit and repeat the
+Trøndelag interaction before external publication is marked complete.
+Colleagues must be granted access in Streamlit Cloud if they are expected to
+review the private deployment.
+
 ## End-of-session publication
 
 1. Run focused slice tests and the full required regression set.

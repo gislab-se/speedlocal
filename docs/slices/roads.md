@@ -190,8 +190,8 @@ artifact is transport evidence only; frozen V2 remains the behavior oracle.
 
 This is an R7 checkpoint, not full roads promotion:
 
-1. complete external cold-start and interaction smoke verification for the
-   published runtime package;
+1. complete the authenticated external interaction smoke verification for the
+   published and clean-cold-start-validated runtime package;
 2. add canonical R7-to-R6/R5 rollups for `roads_large`;
 3. remove its remaining legacy R6/R5 calculation only after those views pass;
 4. migrate `roads_medium`;

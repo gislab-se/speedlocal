@@ -50,8 +50,9 @@ Current milestone status:
   300/1000 m; localhost review approved. Port 8503 is a secondary historical
   Trøndelag-only check, not a replacement for the `75ba148` full-flow gate.
 - Trøndelag cloud runtime transport: 45-file, checksum-pinned Release package
-  implemented and validated locally through the real root entrypoint; external
-  Streamlit smoke verification is the remaining publication gate.
+  published, anonymously redownloaded, and validated through a clean public
+  cold start and the real root entrypoint; authenticated Streamlit Cloud smoke
+  verification is the remaining publication gate.
 - Bornholm catalog/source onboarding: in progress. Its 300/400 m polygon
   fixtures are diagnostic replay, not public parity.
 - Bornholm V1 characterization and technical pinning: not started.
