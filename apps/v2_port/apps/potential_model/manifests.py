@@ -6,10 +6,11 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from speedlocal.paths import provider_root, resolve_source_path
+
 
 REGIONAL_LANDSCAPE_PIPELINE_ROOT_ENV = "REGIONAL_LANDSCAPE_PIPELINE_ROOT"
 DEFAULT_REGIONAL_LANDSCAPE_PIPELINE_ROOT = Path(r"C:\gislab\regional-landscape-pipeline")
-V2_SOURCE_ROOT_ENV = "SPEEDLOCAL_V2_SOURCE_ROOT"
 V2_SOURCE_REGION_IDS = {"bornholm", "trondelag"}
 DELIVERY_REGION_KEYS = {
     "behavior_reference",
@@ -61,10 +62,10 @@ def _regional_landscape_pipeline_root() -> Path:
 
 
 def v2_source_root() -> Path | None:
-    value = os.environ.get(V2_SOURCE_ROOT_ENV, "").strip()
-    if not value:
+    try:
+        return provider_root("v2_archive")
+    except FileNotFoundError:
         return None
-    return Path(value).expanduser().resolve()
 
 
 def _path_within(root: Path, path: Path) -> bool:
@@ -76,12 +77,13 @@ def _path_within(root: Path, path: Path) -> bool:
 
 
 def resolve_v2_source_path(path_value: str | None) -> Path | None:
-    root = v2_source_root()
-    if root is None or not root.is_dir() or not path_value:
+    if not path_value:
         return None
-    path = Path(str(path_value).strip())
-    candidate = path.resolve() if path.is_absolute() else (root / path).resolve()
-    return candidate if _path_within(root, candidate) else None
+    try:
+        candidate = resolve_source_path("v2_archive", str(path_value).strip())
+    except (FileNotFoundError, ValueError):
+        return None
+    return candidate
 
 
 def _expand_path_tokens(path_value: str) -> str:

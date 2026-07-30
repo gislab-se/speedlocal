@@ -64,7 +64,9 @@
 - Analysis and layer availability come from region manifests.
 - All source paths go through the shared provider resolver.
 - Keep large runtime data outside Git. Use `SPEEDLOCAL_V2_SOURCE_ROOT` for the
-  read-only V2 archive until another validated provider is available.
+  complete read-only local V2 archive. With that variable unset, V2 Final may
+  materialize only the checksum-pinned public runtime package declared under
+  `data/runtime/manifests/`; never commit its ZIP or extracted cache.
 - Fail closed on missing manifests, unsupported geometry, invalid paths, or
   incomplete runtime assets.
 - Every migrated slice needs a validator and evidence against the accepted
@@ -92,10 +94,16 @@ $env:SPEEDLOCAL_V2_SOURCE_ROOT = "C:\gislab\data\landskapsanalys-v2-multiregion"
 & ".\.venv\Scripts\python.exe" -B scripts\validate_generic_engine.py
 & ".\.venv\Scripts\python.exe" -B scripts\validate_v2_final_baseline_parity.py
 & ".\.venv\Scripts\python.exe" -B scripts\validate_v2_port_app.py
+& ".\.venv\Scripts\python.exe" -B scripts\validate_runtime_bundle.py
 ```
 
 Also run the existing delivery and V2 guardrail validators for changes that
 touch their scope.
+
+When the runtime package or bootstrap changes, rebuild the ZIP outside Git and
+run `validate_runtime_bundle.py --release-archive <zip>` before publication.
+Full-archive validators still use the complete local V2 archive; the
+Trøndelag-only cloud package is not a Bornholm diagnostic fixture.
 
 `scripts/validate_bornholm_v2_diagnostics.py` is a separate onboarding and
 archive-integrity check. Passing it must never be reported as Bornholm product

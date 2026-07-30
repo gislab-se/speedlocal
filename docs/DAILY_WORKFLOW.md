@@ -26,6 +26,9 @@ the delivery plan, not a replacement for it.
 - Record important discoveries and decisions in the daily file.
 - Keep V2 Final functional throughout the slice and leave frozen V2 untouched.
 - Run focused validation after each meaningful step.
+- If runtime transport changes, run the synthetic bundle security validator,
+  rebuild the real untracked package, and validate that exact ZIP through the
+  root Streamlit entrypoint.
 - Fully restart the local Streamlit server after changing an imported
   function signature or module boundary. Stop the complete previous process
   tree, confirm that the app port has no listener, and then start one instance
@@ -55,13 +58,16 @@ After local validation and visual localhost approval:
 1. complete the daily log except for post-push results;
 2. create one coherent work-checkpoint commit and push `main` to `origin`;
 3. verify that exact work-checkpoint commit on GitHub;
-4. verify the externally deployed V2 Final app and compare the affected
+4. if the runtime package changed, verify the immutable Release assets and
+   their tracked SHA-256 before testing Streamlit Cloud;
+5. verify the externally deployed V2 Final app and compare the affected
    behavior with the active region's accepted reference;
-5. if `site/**` changed, verify the GitHub Pages workflow and public page;
-6. record the work-checkpoint hash, URLs, deployment result, and comparison
+6. if `site/**` changed, verify the GitHub Pages workflow and public page;
+7. record the work-checkpoint hash, URLs, runtime release, deployment result,
+   and comparison
    result in the daily log;
-7. create and push one small publication-record commit;
-8. confirm the publication-record commit on GitHub and a clean local worktree.
+8. create and push one small publication-record commit;
+9. confirm the publication-record commit on GitHub and a clean local worktree.
 
 Pushing is not the same as publishing. A session is published only after the
 external app has been checked and the result has been recorded. The second
@@ -131,6 +137,7 @@ Exact file, function, or test to open next.
 - Push:
 - GitHub checkpoint:
 - V2 Final deployment:
+- Runtime release, if applicable:
 - Accepted-reference comparison:
 - GitHub Pages, if applicable:
 - Publication-record commit:

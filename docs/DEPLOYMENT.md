@@ -90,25 +90,45 @@ The technical runtime status view remains available through `status_app.py`.
 GitHub Actions in this repository publishes only the static Pages site. No
 tracked workflow publishes the interactive Streamlit app.
 
-The following external Streamlit Cloud settings are required and must be
-verified in the Streamlit Cloud owner interface:
+The external app has served the current root entrypoint from:
 
 - repository: `gislab-se/speedlocal`;
 - branch: `main`;
 - entrypoint: `app.py`;
-- auto-deploy behavior and the deployed Git commit;
-- Python runtime and system dependencies;
-- secrets and environment variables;
-- a cloud-accessible runtime-data provider.
+- URL:
+  `https://speedlocal-landskapspotential.streamlit.app/?region=trondelag`.
 
-Only the entrypoint and Python dependencies are visible in this repository.
-The source connection, deployed commit, secrets, and runtime provider are not
-yet verified.
+The previous cloud error proved that this source connection and auto-deploy
+path were active, but also proved that a Windows archive path was not a cloud
+provider. V2 Final now resolves that gap before importing the monolith.
 
-`SPEEDLOCAL_V2_SOURCE_ROOT` is a localhost-only fallback when it points to a
-Windows `C:\...` archive. That path cannot supply a cloud deployment. Until a
-cloud-accessible archive or validated database is configured, a successful
-GitHub push does not guarantee that external maps and data work.
+The cloud runtime contract is:
+
+- tracked manifest:
+  `data/runtime/manifests/trondelag/v2-final-runtime-r7-2026-07-30.1.json`;
+- release tag: `v2-final-runtime-trondelag-r7-2026-07-30.1`;
+- archive:
+  `speedlocal-v2-final-runtime-trondelag-r7-2026-07-30.1.zip`;
+- archive bytes: `15,730,706`;
+- expanded bytes: `101,938,537` across exactly 45 files;
+- archive SHA-256:
+  `43e6ccc8cae99c7a7e15f85d92a8e3e9c15a077abfb9b28bd4c12a92fc63202c`;
+- content-inventory SHA-256:
+  `f05045ac0a91fd0f83629d7507157ed62c504f1a95034339200c4e784d4212c2`.
+
+With `SPEEDLOCAL_V2_SOURCE_ROOT` unset, `app.py` downloads that public Release
+asset over HTTPS, verifies its exact byte count and outer checksum, safely
+extracts only the declared files, verifies every inner checksum, caches the
+verified root under the operating-system temporary directory, and only then
+sets the existing provider environment variable. Invalid explicit local roots,
+unsafe ZIP members, inventory drift, and checksum failures stop before the V2
+monolith is imported. No Streamlit secret is needed for this public package.
+
+`SPEEDLOCAL_V2_SOURCE_ROOT` remains the explicit local/full-archive override.
+It must never be configured to a Windows path in Streamlit Cloud. The cloud
+package is Trøndelag-only runtime transport and deliberately omits Bornholm
+diagnostic assets. Full-archive and Bornholm validators continue to use the
+read-only local archive.
 
 The current local archive can replay two checksum-declared Bornholm polygon
 fixtures for diagnostics. These are not part of the active deployment gate.
@@ -123,11 +143,14 @@ cloud provider must satisfy the separately accepted regional runtime contract.
 4. Commit one coherent, validated work checkpoint.
 5. Push `main` to `origin`.
 6. Confirm that exact checkpoint exists on GitHub.
-7. Confirm the external V2 Final deployment serves that checkpoint and complete
+7. If runtime transport changed, confirm the exact Release tag, all three
+   assets, archive checksum, and a clean cold download.
+8. Confirm the external V2 Final deployment serves that checkpoint and complete
    its Trøndelag smoke check against frozen V2.
-8. If `site/**` changed, confirm the GitHub Pages workflow and landing page.
-9. Record the checkpoint hash, URLs, and results in the daily log.
-10. Commit and push that publication record, then confirm a clean worktree.
+9. If `site/**` changed, confirm the GitHub Pages workflow and landing page.
+10. Record the checkpoint hash, URLs, runtime release, and results in the daily
+    log.
+11. Commit and push that publication record, then confirm a clean worktree.
 
 GitHub Pages deploys automatically only for pushes to `main` that modify
 `site/**` or its workflow. The interactive Streamlit deployment is a separate
@@ -144,6 +167,12 @@ Preferred order:
 1. Validated Postgres runtime tables.
 2. Documented file fallback paths.
 3. Planned/disabled region state.
+
+The current active file fallback is the reviewed, checksum-pinned Trøndelag
+Release package above. It is not described as an exact export of frozen commit
+`75ba148`: nine reviewed runtime inputs differ, and the raw frozen subset failed
+the accepted 6.7%/6.2% V2 Final checkpoints. Those deviations are explicit in
+the tracked package manifest.
 
 Do not remove file fallbacks until the database-backed path has matching
 validation.

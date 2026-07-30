@@ -1,0 +1,377 @@
+{
+  "schema_version": "1.0",
+  "bundle_id": "speedlocal-v2-final-runtime-trondelag-r7-2026-07-30.1",
+  "bundle_version": "2026-07-30.1",
+  "dataset_version": "2026_06_23",
+  "status": "prerelease",
+  "region_id": "trondelag",
+  "logical_provider": "v2_archive",
+  "runtime_scope": "complete_current_ui",
+  "h3_resolutions": [
+    7,
+    6,
+    5
+  ],
+  "source_root_env": "SPEEDLOCAL_V2_SOURCE_ROOT",
+  "release": {
+    "repository": "gislab-se/speedlocal",
+    "tag": "v2-final-runtime-trondelag-r7-2026-07-30.1",
+    "title": "SpeedLocal V2 Final — Trøndelag R7 runtime — 2026-07-30.1",
+    "url": "https://github.com/gislab-se/speedlocal/releases/tag/v2-final-runtime-trondelag-r7-2026-07-30.1",
+    "prerelease": true,
+    "asset_download_base_url": "https://github.com/gislab-se/speedlocal/releases/download/v2-final-runtime-trondelag-r7-2026-07-30.1",
+    "assets": {
+      "archive": "speedlocal-v2-final-runtime-trondelag-r7-2026-07-30.1.zip",
+      "manifest": "speedlocal-v2-final-runtime-trondelag-r7-2026-07-30.1.manifest.json",
+      "checksums": "speedlocal-v2-final-runtime-trondelag-r7-2026-07-30.1.sha256"
+    }
+  },
+  "archive": {
+    "format": "zip",
+    "compression": "deflate-9",
+    "root_prefix": "speedlocal-v2-final-runtime-trondelag-r7-2026-07-30.1",
+    "deterministic_timestamp_utc": "1980-01-01T00:00:00Z",
+    "file_mode": "0644",
+    "file_count": 45,
+    "uncompressed_bytes": 101938537,
+    "bytes": 15730706,
+    "sha256": "43e6ccc8cae99c7a7e15f85d92a8e3e9c15a077abfb9b28bd4c12a92fc63202c"
+  },
+  "content_aggregate": {
+    "algorithm": "sha256(sorted(path + NUL + file_sha256 + LF))",
+    "sha256": "f05045ac0a91fd0f83629d7507157ed62c504f1a95034339200c4e784d4212c2"
+  },
+  "behavior_reference": {
+    "repository": "gislab-se/landskapsanalys",
+    "repository_url": "https://github.com/gislab-se/landskapsanalys",
+    "commit": "75ba14871100c208cbf8eedb794d56c165340811",
+    "source_branch_at_freeze": "potential-v2-multiregion",
+    "frozen_branch": "frozen-v2-reference-2026-07-30",
+    "frozen_tag": "v2-frozen-reference-2026-07-30",
+    "scope": "trondelag_only",
+    "role": "immutable_behavioral_and_numerical_reference"
+  },
+  "source": {
+    "kind": "reviewed_local_runtime_archive",
+    "reviewed_utc_date": "2026-07-30",
+    "git_provenance": "unavailable_broken_worktree_pointer",
+    "runtime_payload_authority": "reviewed_local_bytes_and_this_checksum_contract",
+    "note": "The frozen commit remains the behavior reference, but its raw 34-file subset does not reproduce the accepted V2 Final result. This bundle pins the reviewed local runtime bytes that do.",
+    "parity_evidence": {
+      "road_buffer_m": [
+        300,
+        1000
+      ],
+      "accepted_reviewed_local_wind_share_pct": [
+        6.7,
+        6.2
+      ],
+      "rejected_frozen_subset_wind_share_pct": [
+        11.7,
+        9.2
+      ]
+    }
+  },
+  "known_frozen_deviations": [
+    "apps/acceptance_model/registry_trondelag.json",
+    "apps/potential_model/manifests/potential/trondelag_potential_placeholder.json",
+    "apps/potential_model/manifests/scenarios/trondelag_scenarios_placeholder.json",
+    "apps/potential_model/manifests/social_acceptance/trondelag_synthetic_acceptance_v0.json",
+    "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/distance_tables/built_centre.csv",
+    "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/distance_tables/built_low_selection.csv",
+    "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/distance_tables/population_points.csv",
+    "docs/geocontext/potential_framework/data/social_acceptance/trondelag_synthetic_social_acceptance_r7.csv",
+    "regions/bornholm/region.json"
+  ],
+  "validation_contract": {
+    "expected_v2_port_app_passes": 20,
+    "expected_v2_port_app_blockers": 0,
+    "package_scoped_commands": [
+      "python -B scripts/validate_runtime_bundle.py --release-archive <archive>",
+      "python -B scripts/validate_trondelag_runtime_sources.py",
+      "python -B scripts/validate_v2_final_baseline_parity.py",
+      "python -B scripts/validate_v2_port_app.py"
+    ],
+    "full_archive_regression_commands": [
+      "python -B scripts/validate_generic_engine.py",
+      "python -B scripts/validate_v2_source_adapter.py",
+      "python -B scripts/validate_file_runtime_summary.py",
+      "python -B scripts/validate_frozen_v2_reference.py"
+    ],
+    "release_gate": "Verify the downloaded archive checksum, safe extraction, all file checksums, the full validator set, localhost review, and the external Streamlit deployment before marking the release published."
+  },
+  "file_count": 45,
+  "total_uncompressed_bytes": 101938537,
+  "files": [
+    {
+      "role": "catalog_support",
+      "path": "regions/bornholm/region.json",
+      "bytes": 5554,
+      "sha256": "48e84df1c267515f4ccf7cff01b22cfbd2b27b70efb22561fd16f8fc02d4ed9c"
+    },
+    {
+      "role": "region_manifest",
+      "path": "regions/trondelag/region.json",
+      "bytes": 3801,
+      "sha256": "c8e4407b3b873c88cfcf41a719e45fbe2a4da78425dff3e4ca944d3424a0c0a8"
+    },
+    {
+      "role": "acceptance_registry",
+      "path": "apps/acceptance_model/registry_trondelag.json",
+      "bytes": 12247,
+      "sha256": "e6790a2bf425dbbcf12c304716d459d25dff9ae2e27f565954197aa3cbd6c8f7"
+    },
+    {
+      "role": "landscape_manifest",
+      "path": "apps/potential_model/manifests/landscape/trondelag_lablab_landscape_r7.json",
+      "bytes": 3782,
+      "sha256": "e29f6651fb60dd3f60d06e19a8f8909a0874133c94eca09e3bbdbea855aad2be"
+    },
+    {
+      "role": "potential_manifest",
+      "path": "apps/potential_model/manifests/potential/trondelag_potential_placeholder.json",
+      "bytes": 593,
+      "sha256": "d7269eefba323a9c4fb2db1b9358e60308e362df4f6f655875609780c63ff4d1"
+    },
+    {
+      "role": "scenario_manifest",
+      "path": "apps/potential_model/manifests/scenarios/trondelag_scenarios_placeholder.json",
+      "bytes": 3723,
+      "sha256": "92f7a6cb8ed7f4793418c7a53654a21a96dc595eb6ce652a04715267c25fe3c5"
+    },
+    {
+      "role": "social_acceptance_manifest",
+      "path": "apps/potential_model/manifests/social_acceptance/trondelag_synthetic_acceptance_v0.json",
+      "bytes": 1429,
+      "sha256": "94399bb1b967b4d5d2839c7d825ad3a7418b65b35d13bec203190ec6218e29b7"
+    },
+    {
+      "role": "energy_model",
+      "path": "data/processed/speedlocal_times.duckdb",
+      "bytes": 40644608,
+      "sha256": "7487b7a3b1e2f511bf54342db939c9aa4f1dfc9d4ce66cba0fdebbd619e98784"
+    },
+    {
+      "role": "area_demand",
+      "path": "data/raw/AreaDemand.xlsx",
+      "bytes": 25525,
+      "sha256": "621b2dce5a1e3da6e1046038cbae813d8641f9e21ce7d3e7ebd839915060a79a"
+    },
+    {
+      "role": "acceptance_asset_manifest",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/asset_manifest.csv",
+      "bytes": 9559,
+      "sha256": "0de8626054ad407034f6bb43db6b1cce9ef3dd106ff48884ceeb3b7574658d40"
+    },
+    {
+      "role": "distance_table",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/distance_tables/built_centre.csv",
+      "bytes": 3086010,
+      "sha256": "713554d106365d5835c8c17a89e9765aebf3fbc8b233b35b116d6b18fe2be366"
+    },
+    {
+      "role": "distance_table",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/distance_tables/built_low_selection.csv",
+      "bytes": 2987555,
+      "sha256": "d349f83c2f14465f8db5672239e8ea7a9f4ebd117bcc2e20062d1fe337210f88"
+    },
+    {
+      "role": "distance_table",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/distance_tables/cultural_preservation.csv",
+      "bytes": 402145,
+      "sha256": "43957d0f3954c874b6d65d4267951dccdce4b3547f3a375be7ed63fa8e3e6a37"
+    },
+    {
+      "role": "distance_table",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/distance_tables/existing_wind_turbines.csv",
+      "bytes": 408679,
+      "sha256": "95e868bfcde4ae70f75aff0af0226c1b6a25f2ca2446035faf0cba8e6aeec7c3"
+    },
+    {
+      "role": "distance_table",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/distance_tables/forest_land_cover.csv",
+      "bytes": 352560,
+      "sha256": "007d46aecb8cfdee64d2f2eeb34ab49c41b0d1b11dacfa2c1dec8ecf9ebbe30d"
+    },
+    {
+      "role": "distance_table",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/distance_tables/high_voltage_lines.csv",
+      "bytes": 386584,
+      "sha256": "c0611b716af7029cd45982240f757efe021ced0e8567bc076fb81fb68dfc3511"
+    },
+    {
+      "role": "distance_table",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/distance_tables/population_points.csv",
+      "bytes": 3013328,
+      "sha256": "91717aeec657b00e809c41d8f823e7be5f9416b0b8e3278028f2a088469a2bb2"
+    },
+    {
+      "role": "distance_table",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/distance_tables/protected_areas.csv",
+      "bytes": 382179,
+      "sha256": "b948eb4df084eb26a077818d85788734372541419fc46276c1e3efb10f084bfa"
+    },
+    {
+      "role": "distance_table",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/distance_tables/reindeer_grazing_merged.csv",
+      "bytes": 347899,
+      "sha256": "022f21b938ec89df9d5a4e184eebdc7d2906b767125b260ef59d783764fb5318"
+    },
+    {
+      "role": "distance_table",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/distance_tables/reindeer_migration_routes.csv",
+      "bytes": 390604,
+      "sha256": "377b771ad4d5ca7f1044a5aa37e9ea4b9b840e7f9c98845f483f8fd17478de57"
+    },
+    {
+      "role": "distance_table",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/distance_tables/roads_large.csv",
+      "bytes": 408573,
+      "sha256": "34157b1d43915b07463c741a243a5937638f65429e96bddeff8a8493fe7b1aa2"
+    },
+    {
+      "role": "distance_table",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/distance_tables/roads_medium.csv",
+      "bytes": 394237,
+      "sha256": "0bc27ad528ba71a5de1d116b386a18fc76f457871226bdaa8a21c7fbf2ab74d5"
+    },
+    {
+      "role": "distance_table",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/distance_tables/underground_cables.csv",
+      "bytes": 404519,
+      "sha256": "f95ca427056933924cd49d638cd36841ea70ef76dcdf1babbf2487b2f148712b"
+    },
+    {
+      "role": "distance_table",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/distance_tables/valuable_cultural_environment.csv",
+      "bytes": 400258,
+      "sha256": "59b80697aec0ecc5896e21cfa077ff56947b345bcc8c74bf8cc4491642d9527f"
+    },
+    {
+      "role": "source_geojson",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/source_geojson/built_centre.geojson",
+      "bytes": 186847,
+      "sha256": "ad0df08a688bcff2a10d49d5f96eb3972229b5d5ac9a6e1eaf45bd801604b338"
+    },
+    {
+      "role": "source_geojson",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/source_geojson/built_low_selection.geojson",
+      "bytes": 1969997,
+      "sha256": "78d7a0fccbe80679deba7a5bf6b6a602ee806ac88a2a5b5786f4a170ad4913a3"
+    },
+    {
+      "role": "source_geojson",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/source_geojson/cultural_preservation.geojson",
+      "bytes": 67359,
+      "sha256": "1d1cdcf174d871fd4537621f6bdaa7d0f2960751edda93ab975f73c5960dd1ef"
+    },
+    {
+      "role": "source_geojson",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/source_geojson/existing_wind_turbines.geojson",
+      "bytes": 20959,
+      "sha256": "bd8e8bfeb35c61c5cdaeca23ffc2046313c0c03b66ba976f39aa899f33945bfc"
+    },
+    {
+      "role": "source_geojson",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/source_geojson/forest_land_cover.geojson",
+      "bytes": 3667530,
+      "sha256": "490b24abe6b4d57afc4108d3e8943075db53f24dd968c3d4ea28101bb80c23c7"
+    },
+    {
+      "role": "source_geojson",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/source_geojson/high_voltage_lines.geojson",
+      "bytes": 2174757,
+      "sha256": "b651ac9acc29155814d8f6079bd2030987031a207e7bc891b5cbde698d1b8a67"
+    },
+    {
+      "role": "source_geojson",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/source_geojson/population_points.geojson",
+      "bytes": 2294070,
+      "sha256": "70110cfa8342d299833755326a99c9de556ac660941f6a8f8909cbd3e2e317ea"
+    },
+    {
+      "role": "source_geojson",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/source_geojson/protected_areas.geojson",
+      "bytes": 586906,
+      "sha256": "cdae1a74c568aa0447d2f3065ebda4c53aab7b56245661c7c05df7c911d280d5"
+    },
+    {
+      "role": "source_geojson",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/source_geojson/reindeer_grazing_merged.geojson",
+      "bytes": 639852,
+      "sha256": "4ecf9e797bba71e6803402d5261df551a69d789f303a5f8d5267cdc44a170b94"
+    },
+    {
+      "role": "source_geojson",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/source_geojson/reindeer_migration_routes.geojson",
+      "bytes": 625197,
+      "sha256": "9fc7fd15f32d5365fd3fc4682449ea71886046e5cee549b25e6089b5a8b42a86"
+    },
+    {
+      "role": "source_geojson",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/source_geojson/roads_large.geojson",
+      "bytes": 68136,
+      "sha256": "e8f3448c4d5924484c9e59a2812735b9ce7f4a0bc5abddc114e68516c4cee786"
+    },
+    {
+      "role": "source_geojson",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/source_geojson/roads_medium.geojson",
+      "bytes": 636917,
+      "sha256": "136027c3043d7a5ec3a5c692bcbccdd8a1e78a3bc56aa1aa54139c7a638574a1"
+    },
+    {
+      "role": "source_geojson",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/source_geojson/underground_cables.geojson",
+      "bytes": 137202,
+      "sha256": "ed1d530fdf52513ff66508423a43587bda9074921c79eea443e5766171158da8"
+    },
+    {
+      "role": "source_geojson",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/source_geojson/valuable_cultural_environment.geojson",
+      "bytes": 135796,
+      "sha256": "419503e308ec9ab51b40b874072a1f2a2d06eec7f8f7de6049d4b94e9199a176"
+    },
+    {
+      "role": "h3_display",
+      "path": "docs/geocontext/potential_framework/data/trondelag_r7_app_bundle/hex.geojson",
+      "bytes": 17455310,
+      "sha256": "0bd493f93f55fe47e4deabe683eccdaa798969913fcdc9e12ee1523ae87d7f90"
+    },
+    {
+      "role": "h3_display",
+      "path": "docs/geocontext/potential_framework/data/trondelag_r7_app_bundle/h3/trondelag_landscape_h3_r6_rollup.geojson",
+      "bytes": 3980957,
+      "sha256": "51834edb8a1349de127ff1a1b4d5dfb97003df34f20dc385bc7be141a02d8e62"
+    },
+    {
+      "role": "h3_display",
+      "path": "docs/geocontext/potential_framework/data/trondelag_r7_app_bundle/h3/trondelag_landscape_h3_r5_rollup.geojson",
+      "bytes": 1184530,
+      "sha256": "b38a5fdbd1490105dc7898a50ab8978fb0350a48558ff1005ac91e9d03b84fc4"
+    },
+    {
+      "role": "landscape",
+      "path": "docs/geocontext/potential_framework/data/trondelag_lablab_landscape_h3_r7/trondelag_lablab_landskapsanalys_h3_r7_app_extent.geojson",
+      "bytes": 10249198,
+      "sha256": "f5d9e03763ba2ecae5ded8bdd40673e5160a32a3f9eb8dfe5140918d2cb009eb"
+    },
+    {
+      "role": "social_acceptance_data",
+      "path": "docs/geocontext/potential_framework/data/social_acceptance/trondelag_synthetic_social_acceptance_r7.csv",
+      "bytes": 1519338,
+      "sha256": "cb300e938547d705bc2f51bfe4c8bd7c52139d519ebe7df50dffadebbddb2063"
+    },
+    {
+      "role": "parameter_manifest",
+      "path": "regions/trondelag/parameter_buffers.json",
+      "bytes": 32250,
+      "sha256": "65819b407d5ebf9af20a73ff53adb3d8aad31bb9105a4c81e03e73b37b1c4292"
+    },
+    {
+      "role": "population_table",
+      "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/population_tables/trondelag_population_250m_h3_r8.csv",
+      "bytes": 229478,
+      "sha256": "3392f78f15b5d0cb455ff5917b107f13be7f1eb7a25e42337185f947fbae17e1"
+    }
+  ]
+}

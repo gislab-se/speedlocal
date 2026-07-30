@@ -46,8 +46,9 @@ surface and must not become a parallel application.
   shells.
 
 Large runtime data stays outside Git. Local V2 fallback paths must go through
-`SPEEDLOCAL_V2_SOURCE_ROOT`; cloud deployments need a separate cloud-accessible
-provider.
+`SPEEDLOCAL_V2_SOURCE_ROOT`. Cloud deployment uses a checksum-pinned,
+Trøndelag-only GitHub Release package whose small inventory contract is tracked
+under `data/runtime/manifests/`; the ZIP and extracted cache stay outside Git.
 
 ## Copy rule
 
@@ -78,6 +79,7 @@ $env:SPEEDLOCAL_V2_SOURCE_ROOT = "C:\gislab\data\landskapsanalys-v2-multiregion"
 & ".\.venv\Scripts\python.exe" -B scripts\validate_v2_port_app.py
 & ".\.venv\Scripts\python.exe" -B scripts\validate_generic_engine.py
 & ".\.venv\Scripts\python.exe" -B scripts\validate_frozen_v2_reference.py
+& ".\.venv\Scripts\python.exe" -B scripts\validate_runtime_bundle.py
 ```
 
 Before publishing, also check `git diff --check`, inspect V2 Final on localhost,

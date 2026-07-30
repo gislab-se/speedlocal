@@ -19,8 +19,9 @@ EXPECTED_WIND_SHARE_PCT = {
     "trondelag": (6.7, 6.2),
 }
 
-if str(PORT_APPS) not in sys.path:
-    sys.path.insert(0, str(PORT_APPS))
+for import_root in (ROOT, PORT_APPS):
+    if str(import_root) not in sys.path:
+        sys.path.insert(0, str(import_root))
 
 from potential_model.manifests import load_region, v2_source_root  # noqa: E402
 
@@ -289,10 +290,12 @@ def main() -> int:
         )
         report.check(
             abs(before_share - expected_before) <= 0.05,
-            f"{region_id}: default wind share matches the frozen public baseline "
+            f"{region_id}: default wind share matches the accepted reviewed "
+            "V2 Final baseline "
             f"({expected_before:.1f}%).",
-            f"{region_id}: default wind share drifted from the frozen public "
-            f"baseline: expected {expected_before:.1f}%, got {before_share:.3f}%.",
+            f"{region_id}: default wind share drifted from the accepted reviewed "
+            f"V2 Final baseline: expected {expected_before:.1f}%, "
+            f"got {before_share:.3f}%.",
         )
 
         road_slider.set_value(test_road_distance)
@@ -329,10 +332,12 @@ def main() -> int:
         )
         report.check(
             abs(after_share - expected_after) <= 0.05,
-            f"{region_id}: changed-road result matches the frozen public baseline "
+            f"{region_id}: changed-road result matches the accepted reviewed "
+            "V2 Final baseline "
             f"({expected_after:.1f}%).",
-            f"{region_id}: changed-road result drifted from the frozen public "
-            f"baseline: expected {expected_after:.1f}%, got {after_share:.3f}%.",
+            f"{region_id}: changed-road result drifted from the accepted reviewed "
+            f"V2 Final baseline: expected {expected_after:.1f}%, "
+            f"got {after_share:.3f}%.",
         )
         report.note(
             f"{region_id}: road buffer 300 -> {test_road_distance} m changed wind land share "

@@ -47,13 +47,16 @@ Current milestone status:
 - Roads distance-engine contract-conformance gate: complete for the Trøndelag
   and Bornholm datasets.
 - Trøndelag provider repair and automated V2 checkpoints: complete at
-  300/1000 m; localhost review remains. Port 8503 is a secondary historical
+  300/1000 m; localhost review approved. Port 8503 is a secondary historical
   Trøndelag-only check, not a replacement for the `75ba148` full-flow gate.
+- Trøndelag cloud runtime transport: 45-file, checksum-pinned Release package
+  implemented and validated locally through the real root entrypoint; external
+  Streamlit smoke verification is the remaining publication gate.
 - Bornholm catalog/source onboarding: in progress. Its 300/400 m polygon
   fixtures are diagnostic replay, not public parity.
 - Bornholm V1 characterization and technical pinning: not started.
-- `roads_large` R7 canonical integration: automated gate complete; localhost
-  visual approval remains.
+- `roads_large` R7 canonical integration: automated gate and localhost visual
+  approval complete; external deployment verification remains.
 - `roads_large` full promotion: canonical R6/R5 rollups and their remaining
   legacy-path removal remain.
 - Complete roads promotion: canonical `roads_medium`, combined-roads behavior,
@@ -88,6 +91,8 @@ hardcoded path removed before work starts on the next thematic slice.
 - Some V2 behaviors may not have a stable reference result.
 - CRS and grid-resolution differences can look like algorithm errors.
 - UI cleanup can expand beyond delivery scope.
+- Streamlit Cloud cold starts depend on the immutable runtime Release asset;
+  its checksum, safe extraction, and external smoke test are publication gates.
 
 ## Scope control
 

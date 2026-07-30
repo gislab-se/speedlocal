@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -24,6 +25,8 @@ REQUIRED_PATHS = [
     "app.py",
     "status_app.py",
     "requirements.txt",
+    "speedlocal/runtime_bundle.py",
+    "data/runtime/manifests/trondelag/v2-final-runtime-r7-2026-07-30.1.json",
     "site/landskapspotential/index.html",
     "apps/landskapspotential/app.py",
     "apps/landskapspotential/catalog.py",
@@ -42,6 +45,8 @@ REQUIRED_PATHS = [
     "scripts/validate_bornholm_v2_diagnostics.py",
     "scripts/validate_generic_engine.py",
     "scripts/validate_frozen_v2_reference.py",
+    "scripts/validate_runtime_bundle.py",
+    "scripts/build_v2_runtime_bundle.py",
     "scripts/prepare_trondelag_runtime_metadata.py",
     "AGENTS.md",
     "docs/README.md",
@@ -54,6 +59,13 @@ REQUIRED_PATHS = [
     "docs/REPO_HYGIENE.md",
     "docs/FROZEN_V2_REFERENCE.md",
     "docs/frozen_v2_reference.json",
+]
+RELEASE_CRITICAL_TRACKED_PATHS = [
+    "app.py",
+    "speedlocal/runtime_bundle.py",
+    "data/runtime/manifests/trondelag/v2-final-runtime-r7-2026-07-30.1.json",
+    "scripts/build_v2_runtime_bundle.py",
+    "scripts/validate_runtime_bundle.py",
 ]
 
 
@@ -107,11 +119,38 @@ def main() -> int:
     for path in REQUIRED_PATHS:
         report.check((ROOT / path).exists(), f"Required path exists: {path}", f"Missing required path: {path}")
 
+    tracked_result = subprocess.run(
+        ["git", "ls-files", "-z"],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+    )
+    tracked_paths = {
+        value.decode("utf-8")
+        for value in tracked_result.stdout.split(b"\0")
+        if value
+    }
+    for path in RELEASE_CRITICAL_TRACKED_PATHS:
+        report.check(
+            path in tracked_paths,
+            f"Release-critical path is tracked: {path}",
+            f"Release-critical path is not tracked: {path}",
+        )
+
     root_entrypoint = (ROOT / "app.py").read_text(encoding="utf-8")
     report.check(
         'V2_FINAL_ENTRYPOINT = ROOT / "apps" / "v2_port" / "app.py"' in root_entrypoint,
         "Root Streamlit entrypoint launches the V2 Final monolith.",
         "Root Streamlit entrypoint does not launch the V2 Final monolith.",
+    )
+    bootstrap_call = "ensure_v2_source_root()"
+    runpy_call = "runpy.run_path(str(V2_FINAL_ENTRYPOINT)"
+    report.check(
+        bootstrap_call in root_entrypoint
+        and runpy_call in root_entrypoint
+        and root_entrypoint.index(bootstrap_call) < root_entrypoint.index(runpy_call),
+        "Root entrypoint verifies the V2 runtime bundle before launching V2 Final.",
+        "Root entrypoint does not verify the V2 runtime bundle before launch.",
     )
     status_entrypoint = (ROOT / "status_app.py").read_text(encoding="utf-8")
     report.check(

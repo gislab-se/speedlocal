@@ -58,6 +58,14 @@ $env:SPEEDLOCAL_V2_SOURCE_ROOT = "C:\gislab\data\landskapsanalys-v2-multiregion"
 
 Open: `http://127.0.0.1:8502`
 
+The explicit environment variable keeps using the complete read-only archive
+for development and full-archive regression. If it is unset, the root
+entrypoint materializes the checksum-pinned Trøndelag runtime package declared
+in
+`data/runtime/manifests/trondelag/v2-final-runtime-r7-2026-07-30.1.json`.
+The 45-file package is a V2 Final data transport, not a copy or replacement of
+the frozen V2 reference app.
+
 The start script refuses to launch a second server when port `8502` already
 has an active listener. Stop the existing V2 Final server before restarting it.
 
@@ -83,6 +91,7 @@ python scripts\validate_v2_port_app.py
 python scripts\prepare_trondelag_runtime_metadata.py
 python scripts\validate_generic_engine.py
 python scripts\validate_frozen_v2_reference.py
+python scripts\validate_runtime_bundle.py
 ```
 
 Optional Bornholm archive/onboarding diagnostic:
@@ -94,10 +103,11 @@ python scripts\validate_bornholm_v2_diagnostics.py
 The V2 source, app, frozen-reference, Trøndelag, and file-runtime validators
 read the V2 source archive without copying large data files. Set
 `SPEEDLOCAL_V2_SOURCE_ROOT` to that read-only archive before running them.
-Trøndelag uses the archive for active V2 Final fallback runtime until
-Postgres/Flowcore is available. Bornholm's two checksum-validated polygon
-checkpoints remain diagnostic evidence only; passing them does not establish
-Bornholm product parity or readiness.
+Trøndelag uses either the complete local archive or its exact reviewed cloud
+runtime package until a matching Postgres/Flowcore provider is available.
+Bornholm's two checksum-validated polygon checkpoints remain full-archive
+diagnostic evidence only; they are not included in the Trøndelag cloud package
+and do not establish Bornholm product parity or readiness.
 
 To emit metadata-only SQL for the first Trondelag runtime import:
 
@@ -147,5 +157,5 @@ link during onboarding. Skaraborg remains planned and receives a V2 Final
 button only after its manifest, runtime data, and readiness checks pass.
 
 The repository itself does not deploy Streamlit through GitHub Actions.
-Streamlit Cloud source settings and the cloud runtime-data provider must be
-verified separately; see `docs/DEPLOYMENT.md`.
+Streamlit Cloud auto-deployment and the checksum-pinned GitHub Release runtime
+are verified separately after each work checkpoint; see `docs/DEPLOYMENT.md`.

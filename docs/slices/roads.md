@@ -1,6 +1,6 @@
 # Roads slice characterization
 
-Status: Trøndelag `roads_large` canonical R7 checkpoint implemented; R6/R5 and visual approval pending
+Status: Trøndelag `roads_large` canonical R7 checkpoint implemented and locally approved; R6/R5 pending
 Behavior reference: frozen V2 for Trøndelag; Bornholm V1 acceptance baseline pending
 Integration target: V2 Final
 
@@ -184,11 +184,14 @@ distances also fail closed.
 The complete frozen default selection still renders 6.7% at 300 m and 6.2%
 at 1000 m in V2 Final.
 
+The same full-flow values and isolated `roads_large` values pass when V2 Final
+is started from the reviewed 45-file cloud runtime package. That deployment
+artifact is transport evidence only; frozen V2 remains the behavior oracle.
+
 This is an R7 checkpoint, not full roads promotion:
 
-1. receive the user's localhost approval; the app on port 8503 is a secondary
-   historical Trøndelag-only check, while the `75ba148` fixtures remain the
-   authoritative full-flow gate;
+1. complete external cold-start and interaction smoke verification for the
+   published runtime package;
 2. add canonical R7-to-R6/R5 rollups for `roads_large`;
 3. remove its remaining legacy R6/R5 calculation only after those views pass;
 4. migrate `roads_medium`;
