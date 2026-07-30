@@ -566,7 +566,11 @@ def ensure_v2_source_root(
                 environment[RUNTIME_BUNDLE_SHA_ENV] = str(archive["sha256"])
                 return concurrent
             try:
-                os.replace(stage, final_dir)
+                # os.replace() rejects directory promotion on some Windows
+                # volumes even when the destination does not exist. rename()
+                # is atomic on the same volume and preserves the intended
+                # fail-if-another-process-won behavior for a populated target.
+                os.rename(stage, final_dir)
             except OSError:
                 concurrent = _existing_cache_root(final_dir, contract)
                 if concurrent is None:
