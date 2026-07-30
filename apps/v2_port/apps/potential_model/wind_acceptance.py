@@ -115,7 +115,7 @@ def normalize_group_layer_map(
 ) -> dict[str, list[str]]:
     normalized: dict[str, list[str]] = {}
     for group_id, default_layer_ids in WIND_GROUP_LAYER_DEFAULTS.items():
-        requested = (group_layer_map or {}).get(group_id, default_layer_ids)
+        requested = (group_layer_map or {}).get(group_id, [])
         requested_ids = [str(layer_id) for layer_id in (requested or [])]
         normalized[group_id] = [layer_id for layer_id in requested_ids if layer_id in default_layer_ids]
     return normalized

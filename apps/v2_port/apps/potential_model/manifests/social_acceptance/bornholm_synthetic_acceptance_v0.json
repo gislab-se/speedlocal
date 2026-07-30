@@ -28,5 +28,5 @@
   ],
   "value_range": [0, 1],
   "max_decimals": 3,
-  "method_note": "Synthetic test data for UI and integration only. Bornholm is the reference implementation. Values use landscape factors as proxies for NIMBY pressure, landscape sensitivity, local benefit, random human irregularity and self-interest. This is not IVL research data."
+  "method_note": "Historical synthetic Bornholm material retained for diagnostics and future onboarding only. Values use landscape factors as proxies for NIMBY pressure, landscape sensitivity, local benefit, random human irregularity and self-interest. This is not an accepted V2 Final baseline or IVL research data."
 }

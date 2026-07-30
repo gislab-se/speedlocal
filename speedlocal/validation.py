@@ -43,6 +43,24 @@ def select_processing_adapter(
 
 
 def validate_contract(contract: AnalysisContract) -> None:
+    domain = contract.analysis_domain
+    if domain is not None:
+        if (
+            not domain.provider.strip()
+            or not domain.path.strip()
+            or not domain.id_field.strip()
+        ):
+            raise ValueError("Analysis domain provider, path, and id field are required")
+        if domain.cell_kind != "h3":
+            raise ValueError(
+                f"Unsupported analysis-domain cell kind: {domain.cell_kind}"
+            )
+        if domain.resolution < 0 or domain.resolution > 15:
+            raise ValueError(
+                f"Invalid H3 analysis-domain resolution: {domain.resolution}"
+            )
+        if domain.expected_cell_count <= 0:
+            raise ValueError("Analysis domain expected cell count must be positive")
     unknown_groups = set(contract.groups) - set(STANDARD_GROUP_IDS)
     if unknown_groups:
         raise ValueError(f"Unknown standard groups: {sorted(unknown_groups)}")

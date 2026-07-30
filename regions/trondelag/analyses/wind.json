@@ -3,6 +3,14 @@
   "analysis_id": "wind",
   "region_id": "trondelag",
   "groups": ["roads", "population", "nature", "culture", "grid_infrastructure"],
+  "analysis_domain": {
+    "provider": "v2_archive",
+    "path": "docs/geocontext/potential_framework/data/trondelag_r7_app_bundle/hex.geojson",
+    "id_field": "hex_id",
+    "cell_kind": "h3",
+    "resolution": 7,
+    "expected_cell_count": 13735
+  },
   "layers": [
     {
       "id": "roads_medium",
@@ -20,9 +28,10 @@
         "buffer_m": {
           "type": "number",
           "unit": "m",
-          "default": 100,
-          "minimum": 0,
-          "maximum": 2000
+          "default": 300,
+          "minimum": 100,
+          "maximum": 2000,
+          "step": 25
         }
       }
     },
@@ -42,9 +51,10 @@
         "buffer_m": {
           "type": "number",
           "unit": "m",
-          "default": 100,
-          "minimum": 0,
-          "maximum": 2000
+          "default": 300,
+          "minimum": 100,
+          "maximum": 2000,
+          "step": 25
         }
       }
     }

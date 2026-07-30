@@ -7,6 +7,11 @@ The authoritative migration sequence is in `GENERAL_PROGRAM_PLAN.md`.
 Onboarding currently covers only the five standard groups: roads, population,
 nature, culture, and grid infrastructure. Regional exceptions are deferred.
 
+An indexed region may be `onboarding` or `planned` without being publicly
+enabled. `landing_card.enabled` becomes `true` only after the region's accepted
+behavior reference, runtime data, and independent acceptance checks are
+recorded and pass.
+
 Minimum catalog:
 
 - `regions/index.json` entry.
@@ -30,10 +35,23 @@ Minimum data:
 - Data representation metadata where geometry alone is insufficient, such as a
   population point source versus a population grid.
 
+Behavior-reference gate:
+
+- Identify the intended public reference separately for each region.
+- Record repository, exact commit, entrypoint, deployment, and protected ref
+  before calling a reference technically frozen.
+- Separate source integrity and generic engine conformance from public
+  behavioral parity.
+- Trøndelag currently uses frozen V2.
+- Bornholm currently uses V1 as an unpinned visual reference. Its V1-derived V2
+  archive material is diagnostic only.
+- A region with no trusted historical reference receives explicit,
+  reviewable acceptance fixtures rather than inferred parity.
+
 Validation:
 
 - Region appears from `regions/index.json` only.
-- Planned regions stay disabled until required runtime data exists.
+- Planned and onboarding regions stay disabled until all readiness gates pass.
 - Active regions pass independent validation.
 - Algorithms dispatch from validated data characteristics, not region ids.
 - Point, grid, and polygon representations of the same theme pass independent

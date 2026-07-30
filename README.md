@@ -2,26 +2,32 @@
 
 Bare-minimum delivery repo for SpeedLocal landscape potential.
 
-This public repo is intentionally slim. The old exploratory material has been
-removed from the delivery tree. The V2 `landskapsanalys` repo remains the source
-archive: when something is missing, copy only the smallest runtime-critical
-piece.
+This public repo is intentionally slim. Frozen V2 is the read-only Trøndelag
+behavior reference; its external `landskapsanalys` runtime archive also retains
+multi-region diagnostic assets. The active `apps/v2_port/` code is V2 Final:
+the working monolith being reduced and made manifest-driven one complete slice
+at a time.
 
 ## Surfaces
 
 - Static landing page: `site/landskapspotential/index.html`
 - GitHub Pages workflow: `.github/workflows/pages.yml`
-- Regional Streamlit app: `app.py`
-- Technical runtime status app: `status_app.py`
-- Streamlit Cloud regional app: `https://speedlocal-landskapspotential.streamlit.app/`
+- V2 Final Streamlit entrypoint: `app.py`
+- Active V2 Final monolith: `apps/v2_port/`
+- V2 Final development deployment: `https://speedlocal-landskapspotential.streamlit.app/`
+- Frozen V2 Trøndelag reference: `https://landskapsanalys-potential-v2-test.streamlit.app/`
+- Bornholm V1 visual reference: `https://landskapsanalys-potential-v1.streamlit.app/`
+- Technical runtime diagnostic, not a product surface: `status_app.py`
 - Region catalogs: `regions/`
 - Runtime database scaffold: `db/` plus `docker-compose.yml`
 - File fallbacks: documented under `data/runtime/`
 
 ## Regions
 
-- Bornholm: active catalog, file fallback until database coverage is validated.
-- Trondelag: active catalog, R7/R6/R5 only, file fallback until database coverage is validated.
+- Bornholm: onboarding catalog; V2 Final route disabled until V1 and regional
+  acceptance evidence are pinned and validated.
+- Trondelag: only active V2 Final catalog and authoritative frozen-V2 parity
+  region; R7/R6/R5 only.
 - Skaraborg: planned/disabled catalog slot for forward design.
 
 The app must discover regions from `regions/index.json` only. Do not reintroduce
@@ -31,9 +37,9 @@ legacy fallback region manifests that can expose old regions unintentionally.
 
 This repo should stay delivery-focused. Do not copy broad V2 folders, generated
 GIS outputs, QGIS review packages, rendered reports, caches, or local scratch
-files. Before copying anything from V2, record the decision in
-`docs/SPEEDLOCAL_COPY_LIST.md` and add or update a validator when behavior or
-runtime contracts change.
+files. Before copying anything from V2, record the decision in the current
+daily log and add or update a validator when behavior or runtime contracts
+change.
 
 See `docs/REPO_HYGIENE.md` for the keep/delete rules and cleanup checklist.
 The authoritative product and implementation direction is
@@ -47,13 +53,16 @@ The dated route to delivery and daily working routine are documented in
 cd C:\gislab\projekt\speedlocal
 & ".\.venv\Scripts\python.exe" -m pip install -r requirements.txt
 $env:SPEEDLOCAL_V2_SOURCE_ROOT = "C:\gislab\data\landskapsanalys-v2-multiregion"
-& ".\.venv\Scripts\python.exe" -m streamlit run app.py --server.address 127.0.0.1 --server.port 8502
+& ".\scripts\start_app.ps1"
 ```
 
 Open: `http://127.0.0.1:8502`
 
-The root entrypoint now opens the regional app. To run the technical runtime
-status view separately:
+The start script refuses to launch a second server when port `8502` already
+has an active listener. Stop the existing V2 Final server before restarting it.
+
+The root entrypoint opens the actual V2 Final monolith. To run the technical
+runtime diagnostic separately:
 
 ```powershell
 python -m streamlit run status_app.py --server.address 127.0.0.1 --server.port 8504
@@ -68,16 +77,27 @@ python scripts\validate_region_readiness.py
 python scripts\validate_trondelag_runtime_sources.py
 python scripts\validate_file_runtime_summary.py
 python scripts\validate_v2_port_guardrails.py
+python scripts\validate_v2_source_adapter.py
+python scripts\validate_v2_final_baseline_parity.py
+python scripts\validate_v2_port_app.py
 python scripts\prepare_trondelag_runtime_metadata.py
 python scripts\validate_generic_engine.py
+python scripts\validate_frozen_v2_reference.py
 ```
 
-`validate_trondelag_runtime_sources.py` and `validate_file_runtime_summary.py`
-read the V2 source archive without copying large data files. Override the
-default source path with
-`SPEEDLOCAL_V2_SOURCE_ROOT` if needed.
-The Streamlit app uses the same file-backed source archive for Bornholm and
-Trondelag runtime status until Postgres/Flowcore is available.
+Optional Bornholm archive/onboarding diagnostic:
+
+```powershell
+python scripts\validate_bornholm_v2_diagnostics.py
+```
+
+The V2 source, app, frozen-reference, Trøndelag, and file-runtime validators
+read the V2 source archive without copying large data files. Set
+`SPEEDLOCAL_V2_SOURCE_ROOT` to that read-only archive before running them.
+Trøndelag uses the archive for active V2 Final fallback runtime until
+Postgres/Flowcore is available. Bornholm's two checksum-validated polygon
+checkpoints remain diagnostic evidence only; passing them does not establish
+Bornholm product parity or readiness.
 
 To emit metadata-only SQL for the first Trondelag runtime import:
 
@@ -114,12 +134,18 @@ touch the static site or the workflow. The workflow can also be run manually.
 GitHub Pages is static hosting only. Interactive Python/Streamlit apps must run
 through Flowcore, Docker/server runtime, or another Streamlit-compatible host.
 
-Current Streamlit Cloud regional app:
+V2 Final development deployment:
 
 `https://speedlocal-landskapspotential.streamlit.app/`
 
-Region deep links:
+Active region deep link:
 
-- `https://speedlocal-landskapspotential.streamlit.app/?region=bornholm`
 - `https://speedlocal-landskapspotential.streamlit.app/?region=trondelag`
-- `https://speedlocal-landskapspotential.streamlit.app/?region=skaraborg`
+
+Bornholm remains visible with its V1 reference but has no active V2 Final deep
+link during onboarding. Skaraborg remains planned and receives a V2 Final
+button only after its manifest, runtime data, and readiness checks pass.
+
+The repository itself does not deploy Streamlit through GitHub Actions.
+Streamlit Cloud source settings and the cloud runtime-data provider must be
+verified separately; see `docs/DEPLOYMENT.md`.

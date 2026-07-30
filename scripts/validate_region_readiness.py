@@ -101,7 +101,21 @@ def check_shared(report: Report, region: dict[str, Any], region_id: str) -> None
 def check_bornholm(report: Report, region: dict[str, Any]) -> None:
     resolutions = [int(value) for value in region.get("available_h3_resolutions") or []]
     readiness = text_values(region.get("readiness_requirements"))
-    report.check(region.get("status") == "active", "Bornholm is active.", "Bornholm is not active.")
+    card = region.get("landing_card") or {}
+    reference = region.get("behavior_reference") or {}
+    report.check(
+        region.get("status") == "onboarding" and card.get("enabled") is False,
+        "Bornholm is cataloged for onboarding with V2 Final disabled.",
+        "Bornholm is not safely disabled during onboarding.",
+    )
+    report.check(
+        reference.get("status") == "diagnostic_only"
+        and reference.get("frozen_v2_parity") is False
+        and reference.get("acceptance_source")
+        == "frozen_v1_plus_explicit_region_qa",
+        "Bornholm V2 artifacts are diagnostic and future acceptance is independent.",
+        f"Bornholm behavior reference is invalid: {reference!r}.",
+    )
     report.check(
         region.get("native_crs") == "EPSG:25833",
         "Bornholm uses EPSG:25833.",
@@ -109,18 +123,18 @@ def check_bornholm(report: Report, region: dict[str, Any]) -> None:
     )
     report.check(
         resolutions == [6, 7, 8, 9],
-        "Bornholm exposes R6/R7/R8/R9.",
+        "Bornholm diagnostic catalog records R6/R7/R8/R9.",
         f"Bornholm resolutions are {resolutions}, expected [6, 7, 8, 9].",
     )
     report.check(
         int(region.get("default_h3_resolution") or -1) == 9,
-        "Bornholm defaults to R9 analysis.",
+        "Bornholm diagnostic catalog records R9.",
         f"Bornholm default H3 is {region.get('default_h3_resolution')!r}.",
     )
     ids = fallback_ids(region)
     report.check(
         {"bornholm_region_package", "bornholm_h3_display_r9", "bornholm_potential_r9"}.issubset(ids),
-        "Bornholm has required file fallback placeholders.",
+        "Bornholm retains required diagnostic file fallback placeholders.",
         f"Bornholm fallback ids are incomplete: {sorted(ids)}.",
     )
     report.check(
@@ -135,6 +149,14 @@ def check_trondelag(report: Report, region: dict[str, Any]) -> None:
     constraints = text_values(region.get("constraints"))
     readiness = text_values(region.get("readiness_requirements"))
     report.check(region.get("status") == "active", "Trondelag is active.", "Trondelag is not active.")
+    reference = region.get("behavior_reference") or {}
+    report.check(
+        reference.get("status") == "authoritative"
+        and reference.get("scope") == "trondelag_only"
+        and reference.get("frozen_v2_parity") is True,
+        "Trondelag is the sole authoritative frozen-V2 behavior reference.",
+        f"Trondelag behavior reference is invalid: {reference!r}.",
+    )
     report.check(
         region.get("native_crs") == "EPSG:25832",
         "Trondelag uses EPSG:25832.",

@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS runtime.regions (
 INSERT INTO runtime.regions (
     region_id, display_name, native_crs, app_status, data_status, notes
 ) VALUES
-    ('bornholm', 'Bornholm', 'EPSG:25833', 'active', 'file_fallback_until_speedlocal_runtime_import', 'Active pilot; file fallback until database import is validated.'),
+    ('bornholm', 'Bornholm', 'EPSG:25833', 'onboarding', 'v1_reference_and_v2_diagnostics_pending_acceptance', 'Delivery region; V2 Final disabled while V1 and regional acceptance evidence are validated.'),
     ('trondelag', 'Trondelag', 'EPSG:25832', 'active', 'file_fallback_until_speedlocal_runtime_import', 'Active pilot; R7/R6/R5 only.'),
     ('skaraborg', 'Skaraborg', 'EPSG:3006', 'planned', 'catalog_slot_only', 'Planned/disabled until reviewed runtime data exists.')
 ON CONFLICT (region_id) DO UPDATE SET

@@ -1,125 +1,100 @@
-# SpeedLocal Repo Hygiene
+# SpeedLocal repository boundaries
 
-Date: 2026-06-26
+This repository is the V2 Final delivery repository. Keep it small,
+deployable, and easy to validate.
 
-This repo is the delivery repo, not the exploratory archive. Keep it small,
-deployable, and easy to validate. The V2 `landskapsanalys` checkout remains the
-source archive.
+## Product boundary
 
-## Current Block
+- Frozen V2 is an immutable external Trøndelag behavior reference and a
+  multi-region diagnostic data archive.
+- `C:\gislab\data\landskapsanalys-v2-multiregion` is a read-only local runtime
+  archive, not application source to import wholesale.
+- `app.py` launches the active V2 Final monolith under `apps/v2_port/`.
+- V2 Final is reduced and generalized one promoted vertical slice at a time.
+- Reusable contracts, providers, validators, and analysis belong under
+  `speedlocal/`.
+- Do not create another parity or replacement application.
+- Do not import V3 as the product baseline.
 
-The Day-1 baseline is complete:
+The authoritative direction is `GENERAL_PROGRAM_PLAN.md`. The dated route and
+daily routine are `DELIVERY_PLAN.md` and `DAILY_WORKFLOW.md`.
 
-- GitHub Pages landing page is live.
-- Streamlit Cloud status app is linked from the landing page.
-- Region catalog discovery is limited to Bornholm, Trondelag, and Skaraborg.
-- Bornholm has a file-backed runtime source summary against the V2 archive,
-  including R10-derived R9 PEY labelling.
-- Trondelag has a file-backed runtime source summary against the V2 archive.
-- Postgres is prepared as the preferred future runtime, but file fallbacks stay
-  documented until database-backed reads validate.
-- A guarded V2 app baseline now exists under `apps/v2_port/`.
+## Keep in this repository
 
-The quarantined V2 port is a working baseline to reduce, not final
-architecture. See `docs/GENERAL_PROGRAM_PLAN.md` and the historical note under
-`docs/archive/APP_MIGRATION_STRATEGY_2026-06-26.md`.
-`docs/V2_QUARANTINE_PORT_INVENTORY_2026-06-26.md`.
+- the static landing page under `site/` and its Pages workflow;
+- the root V2 Final entrypoint and active `apps/v2_port/` monolith;
+- manifest-driven business logic under `speedlocal/`;
+- `regions/index.json` and validated region packages;
+- small contracts, schemas, validators, tests, and import helpers;
+- database/runtime scaffolding under `db/` and `data/runtime/`;
+- current delivery, deployment, slice, and daily documentation.
 
-Run `scripts/validate_v2_port_guardrails.py` after any `apps/v2_port/` change.
-If it fails, fix the port before adding more files.
+`status_app.py` may remain as a technical diagnostic, but it is not a product
+surface and must not become a parallel application.
 
-## Keep In This Repo
+## Keep out
 
-- `site/landskapspotential/index.html` and Pages workflow.
-- `app.py` and `apps/landskapspotential/` status/app shell.
-- `regions/index.json` and the three region packages.
-- `db/init/` schema and runtime contract SQL.
-- `scripts/validate_*.py`, `scripts/check_runtime_db.py`, and small import or
-  metadata helpers.
-- `docs/` files that explain delivery, deployment, runtime import, region
-  onboarding, and copy/leave-behind decisions.
-- `data/runtime/README.md` and small runtime contract notes.
-- `apps/v2_port/` only while it remains quarantined, guarded, and useful for
-  shrinking V2 behavior into SpeedLocal.
+- broad copies of V2 or V3 source trees;
+- generated GIS data, caches, logs, exports, map bundles, and local scratch
+  output;
+- mounted runtime data or machine-specific data copies;
+- large `.gpkg`, `.tif`, `.duckdb`, `.xlsx`, `.geojson`, or rendered outputs
+  unless a documented runtime decision explicitly promotes one;
+- local secrets, `.env` files, database credentials, API keys, or Streamlit
+  secrets;
+- legacy region discovery, inactive app branches, and duplicate application
+  shells.
 
-## Keep Out
+Large runtime data stays outside Git. Local V2 fallback paths must go through
+`SPEEDLOCAL_V2_SOURCE_ROOT`; cloud deployments need a separate cloud-accessible
+provider.
 
-Delete or leave out:
+## Copy rule
 
-- Python caches: `__pycache__/`, `*.pyc`.
-- Local working output: `tmp/`, `artifacts/`, `.streamlit/*.log`.
-- Mounted or generated runtime data: `data/runtime/generated/`,
-  `data/runtime/mounted/`.
-- Broad V2 folders copied wholesale.
-- QGIS review packages, rendered reports, map export folders, and old report
-  archives.
-- Large `.gpkg`, `.tif`, `.duckdb`, `.xlsx`, `.geojson`, and rendered HTML
-  bundles unless a later runtime decision explicitly promotes one.
-- Legacy app folders such as old GC4, solochvind, or inactive region fallback
-  manifests.
-- Legacy region exposure for Vara or `skara` unless a compatibility adapter and
-  validator are added first.
-- V3 `data/incoming/`, promoted runtime GeoJSON/CSV, caches, logs, or its new
-  app architecture as a delivery baseline.
-- V2 generated data under `apps/v2_port/data`, `apps/v2_port/exports`,
-  `apps/v2_port/artifacts`, or `apps/v2_port/tmp`.
-- V2 legacy region discovery under
-  `apps/v2_port/apps/potential_model/manifests/regions`.
-- Generic V2 acceptance fallback registry at
-  `apps/v2_port/apps/acceptance_model/registry.json`.
+Before copying any artifact from frozen V2:
 
-## Copy Rule
+1. prove it is required by the active slice;
+2. record it in the current `daily/YYYY-MM-DD.md` log;
+3. prefer a manifest, adapter, validator, or small metadata artifact;
+4. add validation for any behavior, runtime contract, region, or public-link
+   change;
+5. leave the frozen V2 source and runtime archive untouched.
 
-Before copying anything from V2 into `speedlocal`:
+If those checks fail, resolve the artifact through the read-only provider or
+leave it outside this repository.
 
-1. Add it to `docs/SPEEDLOCAL_COPY_LIST.md` as a candidate or accepted file.
-2. Explain why it is needed for the current slice.
-3. Prefer manifests, validators, import scripts, and small metadata files before
-   generated data.
-4. Add or update a validator when the file affects app behavior, runtime
-   contracts, region discovery, or public links.
-5. Keep V2 read-only during this migration.
+## Required checks
 
-If a file cannot pass those checks, leave it in V2 and read it as a source
-archive or file fallback.
-
-If `potential_app.py` is copied, copy it only as a quarantined baseline under a
-clearly named V2-port area. It is allowed as a working source to shrink, not as
-clean final architecture.
-
-The current V2 port baseline has been copied. Future V2 additions must still be
-added to `docs/SPEEDLOCAL_COPY_LIST.md` before copying and must keep the
-guardrail validator green.
-
-## Cleanup Checklist
-
-Run before committing:
+After changes in their respective scopes, run:
 
 ```powershell
-git status --short --branch
-python -B scripts\validate_delivery_repo.py
-python -B scripts\validate_static_site.py
-python -B scripts\validate_region_readiness.py
-python -B scripts\validate_file_runtime_summary.py
-python -B scripts\validate_v2_port_guardrails.py
-python -B scripts\validate_trondelag_runtime_sources.py
-python -B scripts\prepare_trondelag_runtime_metadata.py
+$env:SPEEDLOCAL_V2_SOURCE_ROOT = "C:\gislab\data\landskapsanalys-v2-multiregion"
+& ".\.venv\Scripts\python.exe" -B scripts\validate_delivery_repo.py
+& ".\.venv\Scripts\python.exe" -B scripts\validate_static_site.py
+& ".\.venv\Scripts\python.exe" -B scripts\validate_region_readiness.py
+& ".\.venv\Scripts\python.exe" -B scripts\validate_v2_port_guardrails.py
+& ".\.venv\Scripts\python.exe" -B scripts\validate_v2_source_adapter.py
+& ".\.venv\Scripts\python.exe" -B scripts\validate_v2_final_baseline_parity.py
+& ".\.venv\Scripts\python.exe" -B scripts\validate_v2_port_app.py
+& ".\.venv\Scripts\python.exe" -B scripts\validate_generic_engine.py
+& ".\.venv\Scripts\python.exe" -B scripts\validate_frozen_v2_reference.py
 ```
 
-Remove local generated clutter when needed:
+Before publishing, also check `git diff --check`, inspect V2 Final on localhost,
+and follow the two-commit publication closeout in `DAILY_WORKFLOW.md`.
 
-```powershell
-Remove-Item -Recurse -Force -LiteralPath apps\__pycache__,apps\landskapspotential\__pycache__,tmp -ErrorAction SilentlyContinue
-```
+## Checkpoint rules
 
-If Streamlit is running locally, stop it before deleting Python cache files.
+A daily work checkpoint is ready when:
 
-## Acceptance Rule
+- V2 Final remains the single active product application;
+- the bounded increment has explicit automated evidence;
+- validators and localhost review for that increment pass;
+- no generated runtime data or secrets are tracked;
+- the daily log records what remains legacy and the deployment status is
+  current.
 
-A change is ready only when:
+A full slice-promotion checkpoint additionally requires:
 
-- The repo stays small and delivery-focused.
-- Validators pass.
-- Public Pages and Streamlit links remain clear.
-- No large generated runtime data is committed by accident.
-- V2 remains untouched except for read-only inspection.
+- the complete active slice meets every promotion gate;
+- no calculation or UI path replaced by that complete slice remains active.

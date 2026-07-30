@@ -21,20 +21,60 @@ mapping, manifests, and validation rather than copied application code.
 
 ## Chosen strategy: V2 Final
 
-V2 remains the running behavior reference while it is dismantled one complete
-user-visible slice at a time.
+Two deployments make progress visible:
+
+- **Frozen V2:** the verified monolith, never changed, used as Trøndelag's
+  visual and numerical reference and as a multi-region provenance archive.
+- **V2 Final:** begins from the same working monolith and is reduced,
+  streamlined, and made manifest-driven one complete user-visible slice at a
+  time.
+
+V2 Final is not a new application shell. Extracted modules must replace code in
+the active monolith and be called by its existing user flow.
+
+The frozen reference is
+`gislab-se/landskapsanalys@75ba14871100c208cbf8eedb794d56c165340811`,
+secured as branch `frozen-v2-reference-2026-07-30` and tag
+`v2-frozen-reference-2026-07-30`. Its complete identity, deployment metadata,
+and runtime-archive checksum contract are recorded in
+`FROZEN_V2_REFERENCE.md` and `frozen_v2_reference.json`.
+
+## Regional reference policy
+
+Reference identity, source integrity, engine-contract conformance, and public
+behavioral parity are separate gates.
+
+- Trøndelag uses the technically frozen V2 deployment as its public behavioral
+  and numerical parity reference.
+- Bornholm uses V1 as its intended public behavioral reference. Until V1 is
+  pinned to an exact repository, commit, entrypoint, deployment, and protected
+  ref, it is a visual reference rather than an immutable automated oracle.
+- Bornholm files and polygon fixtures in the V2 runtime archive may be used for
+  source integrity, onboarding, and legacy-fixture diagnostics. They must not
+  be described as Bornholm public V2 parity.
+- Generic engine results prove contract conformance. They become public parity
+  evidence only when compared with that region's secured public reference.
+- Skaraborg has no historical behavior reference and must receive explicit
+  acceptance criteria during onboarding.
+
+Trøndelag is currently the only active V2 Final region. Bornholm remains in the
+delivery catalog with its app route disabled during onboarding. This is a
+temporary readiness state, not a separate regional application branch.
 
 For each slice:
 
-1. characterize the current V2 behavior for Bornholm and Trøndelag;
+1. characterize Trøndelag against frozen V2 and any onboarding region against
+   its own accepted reference;
 2. identify every function, UI control, data source, parameter, and regional
    assumption involved;
 3. classify code as keep, extract, configure, rewrite, or remove;
 4. move reusable analysis out of Streamlit and into `speedlocal/`;
 5. replace hardcoded data choices with validated manifests or data adapters;
-6. compare the new result with V2;
-7. connect the generic result to the existing UI;
-8. remove the replaced V2 path after parity is proven.
+6. compare the new result with the active region's accepted reference;
+7. connect the generic result directly to the existing V2 Final UI;
+8. remove the replaced hardcoded path after parity is proven;
+9. inspect localhost, publish the checkpoint, and compare the affected
+   reference and V2 Final deployments.
 
 We do not mechanically clean all 14,000 lines function by function. We inspect
 functions within a complete behavior slice so that obsolete features can be
@@ -98,7 +138,7 @@ source resolution, validation, and analysis.
 - CRS normalization belongs in shared source/adaptation code.
 - Missing or ambiguous data fails closed.
 - Large runtime data remains outside Git.
-- V2 remains read-only.
+- Frozen V2 and its runtime archive remain read-only.
 
 ## Code classification
 
@@ -116,31 +156,59 @@ Implemented foundation:
 
 - generic contracts, catalog loading, source resolution, and validation under
   `speedlocal/`;
-- manifest-driven `roads_large` for Bornholm and Trøndelag;
+- manifest-driven `roads_large` for active Trøndelag plus a Bornholm
+  onboarding/diagnostic contract;
 - geometry-driven line adapter;
 - generic distance-exclusion execution;
-- validation against both V2 runtime archives.
+- distance-engine contract validation against both regional datasets in the
+  shared V2 runtime archive; this is conformance evidence, not two-region
+  behavioral parity.
 
 Current slice:
 
 - complete the public roads behavior;
 - characterization: complete;
 - dynamic medium and large road layers: complete;
-- generic group result and V2 parity: complete;
-- temporary Streamlit parity surface: complete;
-- remaining promotion work: connect the result to the public V2 flow, then
-  remove only the replaced road code.
+- generic group result and distance-engine contract conformance: complete;
+- the temporary separate parity app has been removed;
+- the V2 Final baseline now loads external acceptance registries and assets
+  through manifest-declared `v2_archive` providers;
+- duplicate local registry files and their duplicate path resolver are removed;
+- runtime strategy is manifest-declared rather than selected by region-name
+  branches: Trøndelag retains frozen V2's fast soft-distance runtime, while
+  Bornholm's checksum-validated polygon artifacts remain diagnostic only;
+- Trøndelag's frozen-public checkpoints pass in the real UI: 6.7% at 300 m
+  and 6.2% at 1000 m;
+- Bornholm's historical 3.9% and 3.3% polygon fixtures replay correctly and
+  fail closed for undeclared combinations, but they do not establish product
+  parity or block Trøndelag roads promotion;
+- direct Bornholm routes fail closed on the manifest-driven landing page;
+- `roads_large` now executes through `speedlocal.run_analysis` in the actual
+  Trøndelag R7 V2 Final flow, restricted to the exact 13,735-cell public
+  analysis domain;
+- the shared road slider reads its 300/100/2000/25 contract from the canonical
+  manifest;
+- this is an R7 checkpoint, not full roads promotion: R6/R5 and
+  `roads_medium` remain on the legacy calculation path;
+- remaining promotion work: add canonical R6/R5 aggregation for
+  `roads_large`, migrate `roads_medium`, validate their combined group
+  behavior, then remove only the legacy road code those replacements make
+  obsolete.
 
 ## Definition of done for a slice
 
-- Current V2 inputs and outputs are documented.
+- Inputs and outputs from the accepted regional reference are documented.
 - Code classification is recorded in the daily log.
 - No region name selects the new algorithm.
 - All paths use the shared resolver.
 - Contract and runtime validators pass.
-- V2 parity passes within a documented tolerance.
-- The public UI still works for both active regions.
+- Trøndelag frozen-V2 parity passes within a documented tolerance.
+- Onboarding diagnostics are never reported as product parity.
+- The public UI works for every currently enabled region, while disabled
+  regions fail closed visibly.
 - Obsolete code is removed after parity.
+- Localhost visual review passes in V2 Final.
+- The checkpoint is pushed and the external V2 Final deployment is verified.
 - Documentation and the daily log describe what changed.
 
 ## Delivery plan and daily control
@@ -155,17 +223,19 @@ If work reveals that the delivery sequence or estimate is wrong, update
 
 ## Stop and reassess when
 
-- a slice cannot reproduce V2 behavior;
+- a slice cannot reproduce the active region's accepted reference behavior;
 - two consecutive workdays pass without a testable slice result;
 - every new layer requires new UI code;
 - region names enter the generic analysis engine;
 - contract work grows without visible functionality;
 - required Skaraborg data is unavailable;
 - the same old and new implementation remain active after parity.
+- a new parallel product surface grows outside the V2 Final monolith.
 
 ## Explicit non-goals
 
 - A line-by-line beautification of the complete monolith.
+- A separate replacement app that recreates V2 behavior.
 - Importing V3 as the product baseline.
 - Copying large runtime datasets into this repository.
 - PostGIS work before file-backed feature parity.

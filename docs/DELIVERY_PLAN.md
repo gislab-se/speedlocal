@@ -21,22 +21,22 @@ The delivery is complete when:
 - social acceptance can be applied and explained;
 - regional data differences are handled through manifests and adapters;
 - results, data limitations, and provenance are visible;
-- smoke, parity, and region-readiness tests pass;
+- smoke, accepted-reference, and region-readiness tests pass;
 - local run and deployment instructions are current.
 
 ## Schedule
 
 | Dates | Slice | Required outcome |
 |---|---|---|
-| 29–31 Jul | Roads | V2 behavior inventory, dynamic road layers, two-region parity, generic UI path |
-| 3–5 Aug | Population | Point/grid/polygon dispatch, Bornholm and Trøndelag parity |
+| 29–31 Jul | Roads | Trøndelag V2 characterization, dynamic road layers, contract validation, generic UI path |
+| 3–5 Aug | Population | Point/grid/polygon dispatch and Trøndelag V2 parity |
 | 6–7 Aug | Nature | Dynamic nature layers and hard-exclusion parity |
 | 10–11 Aug | Culture | Dynamic culture layers and hard-exclusion parity |
 | 12–13 Aug | Grid infrastructure | Proximity-feasibility operation and parity |
 | 14–17 Aug | Combined result | Common restriction composition and explanations |
 | 18–19 Aug | Wind and solar | Shared potential outputs and continuous technology mix |
 | 20–21 Aug | Energy scenarios and social acceptance | Scenario-to-area flow and acceptance overlay |
-| 24 Aug | Skaraborg onboarding | Third-region manifests, adapters, validation, and visible surface |
+| 24 Aug | Region onboarding | Bornholm V1 acceptance gate plus Skaraborg manifests, adapters, validation, and visible state |
 | 25 Aug | Product cleanup | Remove replaced V2 paths, simplify UI, update copy and labels |
 | 26 Aug | Acceptance review | Full regression, delivery docs, known limitations, release candidate |
 
@@ -44,26 +44,46 @@ Current milestone status:
 
 - Roads characterization: complete.
 - Roads generic gate: complete.
-- Roads parity gate: complete for Bornholm and Trøndelag.
-- Roads promotion gate: temporary parity UI complete; public V2 integration
-  and old-path removal remain.
+- Roads distance-engine contract-conformance gate: complete for the Trøndelag
+  and Bornholm datasets.
+- Trøndelag provider repair and automated V2 checkpoints: complete at
+  300/1000 m; localhost review remains. Port 8503 is a secondary historical
+  Trøndelag-only check, not a replacement for the `75ba148` full-flow gate.
+- Bornholm catalog/source onboarding: in progress. Its 300/400 m polygon
+  fixtures are diagnostic replay, not public parity.
+- Bornholm V1 characterization and technical pinning: not started.
+- `roads_large` R7 canonical integration: automated gate complete; localhost
+  visual approval remains.
+- `roads_large` full promotion: canonical R6/R5 rollups and their remaining
+  legacy-path removal remain.
+- Complete roads promotion: canonical `roads_medium`, combined-roads behavior,
+  and removal of the temporary road-group adapter remain.
 
 ## Slice gates
 
-Each slice has four gates:
+Each slice has six explicit gates:
 
 1. **Characterized:** V2 inputs, outputs, and UI behavior are recorded.
 2. **Generic:** analysis runs without region-name branches.
-3. **Parity:** Bornholm and Trøndelag match V2 within the stated tolerance.
-4. **Promoted:** UI uses the generic path and the replaced path is removed.
+3. **Engine contract:** generic layer and group calculations match their
+   declared legacy calculation contracts.
+4. **Accepted-reference checkpoints:** selected automated numeric, artifact,
+   and rendered-UI values match the active region's secured reference within
+   the stated tolerance. Currently this is frozen V2 for Trøndelag only.
+5. **Continuous behavior:** the full declared control domain executes; a small
+   set of frozen fixtures is evidence but does not complete this gate.
+6. **Promoted:** UI uses the generic path, localhost visual review passes, and
+   the replaced path is removed.
 
-Do not begin the next thematic slice before the current one reaches at least
-the parity gate. Promotion may be completed immediately after parity or carried
-as an explicit, dated task.
+Do not begin the next thematic slice before the current one reaches the
+promoted gate. Each slice must be integrated into V2 Final and its replaced
+hardcoded path removed before work starts on the next thematic slice.
 
 ## Critical risks
 
 - Skaraborg source data is not yet runtime-ready.
+- Bornholm V1 is not yet pinned to an exact repository, commit, entrypoint, and
+  protected reference.
 - V2 contains synthetic or placeholder scenario/acceptance inputs.
 - Some V2 behaviors may not have a stable reference result.
 - CRS and grid-resolution differences can look like algorithm errors.

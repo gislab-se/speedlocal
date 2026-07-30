@@ -9,11 +9,7 @@ from .runtime import file_fallback_rows, selected_backend
 
 
 def _status_label(region: dict) -> str:
-    status = str(region.get("status") or "unknown")
-    enabled = bool((region.get("landing_card") or {}).get("enabled", status == "active"))
-    if not enabled:
-        return "planned"
-    return status
+    return str(region.get("status") or "unknown")
 
 
 def _h3_label(region: dict) -> str:
@@ -34,7 +30,7 @@ def _region_card(region: dict) -> bool:
     cols[1].markdown(f"**CRS**  \n`{region.get('native_crs', 'TBD')}`")
     cols[2].markdown(f"**H3**  \n{_h3_label(region)}")
     if not enabled:
-        return st.button("Visa planerad status", key=f"planned_{region_id}")
+        return st.button("Visa status", key=f"status_{region_id}")
     return st.button("Visa runtime-status", key=f"open_{region_id}")
 
 

@@ -296,6 +296,12 @@
       color: var(--ink);
     }
 
+    .card .button.disabled {
+      border-color: rgba(21, 25, 21, 0.16);
+      background: rgba(21, 25, 21, 0.04);
+      color: var(--muted);
+    }
+
     .status-panel,
     .note {
       display: grid;
@@ -556,7 +562,7 @@
       </div>
 
       <p class="hero-status" aria-label="Versionsstatus">
-        <strong>Status:</strong> Bornholm och Tröndelag är aktiva kataloger med filfallbacks. Skaraborg är planerad tills data och runtime-kontrakt är validerade.
+        <strong>Status:</strong> Tröndelag är aktiv V2 Final-region och enda V2-beteendereferens. Bornholm är under onboarding med V1 som referens. Skaraborg är planerad.
       </p>
     </div>
   </header>
@@ -566,26 +572,27 @@
       <div class="section-head">
         <h2 id="regionala-versioner-title">Regionala versioner</h2>
         <p>
-          Primärknappen öppnar den nya SpeedLocal-appen med rätt region vald. Sekundärknapparna leder till de
-          befintliga V1- och V2-apparna som referens medan migrationen fortsätter.
+          Tröndelags V2 Final-knapp öppnar den aktiva monoliten. Fryst V2 används endast som
+          Tröndelag-referens. Bornholms V1-app är historisk referens tills en egen regional
+          acceptansbaseline är validerad.
         </p>
       </div>
 
       <div class="cards">
         <article class="card bornholm" data-region="bornholm">
           <div class="tag-row">
-            <span class="tag live">Aktiv</span>
-            <span class="tag">R9 island pilot</span>
+            <span class="tag next">Onboarding</span>
+            <span class="tag">V1-referens</span>
             <span class="tag">EPSG:25833</span>
           </div>
           <h3>Bornholm</h3>
           <p>
-            Referensregionen för etableringsyta, scenariologik och hur landskapspotentialen presenteras.
-            Fallback-sökvägar behålls tills appklar data är importerad och validerad i SpeedLocal Postgres.
+            Bornholm ingår i leveransen men är ännu inte en godkänd V2 Final-region.
+            V2-materialet behålls som diagnostik medan V1, källdata och regionala acceptanstester granskas.
           </p>
           <div class="button-row">
-            <a class="button" href="https://speedlocal-landskapspotential.streamlit.app/?region=bornholm" data-app-route="?region=bornholm" target="_blank" rel="noreferrer">Öppna Bornholm</a>
-            <a class="button alt" href="https://landskapsanalys-potential-v1.streamlit.app/" target="_blank" rel="noreferrer">Befintlig app V1</a>
+            <span class="button disabled" aria-disabled="true">V2 Final under onboarding</span>
+            <a class="button alt" href="https://landskapsanalys-potential-v1.streamlit.app/" target="_blank" rel="noreferrer">V1-referens</a>
           </div>
         </article>
 
@@ -601,8 +608,8 @@
             medan full appfunktion flyttas över stegvis med dokumenterad 250 m befolkningsgrid-proxy.
           </p>
           <div class="button-row">
-            <a class="button" href="https://speedlocal-landskapspotential.streamlit.app/?region=trondelag" data-app-route="?region=trondelag" target="_blank" rel="noreferrer">Öppna Tröndelag</a>
-            <a class="button alt" href="https://landskapsanalys-potential-v2-test.streamlit.app/" target="_blank" rel="noreferrer">Befintlig app V2</a>
+            <a class="button" href="https://speedlocal-landskapspotential.streamlit.app/?region=trondelag" data-app-route="?region=trondelag" target="_blank" rel="noreferrer">V2 Final Tröndelag</a>
+            <a class="button alt" href="https://landskapsanalys-potential-v2-test.streamlit.app/" target="_blank" rel="noreferrer">Fryst V2</a>
           </div>
         </article>
 
@@ -618,7 +625,7 @@
             katalog, runtime-data och validering, inte hårdkodade appgrenar.
           </p>
           <div class="button-row">
-            <a class="button" href="https://speedlocal-landskapspotential.streamlit.app/?region=skaraborg" data-app-route="?region=skaraborg" target="_blank" rel="noreferrer">Öppna Skaraborg</a>
+            <span class="button disabled" aria-disabled="true">V2 Final väntar på validerad data</span>
           </div>
         </article>
       </div>
@@ -629,14 +636,14 @@
         <h2 id="runtime-title">Statisk sida nu, runtime nästa</h2>
         <p>
           Den kanoniska Pages-adressen är <code>/speedlocal/landskapspotential/</code>.
-          GitHub Pages kör bara den här statiska landningssidan. Korten ovan öppnar den regionala SpeedLocal-appen
-          med vald region. Lokalt kopplas knapparna automatiskt till appen på port 8503.
+          GitHub Pages kör bara den här statiska landningssidan. Aktiva V2 Final-knappar öppnar appen
+          med vald region. Lokalt kopplas de automatiskt till appen på port 8502.
         </p>
       </div>
       <div class="route-list" aria-label="Planerade appvägar">
-        <div>Bornholm: <a href="https://speedlocal-landskapspotential.streamlit.app/?region=bornholm" target="_blank" rel="noreferrer"><code>?region=bornholm</code></a></div>
+          <div>Bornholm: ingen aktiv V2 Final-väg under onboarding; <a href="https://landskapsanalys-potential-v1.streamlit.app/" target="_blank" rel="noreferrer">öppna V1-referensen</a></div>
         <div>Tröndelag: <a href="https://speedlocal-landskapspotential.streamlit.app/?region=trondelag" target="_blank" rel="noreferrer"><code>?region=trondelag</code></a></div>
-        <div>Skaraborg: <a href="https://speedlocal-landskapspotential.streamlit.app/?region=skaraborg" target="_blank" rel="noreferrer"><code>?region=skaraborg</code></a>, planerad</div>
+        <div>Skaraborg: ingen aktiv appväg innan manifest och runtime-data är validerade</div>
       </div>
     </section>
 
@@ -721,8 +728,8 @@
         </p>
       </div>
       <div class="note-list" aria-label="Kort status">
-        <div>Bornholm: aktiv referens med filfallback.</div>
-        <div>Tröndelag: aktiv regional fokusyta med R7/R6/R5.</div>
+        <div>Bornholm: onboarding; V1-referens och diagnostiskt V2-material.</div>
+        <div>Tröndelag: aktiv V2 Final-region och enda V2-paritetsreferens.</div>
         <div>Skaraborg: planerad katalogstyrd region.</div>
       </div>
     </section>
@@ -737,7 +744,7 @@
       if (!localHosts.has(window.location.hostname)) {
         return;
       }
-      const localAppBase = "http://127.0.0.1:8503/";
+      const localAppBase = "http://127.0.0.1:8502/";
       document.querySelectorAll("[data-app-route]").forEach((link) => {
         const route = link.getAttribute("data-app-route") || "";
         link.href = `${localAppBase}${route}`;

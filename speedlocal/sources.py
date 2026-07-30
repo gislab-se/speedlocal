@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .contracts import LayerContract
+import h3
+
+from .contracts import AnalysisContract, LayerContract
 from .paths import resolve_source_path
 
 
@@ -17,6 +19,67 @@ class LayerAssets:
     manifest_status: str
     declared_geometry_family: str
     feature_count: int
+
+
+def resolve_analysis_domain_cell_ids(
+    contract: AnalysisContract,
+) -> tuple[str, ...]:
+    domain = contract.analysis_domain
+    if domain is None:
+        raise ValueError(
+            f"{contract.region_id}/{contract.id} has no analysis-domain contract"
+        )
+    if domain.cell_kind != "h3":
+        raise ValueError(
+            f"Unsupported analysis-domain cell kind: {domain.cell_kind}"
+        )
+    if domain.resolution < 0 or domain.resolution > 15:
+        raise ValueError(
+            f"Invalid H3 analysis-domain resolution: {domain.resolution}"
+        )
+    if domain.expected_cell_count <= 0:
+        raise ValueError("Analysis domain expected cell count must be positive")
+    path = resolve_source_path(domain.provider, domain.path)
+    if not path.is_file():
+        raise FileNotFoundError(f"Analysis-domain source is missing: {path}")
+    with path.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    if payload.get("type") != "FeatureCollection":
+        raise ValueError(f"Analysis-domain source must be a FeatureCollection: {path}")
+
+    cell_ids: list[str] = []
+    for index, feature in enumerate(payload.get("features") or []):
+        properties = feature.get("properties")
+        if not isinstance(properties, dict):
+            raise ValueError(
+                f"Analysis-domain feature {index} has no properties: {path}"
+            )
+        cell_id = str(properties.get(domain.id_field) or "").strip()
+        if not cell_id:
+            raise ValueError(
+                f"Analysis-domain feature {index} has no {domain.id_field}: {path}"
+            )
+        try:
+            resolution = int(h3.get_resolution(cell_id))
+        except Exception as exc:
+            raise ValueError(
+                f"Analysis-domain feature {index} has invalid H3 id: {cell_id}"
+            ) from exc
+        if resolution != domain.resolution:
+            raise ValueError(
+                f"Analysis-domain cell {cell_id} is R{resolution}; "
+                f"expected R{domain.resolution}"
+            )
+        cell_ids.append(cell_id)
+
+    if len(cell_ids) != len(set(cell_ids)):
+        raise ValueError(f"Analysis-domain source contains duplicate cell ids: {path}")
+    if len(cell_ids) != domain.expected_cell_count:
+        raise ValueError(
+            f"Analysis-domain source has {len(cell_ids)} cells; "
+            f"expected {domain.expected_cell_count}"
+        )
+    return tuple(cell_ids)
 
 
 def _clean_relative(value: Any, field: str) -> str:

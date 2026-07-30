@@ -24,7 +24,10 @@ except Exception:
 
 
 ROOT = Path(__file__).resolve().parent
+REPO_ROOT = ROOT.parents[1]
 APPS_DIR = ROOT / "apps"
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 if str(APPS_DIR) not in sys.path:
     sys.path.insert(0, str(APPS_DIR))
 
@@ -75,6 +78,12 @@ from potential_model.social_acceptance import (  # noqa: E402
     acceptance_scenario_label as social_acceptance_scenario_label,
     acceptance_scenarios as social_acceptance_scenarios,
     load_acceptance_frame as load_social_acceptance_frame,
+)
+from potential_model.speedlocal_bridge import (  # noqa: E402
+    LEGACY_ROADS_GROUP_ID,
+    MIGRATED_ROADS_LAYER_ID,
+    roads_buffer_parameter_contract,
+    roads_large_acceptance_frame,
 )
 from potential_model.wind_acceptance import (  # noqa: E402
     GROUP_LABELS,
@@ -177,6 +186,18 @@ TUTORIAL_STORAGE_KEY = "potential_tutorial_trondelag_v2_dismissed"
 REGION_SELECT_KEY = "potential_selected_region_id"
 REGION_LANDING_VIEW = "landing"
 DEFAULT_REGION_ID = default_region_id()
+REGION_SESSION_SCOPE_KEY = "potential_region_session_scope"
+REGION_SESSION_PRESERVE_KEYS = {
+    APP_LANGUAGE_KEY,
+    REGION_SELECT_KEY,
+    LEFT_PANEL_OPEN_KEY,
+    RIGHT_PANEL_OPEN_KEY,
+    RIGHT_PANEL_WIDTH_KEY,
+    RIGHT_PANEL_WIDTH_DEFAULT_VERSION_KEY,
+    PERFORMANCE_HISTORY_KEY,
+    TUTORIAL_FORCE_OPEN_KEY,
+    TUTORIAL_FORCE_OPEN_TOKEN_KEY,
+}
 WIND_LAYER_SELECTION_KEY = "wind_builder_selected_layers"
 WIND_RUNTIME_OVERLAY_KEY = "wind_builder_runtime_overlay_enabled"
 SOLAR_APPLIED_CONFIG_KEY = "solar_applied_config"
@@ -2907,20 +2928,26 @@ def _should_show_region_landing() -> bool:
 
 
 def _reset_session_for_region(region_id: str) -> None:
-    for key in [
-        WORKSPACE_RENDER_CACHE_KEY,
-        "combined_h3_resolution",
-        "combined_h3_display_mode",
-        "workspace_cache_invalidated_reason",
-    ]:
-        st.session_state.pop(key, None)
-    st.session_state[MAP_VIEW_RESET_TOKEN_KEY] = int(st.session_state.get(MAP_VIEW_RESET_TOKEN_KEY, 0) or 0) + 1
+    normalized_region_id = str(region_id or "").strip().lower()
+    if not normalized_region_id:
+        raise ValueError("Region session reset requires a region id")
+    next_map_token = (
+        int(st.session_state.get(MAP_VIEW_RESET_TOKEN_KEY, 0) or 0) + 1
+    )
+    preserved = {
+        key: st.session_state[key]
+        for key in REGION_SESSION_PRESERVE_KEYS
+        if key in st.session_state
+    }
+    for key in list(st.session_state):
+        del st.session_state[key]
+    for key, value in preserved.items():
+        st.session_state[key] = value
+    st.session_state[MAP_VIEW_RESET_TOKEN_KEY] = next_map_token
+    st.session_state[REGION_SESSION_SCOPE_KEY] = normalized_region_id
 
 
 def _select_region(region_id: str) -> None:
-    previous = str(st.session_state.get(REGION_SELECT_KEY, "") or "")
-    if previous.lower() != str(region_id).lower():
-        _reset_session_for_region(str(region_id))
     st.session_state[REGION_SELECT_KEY] = str(region_id)
     _set_query_param("region", str(region_id))
     _clear_query_param("view")
@@ -3014,8 +3041,33 @@ def _active_region() -> dict[str, Any]:
         else:
             st.error(f"Regionmanifest kunde inte laddas: {exc}")
             st.stop()
-    st.session_state[REGION_SELECT_KEY] = str(region.get("region_id", region_id))
+    resolved_region_id = str(region.get("region_id", region_id)).strip().lower()
+    active_scope = str(
+        st.session_state.get(REGION_SESSION_SCOPE_KEY, "") or ""
+    ).strip().lower()
+    if active_scope != resolved_region_id:
+        _reset_session_for_region(resolved_region_id)
+    st.session_state[REGION_SELECT_KEY] = resolved_region_id
     return region
+
+
+def _acceptance_runtime_preflight(region: dict[str, Any]) -> bool:
+    region_id = str(region.get("region_id") or "").strip().lower()
+    try:
+        _, _, registry_meta = load_acceptance_registry(region_id)
+        if str(registry_meta.get("_region_id") or "").lower() != region_id:
+            raise ValueError(
+                f"Acceptance registry region mismatch: {region_id}"
+            )
+    except (FileNotFoundError, KeyError, ValueError) as exc:
+        st.error(
+            "V2 Final kan inte läsa det frysta V2-dataarkivet. "
+            "Sätt `SPEEDLOCAL_V2_SOURCE_ROOT` till arkivets rotmapp och "
+            "starta om appen."
+        )
+        st.caption(f"Teknisk orsak: {exc}")
+        return False
+    return True
 
 
 def _render_region_switcher(region: dict[str, Any]) -> None:
@@ -8287,15 +8339,49 @@ def _normalize_wind_visual_options(visual_options: dict[str, Any] | None) -> dic
 
 
 def _init_wind_control_state() -> None:
-    groups, layers, _ = load_acceptance_registry()
+    groups, layers, registry_meta = load_acceptance_registry()
+    region_id = str(registry_meta.get("_region_id") or "")
     st.session_state[WIND_RUNTIME_OVERLAY_KEY] = True
     for group in groups.values():
-        st.session_state.setdefault(_wind_control_key("analysis", group.id), int(group.analysis_default_m))
+        _, _, _, default_m = _wind_group_control_contract(group, region_id)
+        st.session_state.setdefault(
+            _wind_control_key("analysis", group.id),
+            default_m,
+        )
         st.session_state.setdefault(_wind_control_key("blend", group.id), int(group.blend_default))
         st.session_state.setdefault(_wind_control_key("visual_source", group.id), False)
         st.session_state.setdefault(_wind_control_key("visual_buffer", group.id), False)
     for layer in layers.values():
         st.session_state.setdefault(_wind_control_key("layer", layer.id), False)
+
+
+def _wind_group_control_contract(
+    group: Any,
+    region_id: str,
+) -> tuple[int, int, int, int]:
+    if str(group.id) != LEGACY_ROADS_GROUP_ID:
+        return (
+            int(group.analysis_min_m),
+            int(group.analysis_max_m),
+            int(group.analysis_step_m),
+            int(group.analysis_default_m),
+        )
+
+    parameter = roads_buffer_parameter_contract(region_id)
+    if (
+        parameter.minimum is None
+        or parameter.maximum is None
+        or parameter.step is None
+    ):
+        raise ValueError(
+            f"{region_id}/wind roads buffer must declare minimum, maximum and step"
+        )
+    return (
+        int(parameter.minimum),
+        int(parameter.maximum),
+        int(parameter.step),
+        int(parameter.default),
+    )
 
 
 def _prime_wind_builder_state(
@@ -8329,6 +8415,7 @@ def _wind_layer_is_ready(layer_id: str, availability: dict[str, dict[str, Any]])
     status = availability.get(str(layer_id), {})
     return (
         bool(status.get("geojson_ready"))
+        and bool(status.get("distance_ready"))
         and bool(status.get("source_exists"))
         and int(status.get("feature_count", 0) or 0) > 0
         and str(status.get("status", "")) == "ok"
@@ -8386,12 +8473,19 @@ def _wind_group_controls(
 ) -> tuple[dict[str, list[str]], dict[str, float], bool]:
     _init_wind_control_state()
     groups, layers, registry_meta = load_acceptance_registry()
+    region_id = str(registry_meta.get("_region_id") or "")
     availability = _wind_layer_status_lookup(registry_meta)
     selected: dict[str, list[str]] = {group.id: [] for group in ordered_groups()}
 
     st.header(ui_text("groups_header", language))
     with st.form(f"{widget_prefix}_group_controls", clear_on_submit=False):
         for group in ordered_groups():
+            (
+                analysis_min_m,
+                analysis_max_m,
+                analysis_step_m,
+                analysis_default_m,
+            ) = _wind_group_control_contract(group, region_id)
             is_protected_group = group.id == SOLAR_PROTECTED_GROUP_ID
             is_settlement_group = group.id == WIND_SETTLEMENT_GROUP_ID
             is_culture_group = group.id == WIND_CULTURE_GROUP_ID
@@ -8411,9 +8505,9 @@ def _wind_group_controls(
                     st.caption("Ej tillgängligt för vald region ännu. Källager/assets behöver kopplas innan gruppen kan användas.")
                 st.slider(
                     group_analysis_label(group, language, group.analysis_label),
-                    min_value=int(group.analysis_min_m),
-                    max_value=int(group.analysis_max_m),
-                    step=int(group.analysis_step_m),
+                    min_value=analysis_min_m,
+                    max_value=analysis_max_m,
+                    step=analysis_step_m,
                     key=_wind_control_key("analysis", group.id),
                     help=ui_text("analysis_slider_help", language),
                     disabled=not group_available,
@@ -8523,7 +8617,16 @@ def _wind_group_controls(
         param_key = GROUP_PARAM_MAP.get(group.id)
         if not param_key:
             continue
-        ui_params[param_key] = float(st.session_state.get(_wind_control_key("analysis", group.id), group.analysis_default_m))
+        _, _, _, analysis_default_m = _wind_group_control_contract(
+            group,
+            region_id,
+        )
+        ui_params[param_key] = float(
+            st.session_state.get(
+                _wind_control_key("analysis", group.id),
+                analysis_default_m,
+            )
+        )
     return normalized, ui_params, bool(applied)
 
 
@@ -9300,6 +9403,7 @@ def _acceptance_series_for_group(
     min_distance_m: pd.Series,
     any_intersection: pd.Series,
     threshold_m: float,
+    distance_conflict_semantics: str,
 ) -> pd.Series:
     distance = pd.to_numeric(min_distance_m, errors="coerce")
     intersects = any_intersection.fillna(False).astype(bool)
@@ -9314,6 +9418,11 @@ def _acceptance_series_for_group(
         return (~blocked).astype(float)
     if threshold <= 0:
         return (~intersects).astype(float)
+    if str(distance_conflict_semantics) != "soft_ramp":
+        raise ValueError(
+            "Unsupported distance-conflict semantics: "
+            f"{distance_conflict_semantics}"
+        )
     ramp_end = max(float(threshold * 2.0), float(threshold + 1.0))
     acceptance = ((distance - threshold) / (ramp_end - threshold)).clip(lower=0.0, upper=1.0).fillna(0.0)
     acceptance.loc[intersects] = 0.0
@@ -9359,12 +9468,18 @@ def _wind_fast_distance_runtime_result(
     layer_selection: dict[str, list[str]],
     target_resolution: int,
 ) -> dict[str, Any] | None:
-    if str(region.get("region_id", "")).lower() != "trondelag":
+    region_id = str(region.get("region_id", "")).strip().lower()
+    if not region_id:
         return None
     selected = normalize_group_layer_map(layer_selection)
     if not any(selected.values()):
         return None
-    groups, layers, registry_meta = load_acceptance_registry()
+    groups, layers, registry_meta = load_acceptance_registry(region_id)
+    if str(registry_meta.get("_runtime_strategy") or "") != "fast_distance":
+        return None
+    distance_conflict_semantics = str(
+        registry_meta["_distance_conflict_semantics"]
+    )
     display_geometry_path = _h3_display_geometry_path(region, int(target_resolution))
     if not display_geometry_path:
         return None
@@ -9375,12 +9490,46 @@ def _wind_fast_distance_runtime_result(
     frame["potential_area_share_pct"] = 100.0
     active_groups: list[str] = []
     group_meta: dict[str, dict[str, Any]] = {}
+    canonical_layer_ids: list[str] = []
     for group_id, layer_ids in selected.items():
         group = groups.get(group_id)
         if group is None or not layer_ids:
             continue
         distance_parts: list[pd.DataFrame] = []
+        canonical_acceptance_parts: list[pd.Series] = []
+        threshold_key = GROUP_PARAM_MAP.get(group_id)
+        threshold_m = (
+            float(ui_params.get(threshold_key, group.analysis_default_m))
+            if threshold_key
+            else float(group.analysis_default_m)
+        )
         for layer_id in layer_ids:
+            if (
+                group_id == LEGACY_ROADS_GROUP_ID
+                and layer_id == MIGRATED_ROADS_LAYER_ID
+                and int(target_resolution) == 7
+            ):
+                canonical_frame = roads_large_acceptance_frame(
+                    region_id,
+                    threshold_m,
+                    frame["hex_id"].astype(str),
+                )
+                canonical_merged = frame[["hex_id"]].merge(
+                    canonical_frame[["hex_id", "acceptance"]],
+                    on="hex_id",
+                    how="left",
+                    validate="one_to_one",
+                )
+                if canonical_merged["acceptance"].isna().any():
+                    raise ValueError(
+                        "Canonical roads_large result is incomplete for the "
+                        "R7 display domain"
+                    )
+                canonical_acceptance_parts.append(
+                    canonical_merged["acceptance"].astype(float)
+                )
+                canonical_layer_ids.append(layer_id)
+                continue
             layer_df = _target_resolution_distance_frame(
                 distance_table_for_layer(registry_meta, layer_id),
                 int(target_resolution),
@@ -9388,23 +9537,45 @@ def _wind_fast_distance_runtime_result(
             )
             if not layer_df.empty:
                 distance_parts.append(layer_df)
-        if not distance_parts:
+        if not distance_parts and not canonical_acceptance_parts:
             continue
-        merged = frame[["hex_id"]].copy()
-        distance_cols: list[str] = []
-        intersect_cols: list[str] = []
-        for idx, part in enumerate(distance_parts):
-            distance_col = f"distance_{idx}"
-            intersect_col = f"intersects_{idx}"
-            renamed = part.rename(columns={"distance_m": distance_col, "intersects": intersect_col})
-            merged = merged.merge(renamed, on="hex_id", how="left")
-            distance_cols.append(distance_col)
-            intersect_cols.append(intersect_col)
-        min_distance = merged[distance_cols].min(axis=1, skipna=True)
-        any_intersection = merged[intersect_cols].fillna(False).astype(bool).any(axis=1)
-        threshold_key = GROUP_PARAM_MAP.get(group_id)
-        threshold_m = float(ui_params.get(threshold_key, group.analysis_default_m)) if threshold_key else float(group.analysis_default_m)
-        group_acceptance = _acceptance_series_for_group(group.analysis_kind, min_distance, any_intersection, threshold_m)
+        acceptance_parts = list(canonical_acceptance_parts)
+        if distance_parts:
+            merged = frame[["hex_id"]].copy()
+            distance_cols: list[str] = []
+            intersect_cols: list[str] = []
+            for idx, part in enumerate(distance_parts):
+                distance_col = f"distance_{idx}"
+                intersect_col = f"intersects_{idx}"
+                renamed = part.rename(
+                    columns={
+                        "distance_m": distance_col,
+                        "intersects": intersect_col,
+                    }
+                )
+                merged = merged.merge(renamed, on="hex_id", how="left")
+                distance_cols.append(distance_col)
+                intersect_cols.append(intersect_col)
+            min_distance = merged[distance_cols].min(axis=1, skipna=True)
+            any_intersection = (
+                merged[intersect_cols]
+                .fillna(False)
+                .astype(bool)
+                .any(axis=1)
+            )
+            acceptance_parts.append(
+                _acceptance_series_for_group(
+                    group.analysis_kind,
+                    min_distance,
+                    any_intersection,
+                    threshold_m,
+                    distance_conflict_semantics,
+                )
+            )
+        group_acceptance = pd.concat(acceptance_parts, axis=1).min(
+            axis=1,
+            skipna=True,
+        )
         frame["potential_area_share_pct"] = frame["potential_area_share_pct"].combine(
             group_acceptance.mul(100.0),
             min,
@@ -9432,11 +9603,15 @@ def _wind_fast_distance_runtime_result(
     frame["potential_area_km2"] = frame["potential_area_share_pct"].div(100.0) * hex_area
     frame = _finalize_fast_wind_share_frame(frame, display_geometry_path, compute_core=False)
     return {
-        "cache_key": f"trondelag_fast_distance_r{int(target_resolution)}",
+        "cache_key": (
+            f"{region_id}_{distance_conflict_semantics}_"
+            f"fast_distance_r{int(target_resolution)}"
+        ),
         "groups": group_meta,
         "combined": {"land_share_pct": float(frame["potential_area_share_pct"].mean())},
         "fast_distance_frame": frame,
         "fast_distance": True,
+        "canonical_layer_ids": sorted(set(canonical_layer_ids)),
     }
 
 
@@ -11233,7 +11408,11 @@ def _wind_polygon_preview_state(
         try:
             runtime_result = _wind_fast_distance_runtime_result(region, ui_params, selected, int(target_resolution))
             if runtime_result is None:
-                runtime_result = _wind_runtime_result(ui_params, layer_selection=selected)
+                runtime_result = _wind_runtime_result(
+                    region,
+                    ui_params,
+                    layer_selection=selected,
+                )
         except Exception as exc:
             runtime_error = str(exc)
         if not isinstance(runtime_result, dict):
@@ -11266,7 +11445,7 @@ def _wind_polygon_preview_state(
             include_group_ids=source_group_ids,
         ):
             _append_unique_layer(layers, _layer_visible_by_default(source_layer))
-    if str(region.get("region_id", "")).lower() == "trondelag" and bool(runtime_result.get("fast_distance")):
+    if bool(runtime_result.get("fast_distance")):
         groups, _, _ = load_acceptance_registry()
         for group_id in _wind_active_group_ids(ui_params, layer_selection=selected):
             if group_id not in buffer_group_ids:
@@ -11534,12 +11713,16 @@ def _wind_runtime_config_json(
 
 
 def _wind_runtime_result(
+    region: dict[str, Any],
     ui_params: dict[str, float],
     layer_selection: dict[str, list[str]] | None = None,
 ) -> dict[str, Any]:
     selected = normalize_group_layer_map(layer_selection or _selected_wind_layers())
     runtime_cfg = _wind_runtime_config_json(ui_params, layer_selection=layer_selection)
-    result = run_geometry_runtime(runtime_cfg)
+    result = run_geometry_runtime(
+        runtime_cfg,
+        str(region.get("region_id") or ""),
+    )
     groups = result.get("groups") if isinstance(result, dict) else None
     if isinstance(groups, dict):
         for group_id, group_meta in groups.items():
@@ -14037,6 +14220,8 @@ def main() -> None:
         return
 
     region = _active_region()
+    if not _acceptance_runtime_preflight(region):
+        return
     scenario_state = _scenario_state(region, None)
     context = _load_context(region)
     left_panel, main_panel, right_panel = _workspace_shell()

@@ -20,10 +20,17 @@ the delivery plan, not a replacement for it.
 
 ## During work
 
-- Characterize existing V2 behavior before modifying that path.
+- Characterize the region's accepted reference before modifying the
+  corresponding V2 Final path: frozen V2 for Trøndelag, and the independently
+  pinned V1/reference contract for Bornholm.
 - Record important discoveries and decisions in the daily file.
-- Keep V2 functional until parity exists.
+- Keep V2 Final functional throughout the slice and leave frozen V2 untouched.
 - Run focused validation after each meaningful step.
+- Fully restart the local Streamlit server after changing an imported
+  function signature or module boundary. Stop the complete previous process
+  tree, confirm that the app port has no listener, and then start one instance
+  through `scripts/start_app.ps1`. Hot reload is not a sufficient visual gate
+  for that class of change.
 - Do not expand into another slice because related code happens to be nearby.
 
 ## End of day
@@ -40,6 +47,26 @@ Update the same daily file with:
 
 Then update `DELIVERY_PLAN.md` only if milestone status, order, assumptions, or
 dates changed.
+
+## Publish the work session
+
+After local validation and visual localhost approval:
+
+1. complete the daily log except for post-push results;
+2. create one coherent work-checkpoint commit and push `main` to `origin`;
+3. verify that exact work-checkpoint commit on GitHub;
+4. verify the externally deployed V2 Final app and compare the affected
+   behavior with the active region's accepted reference;
+5. if `site/**` changed, verify the GitHub Pages workflow and public page;
+6. record the work-checkpoint hash, URLs, deployment result, and comparison
+   result in the daily log;
+7. create and push one small publication-record commit;
+8. confirm the publication-record commit on GitHub and a clean local worktree.
+
+Pushing is not the same as publishing. A session is published only after the
+external app has been checked and the result has been recorded. The second
+commit contains documentation only; if it triggers a new Streamlit build,
+confirm that the app remains available.
 
 ## Daily file template
 
@@ -95,7 +122,17 @@ One testable result for the day.
 
 Exact file, function, or test to open next.
 
-## Commit
+## Work checkpoint
 
-- Not committed.
+- Commit: not created.
+
+## Publication
+
+- Push:
+- GitHub checkpoint:
+- V2 Final deployment:
+- Accepted-reference comparison:
+- GitHub Pages, if applicable:
+- Publication-record commit:
+- Final worktree:
 ```

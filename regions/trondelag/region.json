@@ -5,6 +5,12 @@
   "country": "Norway",
   "status": "active",
   "data_status": "file_fallback_until_speedlocal_runtime_import",
+  "behavior_reference": {
+    "status": "authoritative",
+    "source": "frozen_v2",
+    "scope": "trondelag_only",
+    "frozen_v2_parity": true
+  },
   "native_crs": "EPSG:25832",
   "web_crs": "EPSG:4326",
   "available_h3_resolutions": [7, 6, 5],
@@ -22,6 +28,15 @@
   },
   "runtime": {
     "backend_preference": "postgres_then_file",
+    "sources": {
+      "acceptance_registry": {
+        "provider": "v2_archive",
+        "path": "apps/acceptance_model/registry_trondelag.json",
+        "evidence_role": "frozen_v2_parity_reference",
+        "runtime_strategy": "fast_distance",
+        "distance_conflict_semantics": "soft_ramp"
+      }
+    },
     "database": {
       "required_tables": [
         "runtime.regions",

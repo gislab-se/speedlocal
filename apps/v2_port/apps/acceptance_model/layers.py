@@ -10,12 +10,22 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
+from speedlocal.catalogs import load_region as load_speedlocal_region
+from speedlocal.paths import resolve_source_path
+
 from .i18n import acceptance_class_label, cluster_label, reference_layer_name, ui_text
 
 try:
     import h3
 except Exception:  # pragma: no cover
     h3 = None
+
+
+SUPPORTED_RUNTIME_STRATEGIES = {
+    "fast_distance",
+    "precomputed_polygon",
+}
+SUPPORTED_DISTANCE_CONFLICT_SEMANTICS = {"soft_ramp"}
 
 
 @dataclass(frozen=True)
@@ -44,25 +54,73 @@ class SourceLayerSpec:
     point_radius: int
 
 
-def repo_root() -> Path:
-    return Path(__file__).resolve().parents[4]
+def active_region_id(region_id: str | None = None) -> str:
+    value = region_id or st.session_state.get("potential_selected_region_id", "trondelag")
+    normalized = str(value or "").strip().lower()
+    if not normalized:
+        raise ValueError("An active region id is required")
+    return normalized
 
 
-def port_root() -> Path:
-    return Path(__file__).resolve().parents[2]
+def registry_source(region_id: str | None = None) -> dict[str, Any]:
+    normalized_region_id = active_region_id(region_id)
+    region = load_speedlocal_region(normalized_region_id)
+    runtime = region.get("runtime")
+    sources = runtime.get("sources") if isinstance(runtime, dict) else None
+    source = sources.get("acceptance_registry") if isinstance(sources, dict) else None
+    if not isinstance(source, dict):
+        raise FileNotFoundError(
+            f"No acceptance registry source is declared for region: {normalized_region_id}"
+        )
+    provider = str(source.get("provider") or "").strip()
+    path_value = str(source.get("path") or "").strip()
+    runtime_strategy = str(source.get("runtime_strategy") or "").strip()
+    distance_conflict_semantics = str(
+        source.get("distance_conflict_semantics") or ""
+    ).strip()
+    artifact_root = str(source.get("artifact_root") or "").strip()
+    fixtures = source.get("validated_fixtures")
+    if not provider or not path_value or not runtime_strategy:
+        raise ValueError(
+            f"Incomplete acceptance registry source for region: {normalized_region_id}"
+        )
+    if runtime_strategy not in SUPPORTED_RUNTIME_STRATEGIES:
+        raise ValueError(
+            f"Unsupported acceptance runtime strategy for "
+            f"{normalized_region_id}: {runtime_strategy}"
+        )
+    if (
+        runtime_strategy == "fast_distance"
+        and distance_conflict_semantics
+        not in SUPPORTED_DISTANCE_CONFLICT_SEMANTICS
+    ):
+        raise ValueError(
+            "Unsupported distance-conflict semantics for "
+            f"{normalized_region_id}: {distance_conflict_semantics}"
+        )
+    if runtime_strategy == "precomputed_polygon" and (
+        not artifact_root or not isinstance(fixtures, list) or not fixtures
+    ):
+        raise ValueError(
+            "Precomputed polygon runtime requires an artifact root and "
+            f"validated fixtures for region: {normalized_region_id}"
+        )
+    return {
+        "provider": provider,
+        "path": path_value,
+        "runtime_strategy": runtime_strategy,
+        "distance_conflict_semantics": distance_conflict_semantics,
+        "artifact_root": artifact_root,
+        "validated_fixtures": list(fixtures or []),
+    }
 
 
-def registry_path() -> Path:
-    region_id = str(st.session_state.get("potential_selected_region_id", "trondelag") or "trondelag").lower()
-    if region_id == "trondelag":
-        trondelag_path = Path(__file__).resolve().with_name("registry_trondelag.json")
-        if trondelag_path.exists():
-            return trondelag_path
-    if region_id == "bornholm":
-        bornholm_path = Path(__file__).resolve().with_name("registry_bornholm.json")
-        if bornholm_path.exists():
-            return bornholm_path
-    raise FileNotFoundError(f"No SpeedLocal acceptance registry is enabled for region: {region_id}")
+def registry_path(region_id: str | None = None) -> Path:
+    source = registry_source(region_id)
+    path = resolve_source_path(source["provider"], source["path"])
+    if not path.is_file():
+        raise FileNotFoundError(f"Acceptance registry does not exist: {path}")
+    return path
 
 
 @st.cache_data(show_spinner=False)
@@ -71,21 +129,30 @@ def _read_json(path_str: str) -> dict[str, Any]:
         return json.load(handle)
 
 
-def resolve_repo_path(relative_path: str) -> Path:
-    path = Path(relative_path)
-    if path.is_absolute():
-        return path
-    repo_path = repo_root() / path
-    if repo_path.exists():
-        return repo_path
-    port_path = port_root() / path
-    if port_path.exists():
-        return port_path
-    return repo_path
+def resolve_registry_path(registry_meta: dict[str, Any], path_value: str) -> Path:
+    provider = str(registry_meta.get("_source_provider") or "").strip()
+    if not provider:
+        raise ValueError("Acceptance registry has no source provider")
+    normalized_path = str(path_value or "").strip()
+    if not normalized_path:
+        raise ValueError("Acceptance registry path is empty")
+    return resolve_source_path(provider, normalized_path)
 
 
-def load_registry() -> tuple[dict[str, GroupSpec], dict[str, SourceLayerSpec], dict[str, Any]]:
-    raw = _read_json(str(registry_path()))
+def load_registry(
+    region_id: str | None = None,
+) -> tuple[dict[str, GroupSpec], dict[str, SourceLayerSpec], dict[str, Any]]:
+    normalized_region_id = active_region_id(region_id)
+    source = registry_source(normalized_region_id)
+    raw = _read_json(str(registry_path(normalized_region_id))).copy()
+    raw["_source_provider"] = source["provider"]
+    raw["_region_id"] = normalized_region_id
+    raw["_runtime_strategy"] = source["runtime_strategy"]
+    raw["_distance_conflict_semantics"] = source[
+        "distance_conflict_semantics"
+    ]
+    raw["_runtime_artifact_root"] = source["artifact_root"]
+    raw["_runtime_validated_fixtures"] = source["validated_fixtures"]
     groups = {
         item["id"]: GroupSpec(
             id=item["id"],
@@ -117,13 +184,13 @@ def load_registry() -> tuple[dict[str, GroupSpec], dict[str, SourceLayerSpec], d
     return groups, layers, raw
 
 
-def ordered_groups() -> list[GroupSpec]:
-    groups, _, raw = load_registry()
+def ordered_groups(region_id: str | None = None) -> list[GroupSpec]:
+    groups, _, raw = load_registry(region_id)
     return [groups[item["id"]] for item in raw["groups"]]
 
 
-def ordered_layers() -> list[SourceLayerSpec]:
-    _, layers, raw = load_registry()
+def ordered_layers(region_id: str | None = None) -> list[SourceLayerSpec]:
+    _, layers, raw = load_registry(region_id)
     return [layers[item["id"]] for item in raw["layers"]]
 
 
@@ -177,7 +244,7 @@ def build_hex_map_frame(gpkg_path: str, layer_name: str) -> pd.DataFrame:
 
 
 def asset_dir(registry_meta: dict[str, Any]) -> Path:
-    return resolve_repo_path(registry_meta["asset_dir"])
+    return resolve_registry_path(registry_meta, registry_meta["asset_dir"])
 
 
 @st.cache_data(show_spinner=False)
@@ -203,14 +270,15 @@ def load_asset_manifest(manifest_path: str) -> pd.DataFrame:
 
 
 def layer_status_table(registry_meta: dict[str, Any]) -> pd.DataFrame:
-    groups, _, _ = load_registry()
+    region_id = str(registry_meta.get("_region_id") or "")
+    groups, _, _ = load_registry(region_id)
     manifest = load_asset_manifest(str(asset_dir(registry_meta) / "asset_manifest.csv"))
     manifest_map = {}
     if not manifest.empty:
         manifest_map = {row["layer_id"]: row for _, row in manifest.iterrows()}
 
     rows: list[dict[str, Any]] = []
-    for spec in ordered_layers():
+    for spec in ordered_layers(region_id):
         manifest_row = manifest_map.get(spec.id)
         group_label = groups[spec.group_id].label
         if manifest_row is None:
@@ -232,8 +300,8 @@ def layer_status_table(registry_meta: dict[str, Any]) -> pd.DataFrame:
 
         geojson_rel = str(manifest_row.get("geojson_path", ""))
         distance_rel = str(manifest_row.get("distance_path", ""))
-        geojson_ready = bool(geojson_rel) and resolve_repo_path(geojson_rel).exists()
-        distance_ready = bool(distance_rel) and resolve_repo_path(distance_rel).exists()
+        geojson_ready = bool(geojson_rel) and resolve_registry_path(registry_meta, geojson_rel).exists()
+        distance_ready = bool(distance_rel) and resolve_registry_path(registry_meta, distance_rel).exists()
         rows.append(
             {
                 "group": group_label,
@@ -271,7 +339,7 @@ def source_geojson_for_layer(registry_meta: dict[str, Any], layer_id: str) -> di
     geojson_rel = str(rows.iloc[0].get("geojson_path", ""))
     if not geojson_rel:
         return None
-    return load_source_geojson(str(resolve_repo_path(geojson_rel)))
+    return load_source_geojson(str(resolve_registry_path(registry_meta, geojson_rel)))
 
 
 @st.cache_data(show_spinner=False)
@@ -295,7 +363,7 @@ def distance_table_for_layer(registry_meta: dict[str, Any], layer_id: str) -> pd
     distance_rel = str(rows.iloc[0].get("distance_path", ""))
     if not distance_rel:
         return pd.DataFrame(columns=["hex_id", "distance_m", "intersects"])
-    return load_distance_table(str(resolve_repo_path(distance_rel)))
+    return load_distance_table(str(resolve_registry_path(registry_meta, distance_rel)))
 
 
 
@@ -511,7 +579,10 @@ def build_acceptance_reference_payload(gpkg_path: str, layer_name: str, language
 
 
 def acceptance_reference_payload(registry_meta: dict[str, Any], language: str = "sv") -> dict[str, Any] | None:
-    gpkg_path = resolve_repo_path(registry_meta["acceptance_hex_gpkg"])
-    if not gpkg_path.exists():
+    gpkg_value = str(registry_meta.get("acceptance_hex_gpkg") or "").strip()
+    if not gpkg_value:
+        return None
+    gpkg_path = resolve_registry_path(registry_meta, gpkg_value)
+    if not gpkg_path.is_file():
         return None
     return build_acceptance_reference_payload(str(gpkg_path), str(registry_meta["acceptance_hex_layer"]), language)

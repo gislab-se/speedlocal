@@ -38,8 +38,10 @@ REQUIRED_PATHS = [
     "scripts/validate_v2_port_guardrails.py",
     "scripts/validate_v2_source_adapter.py",
     "scripts/validate_v2_port_app.py",
+    "scripts/validate_v2_final_baseline_parity.py",
+    "scripts/validate_bornholm_v2_diagnostics.py",
     "scripts/validate_generic_engine.py",
-    "scripts/validate_generic_roads_app.py",
+    "scripts/validate_frozen_v2_reference.py",
     "scripts/prepare_trondelag_runtime_metadata.py",
     "AGENTS.md",
     "docs/README.md",
@@ -47,8 +49,11 @@ REQUIRED_PATHS = [
     "docs/DELIVERY_PLAN.md",
     "docs/DAILY_WORKFLOW.md",
     "docs/daily/2026-07-29.md",
+    "docs/daily/2026-07-30.md",
     "docs/slices/roads.md",
     "docs/REPO_HYGIENE.md",
+    "docs/FROZEN_V2_REFERENCE.md",
+    "docs/frozen_v2_reference.json",
 ]
 
 
@@ -104,9 +109,9 @@ def main() -> int:
 
     root_entrypoint = (ROOT / "app.py").read_text(encoding="utf-8")
     report.check(
-        'V2_PORT_ENTRYPOINT = ROOT / "apps" / "v2_port" / "app.py"' in root_entrypoint,
-        "Root Streamlit entrypoint launches the regional V2 port.",
-        "Root Streamlit entrypoint does not launch the regional V2 port.",
+        'V2_FINAL_ENTRYPOINT = ROOT / "apps" / "v2_port" / "app.py"' in root_entrypoint,
+        "Root Streamlit entrypoint launches the V2 Final monolith.",
+        "Root Streamlit entrypoint does not launch the V2 Final monolith.",
     )
     status_entrypoint = (ROOT / "status_app.py").read_text(encoding="utf-8")
     report.check(
@@ -138,6 +143,26 @@ def main() -> int:
     trondelag_res = [int(value) for value in trondelag.get("available_h3_resolutions") or []]
     report.check(trondelag_res == [7, 6, 5], "Trondelag exposes only R7/R6/R5.", f"Trondelag resolutions are {trondelag_res}.")
     report.check(8 not in trondelag_res and 9 not in trondelag_res, "Trondelag R8/R9 are not exposed.", "Trondelag exposes R8/R9.")
+    trondelag_reference = trondelag.get("behavior_reference") or {}
+    report.check(
+        trondelag.get("status") == "active"
+        and trondelag_reference.get("status") == "authoritative"
+        and trondelag_reference.get("scope") == "trondelag_only"
+        and trondelag_reference.get("frozen_v2_parity") is True,
+        "Trondelag alone is active and authoritative for frozen-V2 parity.",
+        "Trondelag is not configured as the sole frozen-V2 parity authority.",
+    )
+
+    bornholm = load_json(ROOT / "regions" / "bornholm" / "region.json")
+    bornholm_reference = bornholm.get("behavior_reference") or {}
+    report.check(
+        bornholm.get("status") == "onboarding"
+        and (bornholm.get("landing_card") or {}).get("enabled") is False
+        and bornholm_reference.get("status") == "diagnostic_only"
+        and bornholm_reference.get("frozen_v2_parity") is False,
+        "Bornholm remains cataloged but disabled, with V2 evidence diagnostic only.",
+        "Bornholm is active or incorrectly classified as a V2 parity baseline.",
+    )
 
     skaraborg = load_json(ROOT / "regions" / "skaraborg" / "region.json")
     report.check(skaraborg.get("status") == "planned", "Skaraborg is planned/disabled.", "Skaraborg is not marked planned.")

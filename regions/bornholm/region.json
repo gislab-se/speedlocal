@@ -3,8 +3,14 @@
   "region_id": "bornholm",
   "display_name": "Bornholm",
   "country": "Denmark",
-  "status": "active",
-  "data_status": "file_fallback_until_speedlocal_runtime_import",
+  "status": "onboarding",
+  "data_status": "v1_reference_and_v2_diagnostics_pending_acceptance",
+  "behavior_reference": {
+    "status": "diagnostic_only",
+    "source": "frozen_v2_imported_from_v1",
+    "acceptance_source": "frozen_v1_plus_explicit_region_qa",
+    "frozen_v2_parity": false
+  },
   "native_crs": "EPSG:25833",
   "web_crs": "EPSG:4326",
   "available_h3_resolutions": [6, 7, 8, 9],
@@ -14,14 +20,49 @@
   },
   "landing_card": {
     "title": "Bornholm",
-    "subtitle": "R9 island pilot",
-    "description": "Active pilot retained as a file-fallback runtime until the reviewed data is imported into SpeedLocal Postgres.",
-    "badge": "Active",
-    "enabled": true,
+    "subtitle": "V1 reference · V2 Final onboarding",
+    "description": "Bornholm remains a delivery region, but V2 Final stays disabled until V1 behavior, source data and regional acceptance checks define a trusted baseline.",
+    "badge": "Onboarding",
+    "enabled": false,
     "sort_order": 20
   },
   "runtime": {
     "backend_preference": "postgres_then_file",
+    "sources": {
+      "acceptance_registry": {
+        "provider": "v2_archive",
+        "path": "apps/acceptance_model/registry_bornholm.json",
+        "evidence_role": "diagnostic_only",
+        "runtime_strategy": "precomputed_polygon",
+        "artifact_root": "docs/geocontext/acceptance_framework/data/prototype_runtime",
+        "validated_fixtures": [
+          {
+            "id": "frozen_default_roads_300m",
+            "files_sha256": {
+              "combined.geojson": "41cbdab02e2063410492872a4662dd37c9f9d7f6f00695bcfbe9f6d1f32e88da",
+              "config.json": "4874250c5999d79ba05f6008b6d1917f39ed21b65f29bfc63a057d33e35c1592",
+              "group_culture.geojson": "5e4fbee93e1e29f3c28d741627d96dcde77e14f937ce371704140dcbefea9404",
+              "group_protected.geojson": "248dddb40640c61d230d0145af8462aac0fe6b909a79e979ec5bb7e0f36d2977",
+              "group_settlement.geojson": "0622290c29a2ae52809429e1ec785e3ae1a3c5d3948b01ac52227a646f6604bf",
+              "group_transport.geojson": "3bfaba324aa63fe8e84410d522cc19f062c2f67845babc8bfd7ec57110b58140",
+              "metadata.json": "a3c8ba7b3875c3436c68cf985ae214bd66bc82004fbed241ab5866adafef23ae"
+            }
+          },
+          {
+            "id": "frozen_roads_400m",
+            "files_sha256": {
+              "combined.geojson": "07b8e86f589f805f352ff23a24b196ed17149d223215e09dc4231e9905535fee",
+              "config.json": "b87b5cb4668583e4353b86ed4c80cd1c74873ee27cea2cc988c2ebedd894466d",
+              "group_culture.geojson": "5e4fbee93e1e29f3c28d741627d96dcde77e14f937ce371704140dcbefea9404",
+              "group_protected.geojson": "248dddb40640c61d230d0145af8462aac0fe6b909a79e979ec5bb7e0f36d2977",
+              "group_settlement.geojson": "0622290c29a2ae52809429e1ec785e3ae1a3c5d3948b01ac52227a646f6604bf",
+              "group_transport.geojson": "1bdab1d72d7233cc0137079b8f121495646b134f82996dfc584d5e994bcaa297",
+              "metadata.json": "f15e62e3b2f84d740b7711333f2b168e838d882580cad8310194a2fd5e3dcb8f"
+            }
+          }
+        ]
+      }
+    },
     "database": {
       "required_tables": [
         "runtime.regions",
@@ -57,9 +98,11 @@
     ]
   },
   "readiness_requirements": [
+    "Recover and freeze the Bornholm V1 repository checkpoint before selecting product behavior.",
+    "Define explicit regional acceptance checks independently from the frozen multiregion V2 snapshot.",
     "R10-derived R9 PEY semantics remain labelled until true R9-native runtime exists.",
     "File fallback paths stay documented until SpeedLocal Postgres imports pass validation.",
     "Bornholm validation must run independently from Trondelag."
   ],
-  "runtime_note": "Bornholm remains active through documented file fallbacks until app-ready R9 display, landscape, potential and acceptance data are imported into the shared SpeedLocal runtime schema."
+  "runtime_note": "Bornholm V2 artifacts remain available for provenance and diagnostics only. V2 Final is disabled until a V1- and data-backed regional acceptance baseline is approved."
 }

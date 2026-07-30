@@ -12,6 +12,7 @@ DEFAULT_REGIONAL_LANDSCAPE_PIPELINE_ROOT = Path(r"C:\gislab\regional-landscape-p
 V2_SOURCE_ROOT_ENV = "SPEEDLOCAL_V2_SOURCE_ROOT"
 V2_SOURCE_REGION_IDS = {"bornholm", "trondelag"}
 DELIVERY_REGION_KEYS = {
+    "behavior_reference",
     "country",
     "data_status",
     "display_name",

@@ -1,0 +1,84 @@
+{
+  "schema_version": "2026-07-30",
+  "repository": "gislab-se/landskapsanalys",
+  "repository_url": "https://github.com/gislab-se/landskapsanalys",
+  "source_branch_at_freeze": "potential-v2-multiregion",
+  "frozen_branch": "frozen-v2-reference-2026-07-30",
+  "frozen_tag": "v2-frozen-reference-2026-07-30",
+  "commit": "75ba14871100c208cbf8eedb794d56c165340811",
+  "entrypoint": "streamlit_app.py",
+  "launcher_target": "potential_app.py",
+  "deployment_url": "https://landskapsanalys-potential-v2-test.streamlit.app/",
+  "streamlit_app_id": "63561ff3-f8c2-4c09-a9e7-ea110c51dc4a",
+  "python_version": "3.11",
+  "deployment_source_branch_at_verification": "potential-v2-multiregion",
+  "deployment_repoint_status": "not_required_current_branch_locked",
+  "deployment_access_status": "private_authentication_required",
+  "deployment_metadata_verified_utc_date": "2026-07-30",
+  "runtime_archive_env": "SPEEDLOCAL_V2_SOURCE_ROOT",
+  "runtime_archive_read_only": true,
+  "verified_utc_date": "2026-07-30",
+  "behavior_reference": {
+    "authoritative_regions": [
+      "trondelag"
+    ],
+    "diagnostic_only_regions": [
+      "bornholm"
+    ],
+    "trondelag_only_decision_commit": "9095d996797a3173e7bbc5315a0beae5f712011e",
+    "trondelag_only_history_tag": "stable-v2-trondelag-2026-05-19-zoom"
+  },
+  "branch_protection": {
+    "verified_utc_date": "2026-07-30",
+    "potential-v2-multiregion": {
+      "locked": true,
+      "enforce_admins": true,
+      "allow_force_pushes": false,
+      "allow_deletions": false
+    },
+    "frozen-v2-reference-2026-07-30": {
+      "locked": true,
+      "enforce_admins": true,
+      "allow_force_pushes": false,
+      "allow_deletions": false
+    }
+  },
+  "tag_protection": {
+    "verified_utc_date": "2026-07-30",
+    "ruleset_id": 20038506,
+    "name": "Protect frozen V2 reference tag",
+    "target": "tag",
+    "enforcement": "active",
+    "included_ref": "refs/tags/v2-frozen-reference-2026-07-30",
+    "rules": [
+      "update",
+      "deletion"
+    ]
+  },
+  "acceptance_runtime_asset_set": {
+    "manifests": [
+      "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/asset_manifest.csv",
+      "docs/geocontext/acceptance_framework/data/prototype_assets_dagi_landsdel/asset_manifest.csv"
+    ],
+    "path_fields": [
+      "geojson_path",
+      "distance_path",
+      "analysis_rds_path"
+    ],
+    "expected_path_count": 120,
+    "expected_total_bytes": 58697234,
+    "aggregate_sha256": "76db38675e8f150ca2b2ce287221bdade33c6f906cbd03089e92c84bb29fbe3e"
+  },
+  "runtime_archive_files": {
+    "streamlit_app.py": "49cab539f50f506d8c555c159588765845d2ee6373a53d79f591549af462db8f",
+    "potential_app.py": "287796ce40cdb2ae852b453189256b78db21761370032705702b4e48e73c8195",
+    "apps/acceptance_model/layers.py": "81c487ed591e454039a28490e1731a37684a42722fdea1cd6a63967a2c6d5f91",
+    "apps/acceptance_model/registry_trondelag.json": "e6790a2bf425dbbcf12c304716d459d25dff9ae2e27f565954197aa3cbd6c8f7",
+    "apps/acceptance_model/registry_bornholm.json": "2ac41b054995c1a98caeea8650e84cfafd9430193dc0371bfe6e929ae51ebbe2",
+    "regions/trondelag/region.json": "c8e4407b3b873c88cfcf41a719e45fbe2a4da78425dff3e4ca944d3424a0c0a8",
+    "regions/bornholm/region.json": "48e84df1c267515f4ccf7cff01b22cfbd2b27b70efb22561fd16f8fc02d4ed9c",
+    "requirements.txt": "5e9f4200c994cfe449f0478e226dfab34e615320a7c462501539993050e4585f",
+    "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/asset_manifest.csv": "0de8626054ad407034f6bb43db6b1cce9ef3dd106ff48884ceeb3b7574658d40",
+    "docs/geocontext/acceptance_framework/data/prototype_assets_dagi_landsdel/asset_manifest.csv": "17a8dfc4f9916c4a8492797a3168b6c7092445714b9f87a2869d9e222fc31736"
+  }
+}
