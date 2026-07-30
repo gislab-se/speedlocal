@@ -51,13 +51,13 @@ Current milestone status:
   Trøndelag-only check, not a replacement for the `75ba148` full-flow gate.
 - Trøndelag cloud runtime transport: 45-file, checksum-pinned Release package
   published, anonymously redownloaded, and validated through a clean public
-  cold start and the real root entrypoint; authenticated Streamlit Cloud smoke
-  verification is the remaining publication gate.
+  cold start and the real root entrypoint; authenticated Streamlit Cloud visual
+  and interaction smoke review approved.
 - Bornholm catalog/source onboarding: in progress. Its 300/400 m polygon
   fixtures are diagnostic replay, not public parity.
 - Bornholm V1 characterization and technical pinning: not started.
-- `roads_large` R7 canonical integration: automated gate and localhost visual
-  approval complete; external deployment verification remains.
+- `roads_large` R7 canonical integration: automated gate, localhost visual
+  approval, public-package cold start, and external deployment review complete.
 - `roads_large` full promotion: canonical R6/R5 rollups and their remaining
   legacy-path removal remain.
 - Complete roads promotion: canonical `roads_medium`, combined-roads behavior,

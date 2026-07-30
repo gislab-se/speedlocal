@@ -1,6 +1,6 @@
 # Roads slice characterization
 
-Status: Trøndelag `roads_large` canonical R7 checkpoint implemented and locally approved; R6/R5 pending
+Status: Trøndelag `roads_large` canonical R7 checkpoint implemented and approved locally and in Streamlit Cloud; R6/R5 pending
 Behavior reference: frozen V2 for Trøndelag; Bornholm V1 acceptance baseline pending
 Integration target: V2 Final
 
@@ -190,11 +190,9 @@ artifact is transport evidence only; frozen V2 remains the behavior oracle.
 
 This is an R7 checkpoint, not full roads promotion:
 
-1. complete the authenticated external interaction smoke verification for the
-   published and clean-cold-start-validated runtime package;
-2. add canonical R7-to-R6/R5 rollups for `roads_large`;
-3. remove its remaining legacy R6/R5 calculation only after those views pass;
-4. migrate `roads_medium`;
-5. validate combined roads behavior;
-6. remove the temporary `transport`-to-`roads` UI adapter only when the whole
+1. add canonical R7-to-R6/R5 rollups for `roads_large`;
+2. remove its remaining legacy R6/R5 calculation only after those views pass;
+3. migrate `roads_medium`;
+4. validate combined roads behavior;
+5. remove the temporary `transport`-to-`roads` UI adapter only when the whole
    roads group is canonical.

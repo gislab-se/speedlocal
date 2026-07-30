@@ -158,10 +158,11 @@ real root app, and passed the 20/20 interactive gate including the
 
 The Streamlit Cloud app is currently access-controlled: anonymous requests to
 both the app and its health endpoint redirect to Streamlit authentication.
-Therefore an authorized user must confirm the deployed commit and repeat the
-Trøndelag interaction before external publication is marked complete.
-Colleagues must be granted access in Streamlit Cloud if they are expected to
-review the private deployment.
+On 2026-07-30 the user completed the authenticated visual and interaction smoke
+review and confirmed that the deployed Trøndelag app works correctly. The
+external publication gate is therefore complete. Colleagues must still be
+granted access in Streamlit Cloud if they are expected to review the private
+deployment.
 
 ## End-of-session publication
 
