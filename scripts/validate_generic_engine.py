@@ -80,6 +80,26 @@ ROAD_SELECTION_RAW_EXPECTATIONS = {
         1000.0: (0.6771100714749835, 3475),
     },
 }
+POPULATION_EXPECTATIONS = {
+    7: {
+        100.0: (0.8422249588642156, 1_229, 1_485, 38_119.151592087590),
+        500.0: (0.6611716764470330, 3_792, 4_048, 29_960.271522643929),
+        1000.0: (0.5559792629777940, 4_947, 5_203, 25_213.340431058976),
+        3000.0: (0.2936284590947701, 8_004, 8_260, 13_350.050589430422),
+    },
+    6: {
+        100.0: (0.6316790337494221, 610, 636, 28_522.089594840058),
+        500.0: (0.4522473888118354, 1_099, 1_125, 20_357.789476729769),
+        1000.0: (0.3821757836338419, 1_218, 1_244, 17_125.905968613042),
+        3000.0: (0.2072386372322392, 1_527, 1_553, 9_041.916962610443),
+    },
+    5: {
+        100.0: (0.3502184931506849, 206, 213, 12_878.835458336256),
+        500.0: (0.2230698575342466, 271, 278, 6_930.123791379062),
+        1000.0: (0.1915868438356164, 282, 289, 5_866.145655584355),
+        3000.0: (0.1283255305936073, 302, 309, 3_363.591524290177),
+    },
+}
 
 
 def _v2_roads_oracle(contract, threshold: float) -> tuple[int, int, float]:
@@ -129,13 +149,15 @@ def _trondelag_display_cell_ids(
     return cell_ids
 
 
-def _v2_road_selection_rollup_oracle(
+def _v2_distance_selection_rollup_oracle(
     contract,
     layer_ids: tuple[str, ...],
     threshold: float,
+    source_resolution: int,
     target_resolution: int,
     target_cell_ids: tuple[str, ...],
-) -> dict[str, tuple[float, bool, bool, float]]:
+    missing_distance_policy: str = "error",
+) -> dict[str, tuple[float | None, bool, bool, float]]:
     """Independently reproduce frozen raw-distance rollup and soft acceptance."""
     rolled: dict[str, tuple[float, bool]] = {}
     for layer_id in layer_ids:
@@ -149,13 +171,14 @@ def _v2_road_selection_rollup_oracle(
                         f"Duplicate {layer_id} oracle cell id: {cell_id}"
                     )
                 seen_source_ids.add(cell_id)
-                if int(h3.get_resolution(cell_id)) != 7:
+                if int(h3.get_resolution(cell_id)) != source_resolution:
                     raise ValueError(
-                        f"{layer_id} oracle source cell is not R7: {cell_id}"
+                        f"{layer_id} oracle source cell is not "
+                        f"R{source_resolution}: {cell_id}"
                     )
                 target_id = (
                     cell_id
-                    if target_resolution == 7
+                    if target_resolution == source_resolution
                     else str(h3.cell_to_parent(cell_id, target_resolution))
                 )
                 value = (
@@ -172,14 +195,22 @@ def _v2_road_selection_rollup_oracle(
                         previous[1] or value[1],
                     )
 
-    oracle: dict[str, tuple[float, bool, bool, float]] = {}
+    oracle: dict[str, tuple[float | None, bool, bool, float]] = {}
     ramp_end = max(threshold * 2.0, threshold + 1.0)
     for cell_id in target_cell_ids:
         if cell_id not in rolled:
-            raise ValueError(f"Oracle is missing analysis cell: {cell_id}")
-        distance, intersects = rolled[cell_id]
-        blocked = intersects or distance <= threshold
+            if missing_distance_policy == "zero_acceptance":
+                distance, intersects = None, False
+            else:
+                raise ValueError(f"Oracle is missing analysis cell: {cell_id}")
+        else:
+            distance, intersects = rolled[cell_id]
+        blocked = intersects or (
+            distance is not None and distance <= threshold
+        )
         if intersects:
+            acceptance = 0.0
+        elif distance is None:
             acceptance = 0.0
         elif threshold <= 0:
             acceptance = 1.0
@@ -229,6 +260,30 @@ def _assert_invalid_distance_rows_fail_closed() -> int:
                     f"Malformed distance fixture did not fail closed: {name}"
                 )
             checks += 1
+
+        declared_path = root / "declared_resolution.csv"
+        r7_cell = str(h3.latlng_to_cell(63.4, 10.4, 7))
+        declared_path.write_text(
+            "hex_id,distance_m,intersects\n"
+            f"{r7_cell},10,FALSE\n",
+            encoding="utf-8",
+        )
+        declared_layer = SimpleNamespace(
+            assets=SimpleNamespace(distance_path=declared_path),
+            contract=SimpleNamespace(
+                source=SimpleNamespace(distance_h3_resolution=8),
+            ),
+        )
+        try:
+            _distance_rows(declared_layer)
+        except ValueError as exc:
+            assert "expected declared R8" in str(exc)
+        else:
+            raise AssertionError(
+                "A distance row outside its declared H3 resolution did not "
+                "fail closed"
+            )
+        checks += 1
     return checks
 
 
@@ -556,6 +611,198 @@ def main() -> int:
     assert trondelag.default_request.selected_layer_ids == ()
     checks += 2
     checks += _assert_invalid_default_requests_fail_closed(trondelag)
+
+    population = validate_layer(trondelag.layers["population_points"])
+    population_buffer = population.contract.parameters["buffer_m"]
+    assert population.contract.group_id == "population"
+    assert population.geometry_family == "polygon"
+    assert population.processing_adapter == "population_grid"
+    assert population.assets.feature_count == 26_029
+    assert population.contract.source.distance_h3_resolution == 8
+    population_coverage = population.contract.source.distance_coverage
+    assert population_coverage.mode == "declared_sparse"
+    assert population_coverage.missing_policy == "zero_acceptance"
+    assert population_coverage.expected_source_row_count == 89_312
+    assert set(population_coverage.targets) == {7, 6, 5}
+    assert (
+        population_buffer.default,
+        population_buffer.minimum,
+        population_buffer.maximum,
+        population_buffer.step,
+    ) == (100.0, 100.0, 3000.0, 50.0)
+    checks += 10
+    for invalid_distance_resolution in (True, 6.5, -1, 16):
+        try:
+            replace(
+                population.contract.source,
+                distance_h3_resolution=invalid_distance_resolution,
+            )
+        except ValueError as exc:
+            assert "distance_h3_resolution" in str(exc)
+        else:
+            raise AssertionError(
+                "Invalid distance_h3_resolution did not fail closed: "
+                f"{invalid_distance_resolution!r}"
+            )
+        checks += 1
+    try:
+        replace(
+            population_coverage,
+            missing_policy="unconstrained",
+        )
+    except ValueError as exc:
+        assert "missing policy" in str(exc)
+    else:
+        raise AssertionError("Unknown missing-distance policy did not fail closed")
+    checks += 1
+    try:
+        replace(
+            population_coverage,
+            source_ids_sha256="not-a-digest",
+        )
+    except ValueError as exc:
+        assert "source_ids_sha256" in str(exc)
+    else:
+        raise AssertionError("Invalid distance source digest did not fail closed")
+    checks += 1
+
+    def population_contract_with_source(source):
+        return replace(
+            trondelag,
+            layers={
+                **trondelag.layers,
+                "population_points": replace(
+                    population.contract,
+                    source=source,
+                ),
+            },
+        )
+
+    missing_target_coverage = replace(
+        population_coverage,
+        targets={
+            resolution: target
+            for resolution, target in population_coverage.targets.items()
+            if resolution != 5
+        },
+    )
+    try:
+        validate_contract(
+            population_contract_with_source(
+                replace(
+                    population.contract.source,
+                    distance_coverage=missing_target_coverage,
+                )
+            )
+        )
+    except ValueError as exc:
+        assert "must exactly match" in str(exc)
+    else:
+        raise AssertionError(
+            "Sparse population coverage accepted a missing R5 target"
+        )
+    checks += 1
+
+    r7_coverage = population_coverage.targets[7]
+    wrong_r7_count = replace(
+        r7_coverage,
+        target_cell_count=r7_coverage.target_cell_count + 1,
+        covered_cell_count=r7_coverage.covered_cell_count + 1,
+    )
+    try:
+        validate_contract(
+            population_contract_with_source(
+                replace(
+                    population.contract.source,
+                    distance_coverage=replace(
+                        population_coverage,
+                        targets={
+                            **population_coverage.targets,
+                            7: wrong_r7_count,
+                        },
+                    ),
+                )
+            )
+        )
+    except ValueError as exc:
+        assert "target count does not match" in str(exc)
+    else:
+        raise AssertionError(
+            "Sparse population coverage accepted the wrong R7 target count"
+        )
+    checks += 1
+
+    try:
+        validate_contract(
+            population_contract_with_source(
+                replace(
+                    population.contract.source,
+                    distance_h3_resolution=6,
+                )
+            )
+        )
+    except ValueError as exc:
+        assert "finer than its R6 distance source" in str(exc)
+    else:
+        raise AssertionError(
+            "Sparse population coverage accepted a coarser distance source"
+        )
+    checks += 1
+
+    for coverage_drift, expected_message in (
+        (
+            replace(
+                population_coverage,
+                expected_source_row_count=(
+                    population_coverage.expected_source_row_count - 1
+                ),
+            ),
+            "distance rows; expected",
+        ),
+        (
+            replace(
+                population_coverage,
+                source_ids_sha256="0" * 64,
+            ),
+            "source-id coverage digest",
+        ),
+    ):
+        drifted_layer = replace(
+            population,
+            contract=replace(
+                population.contract,
+                source=replace(
+                    population.contract.source,
+                    distance_coverage=coverage_drift,
+                ),
+            ),
+        )
+        try:
+            _distance_rows(drifted_layer)
+        except ValueError as exc:
+            assert expected_message in str(exc)
+        else:
+            raise AssertionError(
+                "Population source coverage drift did not fail closed"
+            )
+        checks += 1
+
+    try:
+        run_analysis(
+            "trondelag",
+            "wind",
+            ["population_points"],
+            {"population_points": {"buffer_m": 500}},
+            analysis_cell_ids=["not-an-h3-cell"],
+        )
+    except ValueError as exc:
+        assert "target_resolution" in str(exc)
+    else:
+        raise AssertionError(
+            "Sparse population coverage bypassed its signed target domain"
+        )
+    checks += 1
+
     for layer_id in ("roads_medium", "roads_large"):
         buffer_contract = trondelag.layers[layer_id].parameters["buffer_m"]
         assert (
@@ -588,6 +835,37 @@ def main() -> int:
         for rollup in trondelag.analysis_domain.rollups.values()
     )
     checks += 2
+
+    population_rows = _distance_rows(population)
+    for drifted_r7_target in (
+        replace(r7_coverage, missing_ids_sha256="0" * 64),
+        replace(
+            r7_coverage,
+            outside_cell_count=r7_coverage.outside_cell_count + 1,
+        ),
+    ):
+        drifted_coverage = replace(
+            population_coverage,
+            targets={
+                **population_coverage.targets,
+                7: drifted_r7_target,
+            },
+        )
+        try:
+            _rollup_distance_rows(
+                population_rows,
+                8,
+                7,
+                frozenset(display_cell_ids_by_resolution[7]),
+                drifted_coverage,
+            )
+        except ValueError as exc:
+            assert "does not match its manifest signature" in str(exc)
+        else:
+            raise AssertionError(
+                "Population target coverage signature drift did not fail closed"
+            )
+        checks += 1
 
     area_by_resolution: dict[int, dict[str, float]] = {}
     for resolution, target_cell_ids in display_cell_ids_by_resolution.items():
@@ -692,10 +970,11 @@ def main() -> int:
                     cell.cell_id for cell in display_group.cells
                 } == set(target_cell_ids)
 
-                oracle = _v2_road_selection_rollup_oracle(
+                oracle = _v2_distance_selection_rollup_oracle(
                     trondelag,
                     layer_ids,
                     threshold,
+                    7,
                     resolution,
                     target_cell_ids,
                 )
@@ -723,6 +1002,91 @@ def main() -> int:
                     f"{display_group.blocked_cell_count} blocked, "
                     f"{display_group.mean_acceptance:.15f} mean acceptance"
                 )
+
+    for resolution, expectations in POPULATION_EXPECTATIONS.items():
+        target_cell_ids = display_cell_ids_by_resolution[resolution]
+        for threshold, (
+            expected_mean,
+            expected_blocked,
+            expected_zero_acceptance,
+            expected_area_km2,
+        ) in expectations.items():
+            result = run_analysis(
+                "trondelag",
+                "wind",
+                ["population_points"],
+                {"population_points": {"buffer_m": threshold}},
+                target_resolution=resolution,
+            )
+            assert len(result.layers) == 1
+            layer_result = result.layers[0]
+            group = result.groups[0]
+            assert layer_result.geometry_family == "polygon"
+            assert layer_result.processing_adapter == "population_grid"
+            assert group.group_id == "population"
+            assert group.layer_ids == ("population_points",)
+            assert group.cell_count == TRONDELAG_DISPLAY_COUNTS[resolution]
+            assert len(group.cells) == TRONDELAG_DISPLAY_COUNTS[resolution]
+            assert group.blocked_cell_count == expected_blocked
+            assert layer_result.blocked_cell_count == expected_blocked
+            assert abs(group.mean_acceptance - expected_mean) < 1e-12
+            assert {cell.cell_id for cell in group.cells} == set(target_cell_ids)
+            assert sum(
+                cell.acceptance == 0.0 for cell in group.cells
+            ) == expected_zero_acceptance
+            assert sum(
+                cell.coverage_missing for cell in group.cells
+            ) == population_coverage.targets[resolution].missing_cell_count
+
+            oracle = _v2_distance_selection_rollup_oracle(
+                trondelag,
+                ("population_points",),
+                threshold,
+                8,
+                resolution,
+                target_cell_ids,
+                "zero_acceptance",
+            )
+            actual = {cell.cell_id: cell for cell in group.cells}
+            assert actual.keys() == oracle.keys()
+            for cell_id, (
+                expected_distance,
+                expected_intersection,
+                expected_cell_blocked,
+                expected_acceptance,
+            ) in oracle.items():
+                cell = actual[cell_id]
+                if expected_distance is None:
+                    assert cell.min_distance_m is None
+                    assert cell.coverage_missing is True
+                else:
+                    assert cell.min_distance_m is not None
+                    assert abs(cell.min_distance_m - expected_distance) < 1e-12
+                    assert cell.coverage_missing is False
+                assert cell.any_intersection is expected_intersection
+                assert cell.blocked is expected_cell_blocked
+                assert abs(cell.acceptance - expected_acceptance) < 1e-12
+
+            model_area_km2 = math.fsum(
+                cell.acceptance
+                * area_by_resolution[resolution][cell.cell_id]
+                for cell in group.cells
+            )
+            assert math.isclose(
+                model_area_km2,
+                expected_area_km2,
+                rel_tol=1e-12,
+                abs_tol=1e-8,
+            )
+            checks += 16
+            print(
+                f"PASS trondelag population_points R{resolution} "
+                f"{threshold:g} m: {group.cell_count} cells, "
+                f"{group.blocked_cell_count} blocked, "
+                f"{expected_zero_acceptance} zero-acceptance, "
+                f"{group.mean_acceptance:.15f} mean acceptance, "
+                f"{model_area_km2:.9f} km2 model area"
+            )
 
     assert len({round(value, 12) for value in area_by_resolution[7].values()}) > 1
     checks += 1

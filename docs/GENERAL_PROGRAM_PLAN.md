@@ -182,8 +182,9 @@ Implemented foundation:
 
 Current slice:
 
-- complete the public roads behavior;
-- characterization: complete;
+- population and settlement, beginning with the primary Trøndelag
+  `population_points` grid proxy;
+- population characterization: complete;
 - dynamic medium and large road layers: complete;
 - generic group result and distance-engine contract conformance: complete;
 - the temporary separate parity app has been removed;
@@ -209,10 +210,11 @@ Current slice:
   manifest;
 - V2 Final starts from the wind manifest's empty request; source and buffer
   visibility are map-review state and do not alter the numeric request;
-- the five-group public whitelist is manifest-declared, while non-roads layer
-  options still come from the region-manifest-declared legacy registry. This
-  is a transitional adapter, not canonical manifest layer availability and not
-  a solar analysis contract;
+- the five-group public whitelist is manifest-declared. The primary
+  population layer is now manifest-driven alongside roads; remaining
+  unmigrated non-road options still come from the region-manifest-declared
+  legacy registry. That bounded adapter is not canonical manifest layer
+  availability and not a solar analysis contract;
 - wind potential, establishment rollups, and scenario allocation use validated
   per-cell `display_area_m2`; Frozen V2's unweighted cell mean remains the
   parity oracle, and exact polygon-clipped land area remains later work;
@@ -232,7 +234,18 @@ Current slice:
   final manifest-backed UI in a clean localhost process on 2026-07-31, so the
   complete roads slice is locally promoted. Publication remains separate and
   waits for an eligible Tuesday or Friday window; population is the next
-  planned slice.
+  thematic slice;
+- the primary population contract now declares polygon geometry, grid
+  representation, H3 R8 numeric rows, the complete slider range, and explicit
+  fail-closed zero-acceptance semantics plus exact signatures for target cells
+  outside the sparse distance artifact. Independent R8-to-R7/R6/R5 cell,
+  aggregate, and model-area checks pass at 100, 500, 1,000, and 3,000 m. The
+  real V2 Final control, calculation, source preview, and buffer preview use
+  this contract, and adversarial checks prove that a broken migrated contract
+  cannot reopen the legacy primary loader. Automated integration is complete;
+  localhost approval and local promotion remain pending. The optional
+  settlement proxies, public `settlement` alias, and allocation-ranking
+  consumer remain explicit work inside the incomplete population slice.
 
 ## Definition of done for a slice
 

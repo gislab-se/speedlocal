@@ -102,6 +102,26 @@ ROADS_LARGE_APP_ROLLUP_EXPECTATIONS = {
 }
 TRONDELAG_MODEL_DOMAIN_AREA_KM2 = 45_213.18864360976
 DISPLAY_COUNTS = {7: 13_735, 6: 2_163, 5: 365}
+POPULATION_EXPECTATIONS = {
+    7: {
+        100.0: (84.22249588642156, 1_485, 38_119.151592087590),
+        500.0: (66.11716764470330, 4_048, 29_960.271522643929),
+        1000.0: (55.59792629777940, 5_203, 25_213.340431058976),
+        3000.0: (29.36284590947701, 8_260, 13_350.050589430422),
+    },
+    6: {
+        100.0: (63.16790337494221, 636, 28_522.089594840058),
+        500.0: (45.22473888118354, 1_125, 20_357.789476729769),
+        1000.0: (38.21757836338419, 1_244, 17_125.905968613042),
+        3000.0: (20.72386372322392, 1_553, 9_041.916962610443),
+    },
+    5: {
+        100.0: (35.02184931506849, 213, 12_878.835458336256),
+        500.0: (22.30698575342466, 278, 6_930.123791379062),
+        1000.0: (19.15868438356164, 289, 5_866.145655584355),
+        3000.0: (12.83255305936073, 309, 3_363.591524290177),
+    },
+}
 
 for import_root in (ROOT, PORT_ROOT, PORT_APPS):
     if str(import_root) not in sys.path:
@@ -208,6 +228,71 @@ def _roads_acceptance_oracle(
     return oracle
 
 
+def _population_acceptance_oracle(
+    registry: dict,
+    layer_ids: tuple[str, ...],
+    threshold_m: float,
+    target_resolution: int,
+    target_cell_ids: set[str],
+) -> dict[str, float]:
+    """Reproduce frozen sparse population/settlement semantics."""
+    rolled: dict[str, tuple[float, bool]] = {}
+    for layer_id in layer_ids:
+        distance = distance_table_for_layer(registry, layer_id)
+        if distance["hex_id"].astype(str).duplicated().any():
+            raise ValueError(
+                f"Frozen {layer_id} distance table has duplicate hex ids"
+            )
+        for row in distance.itertuples(index=False):
+            cell_id = str(row.hex_id)
+            source_resolution = int(h3.get_resolution(cell_id))
+            if source_resolution < target_resolution:
+                raise ValueError(
+                    f"Frozen {layer_id} row R{source_resolution} cannot "
+                    f"roll up to R{target_resolution}"
+                )
+            target_id = (
+                cell_id
+                if source_resolution == target_resolution
+                else str(h3.cell_to_parent(cell_id, target_resolution))
+            )
+            value = (
+                float(row.distance_m),
+                str(row.intersects).strip().lower()
+                in {"1", "true", "yes"},
+            )
+            previous = rolled.get(target_id)
+            if previous is None:
+                rolled[target_id] = value
+            else:
+                rolled[target_id] = (
+                    min(previous[0], value[0]),
+                    previous[1] or value[1],
+                )
+
+    ramp_end = max(threshold_m * 2.0, threshold_m + 1.0)
+    oracle: dict[str, float] = {}
+    for cell_id in target_cell_ids:
+        observation = rolled.get(cell_id)
+        if observation is None:
+            oracle[cell_id] = 0.0
+            continue
+        distance_m, intersects = observation
+        oracle[cell_id] = (
+            0.0
+            if intersects
+            else max(
+                0.0,
+                min(
+                    1.0,
+                    (distance_m - threshold_m)
+                    / (ramp_end - threshold_m),
+                ),
+            )
+        )
+    return oracle
+
+
 def main() -> int:
     report = Report()
     source_value = os.environ.get(V2_SOURCE_ROOT_ENV, "").strip()
@@ -275,7 +360,7 @@ def main() -> int:
                 result is not None
                 and result.get("fast_distance") is True
                 and result.get("canonical_layer_ids")
-                == ["roads_large", "roads_medium"]
+                == ["population_points", "roads_large", "roads_medium"]
                 and abs(actual_share - expected_share) <= 1e-12,
                 f"Trøndelag R{resolution} at {road_distance:.0f} m preserves "
                 f"frozen full-flow output ({expected_share:.12f}%).",
@@ -283,6 +368,102 @@ def main() -> int:
                 f"expected {expected_share:.12f}%, got {actual_share:.12f}%, "
                 f"canonical={((result or {}).get('canonical_layer_ids') or [])}.",
             )
+    population_only = {
+        group_id: []
+        for group_id in app.public_wind_group_ids("trondelag")
+    }
+    population_only[app.WIND_SETTLEMENT_GROUP_ID] = [
+        app.WIND_POPULATION_SOURCE_LAYER_ID
+    ]
+    for resolution, expectations in POPULATION_EXPECTATIONS.items():
+        display_geometry_path = app._h3_display_geometry_path(
+            trondelag_region,
+            resolution,
+        )
+        target_cell_ids = set(
+            app.load_h3_display_geometries(display_geometry_path)
+        )
+        for distance_m, (
+            expected_share,
+            expected_zero_acceptance,
+            expected_area,
+        ) in expectations.items():
+            params = app._reference_default_wind_params()
+            params["settlement_distance_m"] = distance_m
+            result = app._wind_fast_distance_runtime_result(
+                trondelag_region,
+                params,
+                population_only,
+                resolution,
+            )
+            frame = (
+                (result or {}).get("fast_distance_frame")
+                if isinstance(result, dict)
+                else None
+            )
+            actual_share = float(
+                ((result or {}).get("combined") or {}).get(
+                    "land_share_pct",
+                    -1.0,
+                )
+            )
+            actual_area = (
+                float(frame["potential_area_km2"].sum())
+                if frame is not None
+                else -1.0
+            )
+            actual_zero_acceptance = (
+                int(frame["potential_area_share_pct"].eq(0.0).sum())
+                if frame is not None
+                else -1
+            )
+            oracle = _population_acceptance_oracle(
+                trondelag_registry,
+                (app.WIND_POPULATION_SOURCE_LAYER_ID,),
+                distance_m,
+                resolution,
+                target_cell_ids,
+            )
+            actual_by_hex = (
+                {
+                    str(row.hex_id):
+                    float(row.potential_area_share_pct) / 100.0
+                    for row in frame.itertuples(index=False)
+                }
+                if frame is not None
+                else {}
+            )
+            max_cell_error = (
+                max(
+                    abs(actual_by_hex[cell_id] - oracle[cell_id])
+                    for cell_id in actual_by_hex
+                )
+                if actual_by_hex
+                and actual_by_hex.keys() == oracle.keys()
+                else float("inf")
+            )
+            report.check(
+                result is not None
+                and result.get("canonical_layer_ids")
+                == [app.WIND_POPULATION_SOURCE_LAYER_ID]
+                and frame is not None
+                and len(frame) == DISPLAY_COUNTS[resolution]
+                and set(frame["hex_id"].astype(str)) == target_cell_ids
+                and actual_zero_acceptance == expected_zero_acceptance
+                and abs(actual_share - expected_share) <= 1e-12
+                and abs(actual_area - expected_area) <= 1e-9
+                and max_cell_error <= 1e-12,
+                f"Trøndelag population_points R{resolution} uses the "
+                f"canonical sparse contract at {distance_m:.0f} m "
+                f"({expected_share:.12f}%, {expected_zero_acceptance} "
+                "zero-acceptance cells).",
+                f"Trøndelag population_points R{resolution} drifted at "
+                f"{distance_m:.0f} m: share={actual_share:.12f}, "
+                f"zero={actual_zero_acceptance}, area={actual_area:.12f}, "
+                f"max_cell_error={max_cell_error}, canonical="
+                f"{((result or {}).get('canonical_layer_ids') or [])}.",
+            )
+
     roads_large_only = {
         group_id: []
         for group_id in app.public_wind_group_ids("trondelag")
@@ -593,6 +774,243 @@ def main() -> int:
         "road selections before legacy normalization.",
         "The V2 Final road-selection boundary validation drifted: "
         f"{invalid_app_selection_errors}",
+    )
+
+    invalid_population_selection_errors: list[str] = []
+    for invalid_layer_ids, expected_message in (
+        (("population_points", "population_points"), "duplicate layer ids"),
+        (("population_unknown",), "undeclared population layers"),
+        (("",), "blank layer id"),
+    ):
+        invalid_selection = {
+            group_id: []
+            for group_id in app.public_wind_group_ids("trondelag")
+        }
+        invalid_selection[app.WIND_SETTLEMENT_GROUP_ID] = list(
+            invalid_layer_ids
+        )
+        try:
+            app._wind_fast_distance_runtime_result(
+                trondelag_region,
+                app._reference_default_wind_params(),
+                invalid_selection,
+                7,
+            )
+        except ValueError as exc:
+            if expected_message not in str(exc):
+                invalid_population_selection_errors.append(str(exc))
+        else:
+            invalid_population_selection_errors.append(
+                f"{invalid_layer_ids!r} did not fail closed"
+            )
+    report.check(
+        not invalid_population_selection_errors,
+        "The V2 Final runtime rejects duplicate, blank, and undeclared raw "
+        "population selections.",
+        "The V2 Final population-selection boundary validation drifted: "
+        f"{invalid_population_selection_errors}",
+    )
+
+    original_population_distance_loader = app.distance_table_for_layer
+    population_loader_calls: list[str] = []
+    population_loader_results: list[dict[str, object] | None] = []
+    transitional_population_ids = [
+        str(layer.id)
+        for layer in app.ordered_layers("trondelag")
+        if str(layer.group_id) == app.WIND_SETTLEMENT_GROUP_ID
+        and str(layer.id) != app.WIND_POPULATION_SOURCE_LAYER_ID
+    ]
+    mixed_population_result: dict[str, object] | None = None
+    mixed_population_error = ""
+    mixed_population_oracle_error = float("inf")
+    try:
+        def _reject_legacy_primary_population(registry_meta, layer_id):
+            normalized_layer_id = str(layer_id)
+            population_loader_calls.append(normalized_layer_id)
+            if normalized_layer_id == app.WIND_POPULATION_SOURCE_LAYER_ID:
+                raise AssertionError(
+                    "population_points reached legacy distance loading"
+                )
+            return original_population_distance_loader(
+                registry_meta,
+                normalized_layer_id,
+            )
+
+        app.distance_table_for_layer = _reject_legacy_primary_population
+        for resolution in (7, 6, 5):
+            population_loader_results.append(
+                app._wind_fast_distance_runtime_result(
+                    trondelag_region,
+                    {
+                        **app._reference_default_wind_params(),
+                        "settlement_distance_m": 500.0,
+                    },
+                    population_only,
+                    resolution,
+                )
+            )
+        if transitional_population_ids:
+            transitional_id = transitional_population_ids[0]
+            mixed_selection = {
+                group_id: []
+                for group_id in app.public_wind_group_ids("trondelag")
+            }
+            mixed_selection[app.WIND_SETTLEMENT_GROUP_ID] = [
+                app.WIND_POPULATION_SOURCE_LAYER_ID,
+                transitional_id,
+            ]
+            mixed_population_result = app._wind_fast_distance_runtime_result(
+                trondelag_region,
+                {
+                    **app._reference_default_wind_params(),
+                    "settlement_distance_m": 500.0,
+                },
+                mixed_selection,
+                7,
+            )
+            mixed_frame = (
+                mixed_population_result.get("fast_distance_frame")
+                if isinstance(mixed_population_result, dict)
+                else None
+            )
+            mixed_target_ids = set(
+                app.load_h3_display_geometries(
+                    app._h3_display_geometry_path(trondelag_region, 7)
+                )
+            )
+            mixed_oracle = _population_acceptance_oracle(
+                trondelag_registry,
+                (app.WIND_POPULATION_SOURCE_LAYER_ID, transitional_id),
+                500.0,
+                7,
+                mixed_target_ids,
+            )
+            mixed_actual = (
+                {
+                    str(row.hex_id):
+                    float(row.potential_area_share_pct) / 100.0
+                    for row in mixed_frame.itertuples(index=False)
+                }
+                if isinstance(mixed_frame, pd.DataFrame)
+                else {}
+            )
+            if mixed_actual.keys() == mixed_oracle.keys():
+                mixed_population_oracle_error = max(
+                    abs(mixed_actual[cell_id] - mixed_oracle[cell_id])
+                    for cell_id in mixed_actual
+                )
+    except Exception as exc:
+        mixed_population_error = str(exc)
+    finally:
+        app.distance_table_for_layer = original_population_distance_loader
+
+    report.check(
+        not mixed_population_error
+        and len(population_loader_results) == 3
+        and all(
+            result is not None
+            and result.get("canonical_layer_ids")
+            == [app.WIND_POPULATION_SOURCE_LAYER_ID]
+            for result in population_loader_results
+        )
+        and app.WIND_POPULATION_SOURCE_LAYER_ID
+        not in population_loader_calls,
+        "The primary wind population filter never reaches the legacy "
+        "distance loader at R7/R6/R5.",
+        "The primary population filter still depends on legacy distance "
+        f"loading: {mixed_population_error or population_loader_calls}",
+    )
+    report.check(
+        bool(transitional_population_ids)
+        and mixed_population_result is not None
+        and transitional_population_ids[0] in population_loader_calls
+        and app.WIND_POPULATION_SOURCE_LAYER_ID
+        not in population_loader_calls
+        and mixed_population_oracle_error <= 1e-12,
+        "A canonical primary population layer combines with a transitional "
+        "settlement proxy without losing frozen cell behavior.",
+        "Mixed canonical/transitional population behavior drifted: "
+        f"error={mixed_population_error}, "
+        f"max_cell_error={mixed_population_oracle_error}, "
+        f"loader_calls={population_loader_calls}.",
+    )
+
+    original_population_contract = app.population_control_contract
+    original_population_ids = app.canonical_population_layer_ids
+    original_population_loader = app.distance_table_for_layer
+    broken_contract_loader_calls: list[str] = []
+    broken_contract_errors: list[str] = []
+    try:
+        def _missing_population_contract(_region_id):
+            raise ValueError("wind has no population ui descriptor")
+
+        def _record_broken_contract_loader(registry_meta, layer_id):
+            broken_contract_loader_calls.append(str(layer_id))
+            return original_population_loader(registry_meta, layer_id)
+
+        app.population_control_contract = _missing_population_contract
+        app.distance_table_for_layer = _record_broken_contract_loader
+        try:
+            app._wind_fast_distance_runtime_result(
+                trondelag_region,
+                app._reference_default_wind_params(),
+                population_only,
+                7,
+            )
+        except ValueError as exc:
+            broken_contract_errors.append(str(exc))
+        else:
+            broken_contract_errors.append(
+                "broken population contract did not fail"
+            )
+        try:
+            app._wind_control_groups("trondelag")
+        except ValueError as exc:
+            broken_contract_errors.append(str(exc))
+        else:
+            broken_contract_errors.append(
+                "broken population controls did not fail"
+            )
+    finally:
+        app.population_control_contract = original_population_contract
+        app.distance_table_for_layer = original_population_loader
+    report.check(
+        len(broken_contract_errors) == 2
+        and all(
+            "no population ui descriptor" in message
+            for message in broken_contract_errors
+        )
+        and not broken_contract_loader_calls,
+        "A broken migrated population UI contract fails closed before any "
+        "legacy distance loading.",
+        "A broken population UI contract reopened the legacy path: "
+        f"errors={broken_contract_errors}, "
+        f"loader_calls={broken_contract_loader_calls}.",
+    )
+
+    try:
+        def _missing_population_layers(_region_id):
+            raise ValueError(
+                "wind declares no canonical population layers"
+            )
+
+        app.canonical_population_layer_ids = _missing_population_layers
+        try:
+            app.normalize_group_layer_map(
+                population_only,
+                "trondelag",
+            )
+        except ValueError as exc:
+            missing_layer_error = str(exc)
+        else:
+            missing_layer_error = ""
+    finally:
+        app.canonical_population_layer_ids = original_population_ids
+    report.check(
+        "declares no canonical population layers" in missing_layer_error,
+        "A missing migrated population layer contract fails during selection "
+        "normalization.",
+        "A missing canonical population layer was reclassified as legacy.",
     )
 
     legacy_distance_loader = app.distance_table_for_layer

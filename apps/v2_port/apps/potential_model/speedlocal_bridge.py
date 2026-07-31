@@ -16,6 +16,8 @@ from speedlocal.validation import validate_contract, validate_layer
 
 
 CANONICAL_ROADS_GROUP_ID = "roads"
+CANONICAL_POPULATION_GROUP_ID = "population"
+TRANSITIONAL_POPULATION_GROUP_ID = "settlement"
 CANONICAL_TO_TRANSITIONAL_GROUP_ID = {
     "population": "settlement",
     "nature": "protected",
@@ -25,7 +27,7 @@ CANONICAL_TO_TRANSITIONAL_GROUP_ID = {
 
 
 @dataclass(frozen=True)
-class RoadLayerControlContract:
+class WindLayerControlContract:
     id: str
     group_id: str
     label: str
@@ -37,8 +39,9 @@ class RoadLayerControlContract:
 
 
 @dataclass(frozen=True)
-class RoadGroupControlContract:
+class WindGroupControlContract:
     id: str
+    canonical_id: str
     label: str
     analysis_kind: str
     analysis_label: str
@@ -50,7 +53,12 @@ class RoadGroupControlContract:
     group_color: tuple[int, int, int]
     interpretation: str
     expanded_by_default: bool
-    layers: tuple[RoadLayerControlContract, ...]
+    layers: tuple[WindLayerControlContract, ...]
+
+
+# Compatibility names for downstream code that imported the roads-only bridge.
+RoadLayerControlContract = WindLayerControlContract
+RoadGroupControlContract = WindGroupControlContract
 
 
 def _hex_color_to_rgb(value: str) -> tuple[int, int, int]:
@@ -166,40 +174,73 @@ def vector_buffer_preview(
     )
 
 
-def canonical_road_layer_ids(region_id: str) -> tuple[str, ...]:
-    """Return road layers in manifest order for the active wind contract."""
+def canonical_wind_group_layer_ids(
+    region_id: str,
+    group_id: str,
+) -> tuple[str, ...]:
+    """Return one canonical group's layers in manifest order."""
     analysis = _validated_wind_analysis(region_id)
     layer_ids = tuple(
         layer.id
         for layer in analysis.layers.values()
-        if layer.group_id == CANONICAL_ROADS_GROUP_ID
+        if layer.group_id == str(group_id)
         and layer.operation == "distance_exclusion"
     )
     if not layer_ids:
-        raise ValueError(f"{region_id}/wind declares no canonical road layers")
+        raise ValueError(
+            f"{region_id}/wind declares no canonical {group_id} layers"
+        )
     return layer_ids
 
 
-def roads_control_contract(region_id: str) -> RoadGroupControlContract:
-    """Build the complete public roads control contract from the manifest."""
+def canonical_road_layer_ids(region_id: str) -> tuple[str, ...]:
+    """Return road layers in manifest order for the active wind contract."""
+    return canonical_wind_group_layer_ids(region_id, CANONICAL_ROADS_GROUP_ID)
+
+
+def canonical_population_layer_ids(region_id: str) -> tuple[str, ...]:
+    """Return canonical population layers in manifest order."""
+    return canonical_wind_group_layer_ids(
+        region_id,
+        CANONICAL_POPULATION_GROUP_ID,
+    )
+
+
+def wind_group_control_contract(
+    region_id: str,
+    canonical_group_id: str,
+    *,
+    public_group_id: str | None = None,
+) -> WindGroupControlContract:
+    """Build one public distance-group control from the wind manifest."""
     analysis = _validated_wind_analysis(region_id)
     if analysis.ui is None:
         raise ValueError(f"{region_id}/wind has no ui contract")
-    group_ui = analysis.ui.groups.get(CANONICAL_ROADS_GROUP_ID)
+    group_ui = analysis.ui.groups.get(str(canonical_group_id))
     if group_ui is None:
-        raise ValueError(f"{region_id}/wind has no roads ui descriptor")
-    parameter = roads_buffer_parameter_contract(region_id)
+        raise ValueError(
+            f"{region_id}/wind has no {canonical_group_id} ui descriptor"
+        )
+    parameter = wind_group_buffer_parameter_contract(
+        region_id,
+        canonical_group_id,
+    )
     if (
         parameter.minimum is None
         or parameter.maximum is None
         or parameter.step is None
     ):
         raise ValueError(
-            f"{region_id}/wind roads buffer must declare minimum, maximum and step"
+            f"{region_id}/wind {canonical_group_id} buffer must declare "
+            "minimum, maximum and step"
         )
 
-    layer_controls: list[RoadLayerControlContract] = []
-    for layer_id in canonical_road_layer_ids(region_id):
+    public_id = str(public_group_id or canonical_group_id)
+    layer_controls: list[WindLayerControlContract] = []
+    for layer_id in canonical_wind_group_layer_ids(
+        region_id,
+        canonical_group_id,
+    ):
         layer = analysis.layers[layer_id]
         if layer.ui is None:
             raise ValueError(f"{region_id}/wind layer {layer_id} has no ui")
@@ -211,9 +252,9 @@ def roads_control_contract(region_id: str) -> RoadGroupControlContract:
             ready = False
             message = f"{layer.ui.note} Datakällan är inte redo: {exc}"
         layer_controls.append(
-            RoadLayerControlContract(
+            WindLayerControlContract(
                 id=layer.id,
-                group_id=CANONICAL_ROADS_GROUP_ID,
+                group_id=public_id,
                 label=layer.label,
                 note=layer.ui.note,
                 source_color=_hex_color_to_rgb(layer.ui.source_color),
@@ -223,8 +264,9 @@ def roads_control_contract(region_id: str) -> RoadGroupControlContract:
             )
         )
 
-    return RoadGroupControlContract(
-        id=CANONICAL_ROADS_GROUP_ID,
+    return WindGroupControlContract(
+        id=public_id,
+        canonical_id=str(canonical_group_id),
         label=group_ui.label,
         analysis_kind="distance_conflict",
         analysis_label=group_ui.analysis_label,
@@ -240,38 +282,92 @@ def roads_control_contract(region_id: str) -> RoadGroupControlContract:
     )
 
 
-def road_source_geojson(region_id: str, layer_id: str) -> dict:
-    """Read one validated canonical road source through the provider resolver."""
+def roads_control_contract(region_id: str) -> WindGroupControlContract:
+    """Build the complete public roads control contract from the manifest."""
+    return wind_group_control_contract(
+        region_id,
+        CANONICAL_ROADS_GROUP_ID,
+    )
+
+
+def population_control_contract(region_id: str) -> WindGroupControlContract:
+    """Expose canonical population through its temporary public alias."""
+    return wind_group_control_contract(
+        region_id,
+        CANONICAL_POPULATION_GROUP_ID,
+        public_group_id=TRANSITIONAL_POPULATION_GROUP_ID,
+    )
+
+
+def wind_source_geojson(
+    region_id: str,
+    canonical_group_id: str,
+    layer_id: str,
+) -> dict:
+    """Read one canonical source through the shared provider resolver."""
     analysis = _validated_wind_analysis(region_id)
-    if layer_id not in canonical_road_layer_ids(region_id):
+    if layer_id not in canonical_wind_group_layer_ids(
+        region_id,
+        canonical_group_id,
+    ):
         raise ValueError(
-            f"{region_id}/wind has no canonical road source: {layer_id}"
+            f"{region_id}/wind has no canonical {canonical_group_id} "
+            f"source: {layer_id}"
         )
     validated = validate_layer(analysis.layers[layer_id])
     source_path: Path = validated.assets.geojson_path
     with source_path.open("r", encoding="utf-8") as handle:
         payload = json.load(handle)
     if not isinstance(payload, dict):
-        raise ValueError(f"Canonical road source is not a GeoJSON object: {layer_id}")
+        raise ValueError(
+            f"Canonical {canonical_group_id} source is not a GeoJSON "
+            f"object: {layer_id}"
+        )
     return payload
 
 
-def roads_buffer_parameter_contract(region_id: str) -> ParameterContract:
-    """Return the shared manifest road-buffer contract."""
+def road_source_geojson(region_id: str, layer_id: str) -> dict:
+    """Read one validated canonical road source through the provider resolver."""
+    return wind_source_geojson(
+        region_id,
+        CANONICAL_ROADS_GROUP_ID,
+        layer_id,
+    )
+
+
+def population_source_geojson(region_id: str, layer_id: str) -> dict:
+    """Read one validated canonical population source."""
+    return wind_source_geojson(
+        region_id,
+        CANONICAL_POPULATION_GROUP_ID,
+        layer_id,
+    )
+
+
+def wind_group_buffer_parameter_contract(
+    region_id: str,
+    canonical_group_id: str,
+) -> ParameterContract:
+    """Return one canonical group's shared buffer contract."""
     analysis = _validated_wind_analysis(region_id)
     parameters: list[ParameterContract] = []
-    for layer_id in canonical_road_layer_ids(region_id):
+    for layer_id in canonical_wind_group_layer_ids(
+        region_id,
+        canonical_group_id,
+    ):
         layer = analysis.layers.get(layer_id)
         if layer is None:
             raise KeyError(
-                f"{region_id}/wind is missing canonical road layer: {layer_id}"
+                f"{region_id}/wind is missing canonical "
+                f"{canonical_group_id} layer: {layer_id}"
             )
         if (
-            layer.group_id != CANONICAL_ROADS_GROUP_ID
+            layer.group_id != canonical_group_id
             or layer.operation != "distance_exclusion"
         ):
             raise ValueError(
-                f"{region_id}/wind layer {layer_id} is not a canonical road "
+                f"{region_id}/wind layer {layer_id} is not a canonical "
+                f"{canonical_group_id} "
                 "distance-exclusion layer"
             )
         parameter = layer.parameters.get("buffer_m")
@@ -292,32 +388,56 @@ def roads_buffer_parameter_contract(region_id: str) -> ParameterContract:
     }
     if len(signatures) != 1:
         raise ValueError(
-            f"{region_id}/wind road layers do not share one buffer contract"
+            f"{region_id}/wind {canonical_group_id} layers do not share one "
+            "buffer contract"
         )
     return parameters[0]
 
 
-def roads_acceptance_frame(
+def roads_buffer_parameter_contract(region_id: str) -> ParameterContract:
+    """Return the shared manifest road-buffer contract."""
+    return wind_group_buffer_parameter_contract(
+        region_id,
+        CANONICAL_ROADS_GROUP_ID,
+    )
+
+
+def wind_group_acceptance_frame(
     region_id: str,
+    canonical_group_id: str,
     layer_ids: Collection[str],
     buffer_m: float,
     analysis_cell_ids: Collection[str],
     target_resolution: int,
 ) -> pd.DataFrame:
-    """Adapt one manifest-selected canonical roads result to V2 Final."""
+    """Adapt one manifest-selected distance group to V2 Final."""
     raw_requested_layers = tuple(str(value).strip() for value in layer_ids)
     if not raw_requested_layers:
-        raise ValueError("A canonical roads request requires at least one layer")
+        raise ValueError(
+            f"A canonical {canonical_group_id} request requires at least one layer"
+        )
     if any(not value for value in raw_requested_layers):
-        raise ValueError("A canonical roads request contains a blank layer id")
+        raise ValueError(
+            f"A canonical {canonical_group_id} request contains a blank layer id"
+        )
     if len(raw_requested_layers) != len(set(raw_requested_layers)):
-        raise ValueError("A canonical roads request contains duplicate layer ids")
-    available_layers = canonical_road_layer_ids(region_id)
+        raise ValueError(
+            f"A canonical {canonical_group_id} request contains duplicate layer ids"
+        )
+    available_layers = canonical_wind_group_layer_ids(
+        region_id,
+        canonical_group_id,
+    )
     requested_layer_set = set(raw_requested_layers)
     unknown_layers = requested_layer_set - set(available_layers)
     if unknown_layers:
+        layer_kind = (
+            "road"
+            if canonical_group_id == CANONICAL_ROADS_GROUP_ID
+            else canonical_group_id
+        )
         raise ValueError(
-            f"{region_id}/wind has no canonical road layers: "
+            f"{region_id}/wind has no canonical {layer_kind} layers: "
             f"{sorted(unknown_layers)}"
         )
     requested_layers = tuple(
@@ -329,13 +449,18 @@ def roads_acceptance_frame(
     requested_ids = tuple(str(value).strip() for value in analysis_cell_ids)
     if not requested_ids:
         raise ValueError(
-            "Canonical roads require a non-empty analysis-cell universe"
+            f"Canonical {canonical_group_id} requires a non-empty "
+            "analysis-cell universe"
         )
     if any(not value for value in requested_ids):
-        raise ValueError("Canonical roads analysis-cell universe contains a blank id")
+        raise ValueError(
+            f"Canonical {canonical_group_id} analysis-cell universe contains "
+            "a blank id"
+        )
     if len(requested_ids) != len(set(requested_ids)):
         raise ValueError(
-            "Canonical roads analysis-cell universe contains duplicate ids"
+            f"Canonical {canonical_group_id} analysis-cell universe contains "
+            "duplicate ids"
         )
 
     result = run_analysis(
@@ -355,22 +480,25 @@ def roads_acceptance_frame(
         (
             item
             for item in result.groups
-            if item.group_id == CANONICAL_ROADS_GROUP_ID
+            if item.group_id == canonical_group_id
         ),
         None,
     )
     if group is None:
-        raise ValueError("Canonical roads result has no roads group")
+        raise ValueError(
+            f"Canonical result has no {canonical_group_id} group"
+        )
     if tuple(group.layer_ids) != requested_layers:
         raise ValueError(
-            "Canonical roads result does not preserve the requested layers: "
+            f"Canonical {canonical_group_id} result does not preserve the "
+            "requested layers: "
             f"{group.layer_ids}"
         )
     if group.cell_count != len(requested_ids) or len(group.cells) != len(
         requested_ids
     ):
         raise ValueError(
-            "Canonical roads result does not cover the requested "
+            f"Canonical {canonical_group_id} result does not cover the requested "
             f"analysis domain ({len(group.cells)}/{len(requested_ids)})"
         )
 
@@ -381,10 +509,49 @@ def roads_acceptance_frame(
                 "distance_m": cell.min_distance_m,
                 "intersects": cell.any_intersection,
                 "acceptance": cell.acceptance,
+                "coverage_missing": cell.coverage_missing,
             }
             for cell in group.cells
         )
     )
     if frame["hex_id"].duplicated().any():
-        raise ValueError("Canonical roads result contains duplicate cells")
+        raise ValueError(
+            f"Canonical {canonical_group_id} result contains duplicate cells"
+        )
     return frame.sort_values("hex_id").reset_index(drop=True)
+
+
+def roads_acceptance_frame(
+    region_id: str,
+    layer_ids: Collection[str],
+    buffer_m: float,
+    analysis_cell_ids: Collection[str],
+    target_resolution: int,
+) -> pd.DataFrame:
+    """Adapt one manifest-selected canonical roads result to V2 Final."""
+    return wind_group_acceptance_frame(
+        region_id,
+        CANONICAL_ROADS_GROUP_ID,
+        layer_ids,
+        buffer_m,
+        analysis_cell_ids,
+        target_resolution,
+    )
+
+
+def population_acceptance_frame(
+    region_id: str,
+    layer_ids: Collection[str],
+    buffer_m: float,
+    analysis_cell_ids: Collection[str],
+    target_resolution: int,
+) -> pd.DataFrame:
+    """Adapt canonical population distance results to V2 Final."""
+    return wind_group_acceptance_frame(
+        region_id,
+        CANONICAL_POPULATION_GROUP_ID,
+        layer_ids,
+        buffer_m,
+        analysis_cell_ids,
+        target_resolution,
+    )

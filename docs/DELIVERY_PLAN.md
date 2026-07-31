@@ -29,7 +29,7 @@ The delivery is complete when:
 | Dates | Slice | Required outcome |
 |---|---|---|
 | 29 Jul–3 Aug | Roads | Trøndelag V2 characterization, dynamic road layers, contract validation, generic UI path |
-| 4–6 Aug | Population | Point/grid/polygon dispatch and Trøndelag V2 parity |
+| 31 Jul–6 Aug | Population | Point/grid/polygon dispatch and Trøndelag V2 parity |
 | 7–10 Aug | Nature | Dynamic nature layers and hard-exclusion parity |
 | 11–12 Aug | Culture | Dynamic culture layers and hard-exclusion parity |
 | 13–14 Aug | Grid infrastructure | Proximity-feasibility operation and parity |
@@ -41,9 +41,9 @@ The delivery is complete when:
 | 27 Aug | Acceptance review | Full regression, delivery docs, known limitations, release candidate |
 
 The schedule moved one business day on 2026-07-31 because the complete roads
-slice had not yet reached its locally promoted gate. Population does not begin
-until canonical `roads_medium`, combined-road behavior, and legacy-path removal
-pass.
+slice had not yet reached its locally promoted gate. Roads then passed that
+gate later the same day, so a bounded primary-population increment began on
+31 July; the population completion date remains 6 August.
 
 ## Branch and publication cadence
 
@@ -84,9 +84,9 @@ Current milestone status:
   not yet published.
 - V2 Final verification cleanup: empty manifest startup, map-only road source
   and buffer review, and manifest-cell-area propagation through wind
-  establishment/allocation are locally approved on `v2-final-dev`. Non-roads
-  controls still use the declared legacy-registry adapter until their slices
-  migrate.
+  establishment/allocation are locally approved on `v2-final-dev`. Unmigrated
+  non-road layers still use the declared legacy-registry adapter; the primary
+  population source is now the first manifest-driven exception.
 - `roads_large` full local promotion: complete. Publication remains a separate
   pending state.
 - `roads_medium` and combined roads: canonical calculation and automated
@@ -97,7 +97,16 @@ Current milestone status:
   canonical `roads`, its UI/source/buffer metadata is manifest-driven, and the
   complete automated roads gate passes. Clean-process localhost review was
   approved on 2026-07-31; the complete roads slice is locally promoted but
-  unpublished. Population is the next planned slice.
+  unpublished.
+- Population characterization: complete for the primary Trøndelag
+  `population_points` proxy. Its manifest, generic engine, actual V2 Final
+  controls, calculation, source view, and buffer view pass automated
+  R8-to-R7/R6/R5 parity and real-Streamlit gates. Signed sparse-coverage drift
+  and broken migrated UI/layer contracts fail closed before legacy loading.
+  Localhost review and local promotion remain pending. Optional settlement
+  proxies, the public `settlement` alias, and the separate allocation-ranking
+  consumer remain transitional, so the complete population slice is not yet
+  promoted.
 
 ## Slice gates
 

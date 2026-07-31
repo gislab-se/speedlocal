@@ -158,6 +158,43 @@ def validate_contract(contract: AnalysisContract) -> None:
         unknown_families = set(layer.source.expected_geometry_families) - SUPPORTED_GEOMETRY_FAMILIES
         if unknown_families:
             raise ValueError(f"Unsupported geometry families for {layer.id}: {sorted(unknown_families)}")
+        coverage = layer.source.distance_coverage
+        if coverage.mode == "declared_sparse":
+            if domain is None:
+                raise ValueError(
+                    f"Layer {layer.id} declares sparse distance coverage "
+                    "without an analysis domain"
+                )
+            source_resolution = layer.source.distance_h3_resolution
+            if source_resolution is None:
+                raise ValueError(
+                    f"Layer {layer.id} declares sparse distance coverage "
+                    "without distance_h3_resolution"
+                )
+            expected_targets = {
+                domain.resolution: domain.expected_cell_count,
+                **{
+                    resolution: rollup.expected_cell_count
+                    for resolution, rollup in domain.rollups.items()
+                },
+            }
+            if set(coverage.targets) != set(expected_targets):
+                raise ValueError(
+                    f"Layer {layer.id} sparse coverage targets must exactly "
+                    "match the analysis-domain resolutions"
+                )
+            for resolution, expected_cell_count in expected_targets.items():
+                target = coverage.targets[resolution]
+                if resolution > source_resolution:
+                    raise ValueError(
+                        f"Layer {layer.id} sparse coverage R{resolution} is "
+                        f"finer than its R{source_resolution} distance source"
+                    )
+                if target.target_cell_count != expected_cell_count:
+                    raise ValueError(
+                        f"Layer {layer.id} sparse coverage R{resolution} "
+                        "target count does not match the analysis domain"
+                    )
         if contract.ui is not None and layer.group_id in contract.ui.groups:
             if layer.ui is None:
                 raise ValueError(

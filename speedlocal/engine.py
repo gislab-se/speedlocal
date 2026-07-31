@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import math
 import operator
 from dataclasses import dataclass, field
@@ -29,10 +30,11 @@ class LayerResult:
 @dataclass(frozen=True)
 class GroupCellResult:
     cell_id: str
-    min_distance_m: float
+    min_distance_m: float | None
     any_intersection: bool
     blocked: bool
     acceptance: float
+    coverage_missing: bool = False
 
     @property
     def intersects(self) -> bool:
@@ -61,8 +63,21 @@ class AnalysisResult:
     warnings: tuple[str, ...] = field(default_factory=tuple)
 
 
-def _distance_rows(layer: ValidatedLayer) -> dict[str, tuple[float, bool]]:
+DistanceObservation = tuple[float | None, bool]
+
+
+def _id_set_sha256(values: Iterable[str]) -> str:
+    payload = "".join(f"{value}\n" for value in sorted(values))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _distance_rows(layer: ValidatedLayer) -> dict[str, DistanceObservation]:
     rows: dict[str, tuple[float, bool]] = {}
+    declared_resolution = getattr(
+        getattr(getattr(layer, "contract", None), "source", None),
+        "distance_h3_resolution",
+        None,
+    )
     with layer.assets.distance_path.open("r", encoding="utf-8-sig", newline="") as handle:
         reader = csv.DictReader(handle)
         required = {"hex_id", "distance_m", "intersects"}
@@ -79,6 +94,20 @@ def _distance_rows(layer: ValidatedLayer) -> dict[str, tuple[float, bool]]:
                     f"{layer.assets.distance_path}:{line_number} duplicates "
                     f"hex_id {hex_id}"
                 )
+            if declared_resolution is not None:
+                try:
+                    actual_resolution = int(h3.get_resolution(hex_id))
+                except Exception as exc:
+                    raise ValueError(
+                        f"{layer.assets.distance_path}:{line_number} has an "
+                        f"invalid H3 hex_id {hex_id!r}"
+                    ) from exc
+                if actual_resolution != declared_resolution:
+                    raise ValueError(
+                        f"{layer.assets.distance_path}:{line_number} contains "
+                        f"an R{actual_resolution} cell; expected declared "
+                        f"R{declared_resolution}"
+                    )
             raw_intersects = str(row.get("intersects") or "").strip().lower()
             if raw_intersects in {"1", "true", "yes"}:
                 intersects = True
@@ -109,6 +138,26 @@ def _distance_rows(layer: ValidatedLayer) -> dict[str, tuple[float, bool]]:
             rows[hex_id] = (distance, intersects)
     if not rows:
         raise ValueError(f"{layer.assets.distance_path} has no distance rows")
+    coverage = getattr(
+        getattr(getattr(layer, "contract", None), "source", None),
+        "distance_coverage",
+        None,
+    )
+    if coverage is not None:
+        expected_count = coverage.expected_source_row_count
+        if expected_count is not None and len(rows) != expected_count:
+            raise ValueError(
+                f"{layer.assets.distance_path} has {len(rows)} distance rows; "
+                f"expected {expected_count}"
+            )
+        expected_digest = coverage.source_ids_sha256
+        if expected_digest is not None:
+            actual_digest = _id_set_sha256(rows)
+            if actual_digest != expected_digest:
+                raise ValueError(
+                    f"{layer.assets.distance_path} source-id coverage digest "
+                    "does not match its manifest contract"
+                )
     return rows
 
 
@@ -118,7 +167,8 @@ def _distance_exclusion(
     analysis_cell_ids: frozenset[str] | None,
     source_resolution: int | None = None,
     target_resolution: int | None = None,
-) -> tuple[LayerResult, dict[str, tuple[float, bool]]]:
+    distance_coverage: Any = None,
+) -> tuple[LayerResult, dict[str, DistanceObservation]]:
     parameter = layer.contract.parameters["buffer_m"]
     threshold = parameter.validate_value(parameters.get("buffer_m", parameter.default))
     rows = _distance_rows(layer)
@@ -132,8 +182,17 @@ def _distance_exclusion(
             source_resolution,
             target_resolution,
             analysis_cell_ids,
+            distance_coverage,
         )
     elif analysis_cell_ids is not None:
+        if (
+            distance_coverage is not None
+            and distance_coverage.mode == "declared_sparse"
+        ):
+            raise ValueError(
+                "Declared sparse distance coverage requires an exact "
+                "target_resolution and signed analysis domain"
+            )
         missing = analysis_cell_ids - rows.keys()
         if missing:
             raise ValueError(
@@ -142,7 +201,9 @@ def _distance_exclusion(
             )
         rows = {cell_id: rows[cell_id] for cell_id in sorted(analysis_cell_ids)}
     blocked_count = sum(
-        1 for distance, intersects in rows.values() if intersects or distance <= threshold
+        1
+        for distance, intersects in rows.values()
+        if intersects or (distance is not None and distance <= threshold)
     )
     return (
         LayerResult(
@@ -161,19 +222,22 @@ def _distance_exclusion(
 
 
 def _rollup_distance_rows(
-    rows: dict[str, tuple[float, bool]],
+    rows: dict[str, DistanceObservation],
     source_resolution: int,
     target_resolution: int,
     target_cell_ids: frozenset[str],
-) -> dict[str, tuple[float, bool]]:
+    distance_coverage: Any = None,
+) -> dict[str, DistanceObservation]:
     if target_resolution > source_resolution:
         raise ValueError(
             f"Distance rows cannot roll up from R{source_resolution} "
             f"to finer R{target_resolution}"
         )
 
-    rolled: dict[str, tuple[float, bool]] = {}
+    rolled: dict[str, DistanceObservation] = {}
     for cell_id, (distance, intersects) in rows.items():
+        if distance is None:
+            raise ValueError("Raw distance rows must contain numeric distances")
         try:
             cell_resolution = int(h3.get_resolution(cell_id))
         except Exception as exc:
@@ -198,11 +262,49 @@ def _rollup_distance_rows(
             )
 
     missing = target_cell_ids - rolled.keys()
-    if missing:
-        raise ValueError(
-            f"Distance rollup is missing R{target_resolution} analysis cells: "
-            f"{sorted(missing)}"
+    outside = rolled.keys() - target_cell_ids
+    coverage_mode = (
+        str(distance_coverage.mode)
+        if distance_coverage is not None
+        else "complete"
+    )
+    if coverage_mode == "declared_sparse":
+        target_contract = distance_coverage.targets.get(target_resolution)
+        if target_contract is None:
+            raise ValueError(
+                f"Sparse distance coverage has no R{target_resolution} signature"
+            )
+        actual_signature = (
+            len(target_cell_ids),
+            len(target_cell_ids & rolled.keys()),
+            len(missing),
+            len(outside),
+            _id_set_sha256(missing),
+            _id_set_sha256(outside),
         )
+        expected_signature = (
+            target_contract.target_cell_count,
+            target_contract.covered_cell_count,
+            target_contract.missing_cell_count,
+            target_contract.outside_cell_count,
+            target_contract.missing_ids_sha256,
+            target_contract.outside_ids_sha256,
+        )
+        if actual_signature != expected_signature:
+            raise ValueError(
+                f"Sparse distance coverage for R{target_resolution} does not "
+                "match its manifest signature"
+            )
+        if distance_coverage.missing_policy != "zero_acceptance":
+            raise ValueError("Unsupported sparse distance missing policy")
+        rolled.update({cell_id: (None, False) for cell_id in missing})
+    elif missing:
+        if coverage_mode == "complete":
+            raise ValueError(
+                f"Distance rollup is missing R{target_resolution} analysis cells: "
+                f"{sorted(missing)}"
+            )
+        raise ValueError(f"Unsupported distance coverage mode: {coverage_mode}")
     return {
         cell_id: rolled[cell_id]
         for cell_id in sorted(target_cell_ids)
@@ -211,7 +313,7 @@ def _rollup_distance_rows(
 
 def _distance_group_result(
     group_id: str,
-    layer_results: list[tuple[LayerResult, dict[str, tuple[float, bool]]]],
+    layer_results: list[tuple[LayerResult, dict[str, DistanceObservation]]],
 ) -> GroupResult:
     thresholds = {result.threshold_m for result, _ in layer_results}
     if len(thresholds) != 1:
@@ -224,11 +326,19 @@ def _distance_group_result(
     ramp_end = max(threshold * 2.0, threshold + 1.0)
     for hex_id in sorted(hex_ids):
         values = [rows[hex_id] for _, rows in layer_results if hex_id in rows]
-        min_distance = min(distance for distance, _ in values)
+        observed_distances = [
+            distance for distance, _ in values if distance is not None
+        ]
+        min_distance = min(observed_distances) if observed_distances else None
         intersects = any(intersection for _, intersection in values)
-        blocked = intersects or min_distance <= threshold
+        coverage_missing = not observed_distances
+        blocked = intersects or (
+            min_distance is not None and min_distance <= threshold
+        )
         blocked_count += int(blocked)
         if intersects:
+            acceptance = 0.0
+        elif coverage_missing:
             acceptance = 0.0
         elif threshold <= 0:
             acceptance = 1.0
@@ -242,6 +352,7 @@ def _distance_group_result(
                 any_intersection=intersects,
                 blocked=blocked,
                 acceptance=acceptance,
+                coverage_missing=coverage_missing,
             )
         )
     return GroupResult(
@@ -288,7 +399,7 @@ def run_analysis(
     if unknown:
         raise KeyError(f"Layers are not configured for {region}/{analysis}: {sorted(unknown)}")
     cell_domain = _analysis_cell_domain(analysis_cell_ids)
-    source_resolution: int | None = None
+    domain_resolution: int | None = None
     normalized_target_resolution: int | None = None
     if target_resolution is not None:
         if isinstance(target_resolution, bool):
@@ -316,22 +427,28 @@ def run_analysis(
                 f"unexpected={len(cell_domain - canonical_target_ids)}"
             )
         cell_domain = canonical_target_ids
-        source_resolution = domain.resolution
+        domain_resolution = domain.resolution
 
     results: list[LayerResult] = []
     distance_rows_by_group: dict[
         str,
-        list[tuple[LayerResult, dict[str, tuple[float, bool]]]],
+        list[tuple[LayerResult, dict[str, DistanceObservation]]],
     ] = {}
     for layer_id in requested:
         validated = validate_layer(contract.layers[layer_id])
         if validated.contract.operation == "distance_exclusion":
+            distance_resolution = (
+                validated.contract.source.distance_h3_resolution
+                if validated.contract.source.distance_h3_resolution is not None
+                else domain_resolution
+            )
             result, rows = _distance_exclusion(
                 validated,
                 (parameters or {}).get(layer_id, {}),
                 cell_domain,
-                source_resolution,
+                distance_resolution,
                 normalized_target_resolution,
+                validated.contract.source.distance_coverage,
             )
             results.append(result)
             distance_rows_by_group.setdefault(validated.contract.group_id, []).append(

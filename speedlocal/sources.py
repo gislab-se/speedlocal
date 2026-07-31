@@ -28,6 +28,16 @@ class LayerAssets:
     feature_count: int
 
 
+DECLARED_GEOMETRY_FAMILY_ALIASES = {
+    "polygon_proxy_from_250m_centroids": "polygon",
+}
+
+
+def _declared_geometry_family(value: Any) -> str:
+    normalized = str(value or "unknown").strip().lower()
+    return DECLARED_GEOMETRY_FAMILY_ALIASES.get(normalized, normalized)
+
+
 def _domain_level_area_to_km2(
     raw_value: Any,
     level: AnalysisDomainContract | AnalysisDomainRollupContract,
@@ -236,7 +246,9 @@ def resolve_layer_assets(layer: LayerContract) -> LayerAssets:
         geojson_path=resolve_source_path(source.provider, _clean_relative(row.get("geojson_path"), "geojson_path")),
         distance_path=resolve_source_path(source.provider, _clean_relative(row.get("distance_path"), "distance_path")),
         manifest_status=str(row.get("status") or ""),
-        declared_geometry_family=str(row.get("geometry_family") or "unknown").lower(),
+        declared_geometry_family=_declared_geometry_family(
+            row.get("geometry_family")
+        ),
         feature_count=int(float(row.get("feature_count") or 0)),
     )
 

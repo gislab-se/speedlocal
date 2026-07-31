@@ -40,6 +40,7 @@ from acceptance_model.layers import (  # noqa: E402
 from potential_model.manifests import load_region, v2_source_root  # noqa: E402
 from potential_model.speedlocal_bridge import (  # noqa: E402
     default_wind_layer_selection,
+    population_control_contract,
     public_wind_group_ids,
     roads_control_contract,
 )
@@ -156,8 +157,15 @@ def _ready_public_ui_contract(
 ) -> tuple[set[str], set[str], set[str], set[str]]:
     registry_groups, registry_layers, registry_meta = load_registry(region_id)
     public_group_ids = set(public_wind_group_ids(region_id))
-    legacy_public_group_ids = public_group_ids - {"roads"}
+    manifest_public_group_ids = {"roads", "settlement"}
+    legacy_public_group_ids = public_group_ids - manifest_public_group_ids
     roads_group = roads_control_contract(region_id)
+    population_group = population_control_contract(region_id)
+    manifest_layer_ids = {
+        layer.id
+        for group in (roads_group, population_group)
+        for layer in group.layers
+    }
     status_frame = layer_status_table(registry_meta)
     status_by_layer = {
         str(row["layer_id"]): row.to_dict()
@@ -177,27 +185,37 @@ def _ready_public_ui_contract(
     ready_layer_ids = {
         str(layer_id)
         for layer_id, layer in registry_layers.items()
-        if str(layer.group_id) in legacy_public_group_ids
+        if (
+            str(layer.group_id) in legacy_public_group_ids
+            or str(layer.group_id) == "settlement"
+        )
+        and str(layer_id) not in manifest_layer_ids
         and is_ready(str(layer_id))
     }
     ready_layer_ids.update(
-        layer.id for layer in roads_group.layers if layer.ready
+        layer.id
+        for group in (roads_group, population_group)
+        for layer in group.layers
+        if layer.ready
     )
     ready_group_ids = {
         str(registry_layers[layer_id].group_id)
         for layer_id in ready_layer_ids
         if layer_id in registry_layers
-        and layer_id not in {layer.id for layer in roads_group.layers}
+        and layer_id not in manifest_layer_ids
     }
     if any(layer.ready for layer in roads_group.layers):
         ready_group_ids.add("roads")
+    if any(layer.ready for layer in population_group.layers):
+        ready_group_ids.add("settlement")
     public_layer_ids = {
         str(layer_id)
         for layer_id, layer in registry_layers.items()
         if str(layer.group_id) in legacy_public_group_ids
+        or str(layer.group_id) == "settlement"
     }
-    public_layer_ids.update(layer.id for layer in roads_group.layers)
-    extra_group_ids = set(registry_groups) - legacy_public_group_ids - {"transport"}
+    public_layer_ids.update(manifest_layer_ids)
+    extra_group_ids = set(registry_groups) - public_group_ids - {"transport"}
     return (
         ready_group_ids,
         ready_layer_ids,
@@ -343,6 +361,33 @@ def _check_manifest_empty_start_and_public_controls(
             f"step={road_slider.step}.",
         )
 
+    try:
+        population_slider = _by_key(
+            app.slider,
+            f"{WIND_ANALYSIS_KEY_PREFIX}settlement",
+        )
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            f"{region_id}: manifest-backed population slider is "
+            f"unavailable: {exc}",
+        )
+    else:
+        report.check(
+            not population_slider.disabled
+            and int(population_slider.value) == 100
+            and int(population_slider.min) == 100
+            and int(population_slider.max) == 3000
+            and int(population_slider.step) == 50,
+            f"{region_id}: population uses the manifest-backed "
+            "100/3000/50 parameter contract.",
+            f"{region_id}: population parameter contract drifted: "
+            f"disabled={population_slider.disabled}, "
+            f"value={population_slider.value}, min={population_slider.min}, "
+            f"max={population_slider.max}, step={population_slider.step}.",
+        )
+
     visual_ids = (
         _element_ids(app.toggle, WIND_VISUAL_SOURCE_KEY_PREFIX)
         | _element_ids(app.toggle, WIND_VISUAL_BUFFER_KEY_PREFIX)
@@ -388,7 +433,11 @@ def _check_manifest_empty_start_and_public_controls(
         )
 
 
-def _select_road_layers(app: AppTest, layer_ids: tuple[str, ...]) -> None:
+def _select_wind_group_layers(
+    app: AppTest,
+    group_id: str,
+    layer_ids: tuple[str, ...],
+) -> None:
     selected_layer_ids = set(layer_ids)
     for checkbox in app.checkbox:
         key = str(checkbox.key or "")
@@ -396,13 +445,20 @@ def _select_road_layers(app: AppTest, layer_ids: tuple[str, ...]) -> None:
             layer_id = key[len("wind_control__layer__"):]
             checkbox.set_value(layer_id in selected_layer_ids)
         elif key.startswith("wind_control__group__") and not checkbox.disabled:
-            checkbox.set_value(False)
+            rendered_group_id = key[len("wind_control__group__"):]
+            checkbox.set_value(rendered_group_id == str(group_id))
+
+
+def _select_road_layers(app: AppTest, layer_ids: tuple[str, ...]) -> None:
+    _select_wind_group_layers(app, "roads", layer_ids)
 
 
 def _check_wind_map_review_toggles(
     report: Report,
     app: AppTest,
     expected_share: float,
+    group_id: str = "roads",
+    group_label: str = "roads",
 ) -> bool:
     baseline_selection = deepcopy(
         _session_state_value(app, WIND_SELECTION_STATE_KEY)
@@ -411,8 +467,8 @@ def _check_wind_map_review_toggles(
         _session_state_value(app, WIND_PARAMS_STATE_KEY)
     )
     baseline_share, baseline_share_error = _safe_wind_share_pct(app)
-    source_key = f"{WIND_VISUAL_SOURCE_KEY_PREFIX}roads"
-    buffer_key = f"{WIND_VISUAL_BUFFER_KEY_PREFIX}roads"
+    source_key = f"{WIND_VISUAL_SOURCE_KEY_PREFIX}{group_id}"
+    buffer_key = f"{WIND_VISUAL_BUFFER_KEY_PREFIX}{group_id}"
     try:
         source_toggle = _by_key(app.toggle, source_key)
         buffer_toggle = _by_key(app.toggle, buffer_key)
@@ -420,14 +476,15 @@ def _check_wind_map_review_toggles(
         report.check(
             False,
             "",
-            "trondelag: external road map-review toggles are unavailable: "
+            f"trondelag: external {group_label} map-review toggles are "
+            "unavailable: "
             f"{exc}",
         )
         return False
 
     report.check(
         not source_toggle.disabled and not buffer_toggle.disabled,
-        "trondelag: roads source and manifest-backed buffer toggles render "
+        f"trondelag: {group_label} source and manifest-backed buffer toggles render "
         "outside the analysis form.",
         "trondelag: source or buffer map-review toggle is disabled.",
     )
@@ -787,6 +844,94 @@ def _check_canonical_road_selection(
             )
 
 
+def _check_population_slice(report: Report) -> None:
+    app = AppTest.from_file(str(APP_PATH), default_timeout=120)
+    app.query_params["region"] = TRONDELAG_REGION_ID
+    app.run(timeout=120)
+    initial_exceptions, initial_errors = _app_failures(app)
+    if initial_exceptions or initial_errors:
+        report.check(
+            False,
+            "",
+            "trondelag: population slice setup failed: "
+            f"exceptions={initial_exceptions}, errors={initial_errors}",
+        )
+        return
+
+    try:
+        _select_wind_group_layers(
+            app,
+            "settlement",
+            ("population_points",),
+        )
+        population_slider = _by_key(
+            app.slider,
+            "wind_control__analysis__settlement",
+        )
+        population_slider.set_value(100)
+        _wind_apply_button(app).click().run(timeout=120)
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            f"trondelag: population controls failed: {exc}",
+        )
+        return
+
+    first_exceptions, first_errors = _app_failures(app)
+    selected = _session_state_value(app, WIND_SELECTION_STATE_KEY)
+    first_share, first_share_error = _safe_wind_share_pct(app)
+    report.check(
+        not first_exceptions
+        and not first_errors
+        and isinstance(selected, dict)
+        and selected.get("settlement") == ["population_points"]
+        and not any(
+            selected_layer_ids
+            for group_id, selected_layer_ids in selected.items()
+            if group_id != "settlement"
+        )
+        and first_share is not None
+        and abs(first_share - 84.2) <= 0.05,
+        "trondelag: population_points renders the canonical R7 result at "
+        "100 m (84.2%).",
+        "trondelag: population_points R7/100 m drifted: "
+        f"selection={selected}, share={first_share}, "
+        f"share_error={first_share_error}, exceptions={first_exceptions}, "
+        f"errors={first_errors}.",
+    )
+    if first_share is None or first_exceptions or first_errors:
+        return
+
+    if not _check_wind_map_review_toggles(
+        report,
+        app,
+        expected_share=84.2,
+        group_id="settlement",
+        group_label="population",
+    ):
+        return
+
+    population_slider = _by_key(
+        app.slider,
+        "wind_control__analysis__settlement",
+    )
+    population_slider.set_value(1000)
+    _wind_apply_button(app).click().run(timeout=120)
+    second_exceptions, second_errors = _app_failures(app)
+    second_share, second_share_error = _safe_wind_share_pct(app)
+    report.check(
+        not second_exceptions
+        and not second_errors
+        and second_share is not None
+        and abs(second_share - 55.6) <= 0.05,
+        "trondelag: population_points visibly reacts at 1000 m (55.6%).",
+        "trondelag: population_points R7/1000 m drifted: "
+        f"share={second_share}, share_error={second_share_error}, "
+        f"exceptions={second_exceptions}, errors={second_errors}.",
+    )
+
+
 def _check_missing_source_root(report: Report) -> None:
     configured = os.environ.pop(V2_SOURCE_ROOT_ENV, None)
     app = None
@@ -863,6 +1008,7 @@ def main() -> int:
             1000: {7: 67.4, 6: 47.9, 5: 25.5},
         },
     )
+    _check_population_slice(report)
     return report.emit()
 
 

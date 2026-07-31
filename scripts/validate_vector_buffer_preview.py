@@ -93,6 +93,7 @@ def main() -> int:
     region = load_region("trondelag")
     layer = contract.layers["roads_large"]
     medium_layer = contract.layers["roads_medium"]
+    population_layer = contract.layers["population_points"]
     native_crs = str(region["native_crs"])
 
     zero = build_vector_buffer_preview(
@@ -119,6 +120,16 @@ def main() -> int:
         [medium_layer, layer],
         native_crs=native_crs,
         buffer_m=300,
+    )
+    population_at_100 = build_vector_buffer_preview(
+        [population_layer],
+        native_crs=native_crs,
+        buffer_m=100,
+    )
+    population_at_1000 = build_vector_buffer_preview(
+        [population_layer],
+        native_crs=native_crs,
+        buffer_m=1000,
     )
 
     report.check(
@@ -158,6 +169,21 @@ def main() -> int:
         ),
         "The combined-roads preview dissolves both declared vector sources.",
         "The combined-roads preview did not preserve both layer contracts.",
+    )
+    report.check(
+        population_at_100.layer_ids == ("population_points",)
+        and population_at_100.geometry_type in {"Polygon", "MultiPolygon"}
+        and population_at_100.source_feature_count == 1
+        and population_at_100.declared_feature_count == 26_029
+        and population_at_100.area_m2 > 0,
+        "The population 100 m preview uses the declared polygon grid proxy.",
+        "The population 100 m preview did not preserve its manifest source.",
+    )
+    report.check(
+        population_at_1000.geometry_type in {"Polygon", "MultiPolygon"}
+        and population_at_1000.area_m2 > population_at_100.area_m2,
+        "The population preview grows monotonically from 100 m to 1000 m.",
+        "The population preview did not grow from 100 m to 1000 m.",
     )
     report.check(
         at_300.geojson.get("type") == "FeatureCollection"

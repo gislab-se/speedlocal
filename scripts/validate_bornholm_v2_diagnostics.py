@@ -30,21 +30,50 @@ def _bornholm_diagnostic_runtime_result(
     selection: dict[str, list[str]],
 ) -> dict[str, Any]:
     """Replay the frozen diagnostic fixture outside the product wind path."""
-    payload = json.loads(
-        app._wind_runtime_config_json(
-            params,
-            layer_selection=selection,
-            region_id=str(region.get("region_id") or ""),
+    groups: dict[str, dict[str, Any]] = {}
+    for group_id, layer_ids in selection.items():
+        if not layer_ids:
+            continue
+        threshold_key = app._wind_group_param_key(group_id)
+        threshold_value = (
+            float(params.get(threshold_key, 0.0))
+            if threshold_key
+            else 0.0
         )
-    )
-    groups = payload.get("groups") or {}
+        groups[group_id] = {
+            "active_layer_ids": list(layer_ids),
+            "analysis_value_m": int(round(threshold_value)),
+        }
     roads = groups.pop("roads", None)
     if roads is not None:
         groups["transport"] = roads
     return app.run_geometry_runtime(
-        json.dumps(payload, sort_keys=True, ensure_ascii=False),
+        json.dumps(
+            {"groups": groups},
+            sort_keys=True,
+            ensure_ascii=False,
+        ),
         str(region.get("region_id") or ""),
     )
+
+
+def _bornholm_diagnostic_selection() -> dict[str, list[str]]:
+    """Pin the V1-derived archive fixture outside product normalization."""
+    return {
+        "settlement": [app.WIND_POPULATION_SOURCE_LAYER_ID],
+        "roads": list(app.canonical_road_layer_ids("bornholm")),
+        "electrical": [],
+        "protected": ["protected_areas"],
+        "coastal": [],
+        "culture": [
+            "cultural_preservation",
+            "valuable_cultural_environment",
+        ],
+        "reindeer": [],
+        "aviation_approach": [],
+        "aviation_bird": [],
+        "military": [],
+    }
 
 
 class Report:
@@ -167,7 +196,7 @@ def main() -> int:
 
     _check_path_confinement(report)
 
-    selection = app._reference_default_wind_layer_selection("bornholm")
+    selection = _bornholm_diagnostic_selection()
     expected_fixtures = (
         (300.0, "frozen_default_roads_300m", 3.9),
         (400.0, "frozen_roads_400m", 3.3),

@@ -11,6 +11,102 @@ SUPPORTED_OPERATIONS = {"distance_exclusion"}
 
 
 @dataclass(frozen=True)
+class DistanceTargetCoverageContract:
+    resolution: int
+    target_cell_count: int
+    covered_cell_count: int
+    missing_cell_count: int
+    outside_cell_count: int
+    missing_ids_sha256: str
+    outside_ids_sha256: str
+
+    def __post_init__(self) -> None:
+        if isinstance(self.resolution, bool) or not isinstance(
+            self.resolution, int
+        ):
+            raise ValueError("Distance target resolution must be an integer")
+        if self.resolution < 0 or self.resolution > 15:
+            raise ValueError("Distance target resolution must be between 0 and 15")
+        for field_name in (
+            "target_cell_count",
+            "covered_cell_count",
+            "missing_cell_count",
+            "outside_cell_count",
+        ):
+            value = getattr(self, field_name)
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"{field_name} must be a non-negative integer")
+        if self.target_cell_count != (
+            self.covered_cell_count + self.missing_cell_count
+        ):
+            raise ValueError(
+                "Distance target coverage must satisfy target = covered + missing"
+            )
+        for field_name in ("missing_ids_sha256", "outside_ids_sha256"):
+            value = getattr(self, field_name)
+            if len(value) != 64 or any(
+                character not in "0123456789abcdef" for character in value
+            ):
+                raise ValueError(f"{field_name} must be a lowercase SHA256 digest")
+
+
+@dataclass(frozen=True)
+class DistanceCoverageContract:
+    mode: str = "complete"
+    missing_policy: str = "error"
+    expected_source_row_count: int | None = None
+    source_ids_sha256: str | None = None
+    targets: dict[int, DistanceTargetCoverageContract] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.mode not in {"complete", "declared_sparse"}:
+            raise ValueError(
+                "Distance coverage mode must be 'complete' or 'declared_sparse'"
+            )
+        if self.missing_policy not in {"error", "zero_acceptance"}:
+            raise ValueError(
+                "Distance missing policy must be 'error' or 'zero_acceptance'"
+            )
+        if self.mode == "complete" and self.missing_policy != "error":
+            raise ValueError("Complete distance coverage must use the error policy")
+        row_count = self.expected_source_row_count
+        if row_count is not None and (
+            isinstance(row_count, bool)
+            or not isinstance(row_count, int)
+            or row_count <= 0
+        ):
+            raise ValueError(
+                "expected_source_row_count must be a positive integer"
+            )
+        if self.source_ids_sha256 is not None and (
+            len(self.source_ids_sha256) != 64
+            or any(
+                character not in "0123456789abcdef"
+                for character in self.source_ids_sha256
+            )
+        ):
+            raise ValueError("source_ids_sha256 must be a lowercase SHA256 digest")
+        if self.mode == "declared_sparse":
+            if self.missing_policy != "zero_acceptance":
+                raise ValueError(
+                    "Declared sparse distance coverage must use zero_acceptance"
+                )
+            if row_count is None or self.source_ids_sha256 is None:
+                raise ValueError(
+                    "Declared sparse distance coverage must pin source rows and ids"
+                )
+            if not self.targets:
+                raise ValueError(
+                    "Declared sparse distance coverage must declare target signatures"
+                )
+        if any(
+            resolution != target.resolution
+            for resolution, target in self.targets.items()
+        ):
+            raise ValueError("Distance target coverage keys must match resolutions")
+
+
+@dataclass(frozen=True)
 class SourceContract:
     provider: str
     asset_manifest: str
@@ -18,6 +114,20 @@ class SourceContract:
     expected_geometry_families: tuple[str, ...]
     data_representation: str = "auto"
     source_geometry_required: bool = True
+    distance_h3_resolution: int | None = None
+    distance_coverage: DistanceCoverageContract = field(
+        default_factory=DistanceCoverageContract
+    )
+
+    def __post_init__(self) -> None:
+        resolution = self.distance_h3_resolution
+        if resolution is not None:
+            if isinstance(resolution, bool) or not isinstance(resolution, int):
+                raise ValueError("distance_h3_resolution must be an integer")
+            if resolution < 0 or resolution > 15:
+                raise ValueError(
+                    "distance_h3_resolution must be between 0 and 15"
+                )
 
 
 @dataclass(frozen=True)
@@ -153,7 +263,42 @@ class AnalysisContract:
     ui: AnalysisUIContract | None = None
 
 
+def distance_coverage_contract(raw: dict[str, Any] | None) -> DistanceCoverageContract:
+    if not raw:
+        return DistanceCoverageContract()
+    targets: dict[int, DistanceTargetCoverageContract] = {}
+    for item in raw.get("targets") or []:
+        resolution = item["resolution"]
+        if isinstance(resolution, bool) or not isinstance(resolution, int):
+            raise ValueError("Distance target resolution must be an integer")
+        if resolution in targets:
+            raise ValueError(
+                f"Distance coverage contains duplicate R{resolution} targets"
+            )
+        targets[resolution] = DistanceTargetCoverageContract(
+            resolution=resolution,
+            target_cell_count=item["target_cell_count"],
+            covered_cell_count=item["covered_cell_count"],
+            missing_cell_count=item["missing_cell_count"],
+            outside_cell_count=item["outside_cell_count"],
+            missing_ids_sha256=str(item["missing_ids_sha256"]).lower(),
+            outside_ids_sha256=str(item["outside_ids_sha256"]).lower(),
+        )
+    return DistanceCoverageContract(
+        mode=str(raw.get("mode") or "complete"),
+        missing_policy=str(raw.get("missing_policy") or "error"),
+        expected_source_row_count=raw.get("expected_source_row_count"),
+        source_ids_sha256=(
+            str(raw["source_ids_sha256"]).lower()
+            if raw.get("source_ids_sha256") is not None
+            else None
+        ),
+        targets=targets,
+    )
+
+
 def source_contract(raw: dict[str, Any]) -> SourceContract:
+    distance_h3_resolution = raw.get("distance_h3_resolution")
     return SourceContract(
         provider=str(raw["provider"]),
         asset_manifest=str(raw["asset_manifest"]),
@@ -161,6 +306,8 @@ def source_contract(raw: dict[str, Any]) -> SourceContract:
         expected_geometry_families=tuple(str(item) for item in raw["expected_geometry_families"]),
         data_representation=str(raw.get("data_representation") or "auto"),
         source_geometry_required=bool(raw.get("source_geometry_required", True)),
+        distance_h3_resolution=distance_h3_resolution,
+        distance_coverage=distance_coverage_contract(raw.get("distance_coverage")),
     )
 
 
