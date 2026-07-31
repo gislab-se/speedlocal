@@ -103,10 +103,10 @@ Current milestone status:
   controls, calculation, source view, and buffer view pass automated
   R8-to-R7/R6/R5 parity and real-Streamlit gates. Signed sparse-coverage drift
   and broken migrated UI/layer contracts fail closed before legacy loading.
-  Localhost review and local promotion remain pending. Optional settlement
-  proxies, the public `settlement` alias, and the separate allocation-ranking
-  consumer remain transitional, so the complete population slice is not yet
-  promoted.
+  Clean-process localhost review was approved on 2026-07-31, so the bounded
+  primary increment is locally promoted. Optional settlement proxies, the
+  public `settlement` alias, and the separate allocation-ranking consumer
+  remain transitional, so the complete population slice is not yet promoted.
 
 ## Slice gates
 

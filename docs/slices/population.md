@@ -1,6 +1,6 @@
 # Population and settlement slice characterization
 
-Status: active; primary increment automated, localhost review pending
+Status: active; primary increment locally approved, complete slice open
 Behavior reference: frozen V2 for Trøndelag only
 Integration target: V2 Final wind restriction flow
 
@@ -121,10 +121,11 @@ V2 Final parity 65/65, real Streamlit AppTest 48/48, and vector preview 16/16.
 The healthy app path and adversarial broken-contract cases both prove that the
 primary source cannot fall back to the legacy distance loader.
 
-Localhost approval is still required before this increment is locally
-promoted. The source and buffer comparison is currently defined for the
-canonical primary layer alone; selecting it together with an optional
-transitional proxy does not yet provide a mixed buffer preview.
+The user approved the clean localhost checkpoint on 2026-07-31, so this
+bounded primary increment is locally promoted. The source and buffer
+comparison is currently defined for the canonical primary layer alone;
+selecting it together with an optional transitional proxy does not yet provide
+a mixed buffer preview.
 
 This increment is not the complete population slice. Completion also requires
 canonical optional settlement sources, removal of the public `settlement`

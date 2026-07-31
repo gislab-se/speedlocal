@@ -242,10 +242,11 @@ Current slice:
   aggregate, and model-area checks pass at 100, 500, 1,000, and 3,000 m. The
   real V2 Final control, calculation, source preview, and buffer preview use
   this contract, and adversarial checks prove that a broken migrated contract
-  cannot reopen the legacy primary loader. Automated integration is complete;
-  localhost approval and local promotion remain pending. The optional
-  settlement proxies, public `settlement` alias, and allocation-ranking
-  consumer remain explicit work inside the incomplete population slice.
+  cannot reopen the legacy primary loader. The user approved the clean
+  localhost checkpoint on 2026-07-31, so this bounded primary increment is
+  locally promoted. The optional settlement proxies, public `settlement`
+  alias, and allocation-ranking consumer remain explicit work inside the
+  incomplete population slice.
 
 ## Definition of done for a slice
 
