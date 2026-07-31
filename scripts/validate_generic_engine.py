@@ -8,33 +8,70 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
+import h3
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from speedlocal import run_analysis
 from speedlocal.catalogs import load_analysis
-from speedlocal.engine import _distance_rows
+from speedlocal.engine import _distance_rows, _rollup_distance_rows
 from speedlocal.validation import select_processing_adapter, validate_contract, validate_layer
 from speedlocal.sources import resolve_analysis_domain_cell_ids, resolve_layer_assets
 
 
 DEFAULT_V2_ROOT = Path(r"C:\gislab\data\landskapsanalys-v2-multiregion")
-TRONDELAG_R7_DISPLAY_PATH = Path(
-    "docs/geocontext/potential_framework/data/"
-    "trondelag_r7_app_bundle/hex.geojson"
-)
+TRONDELAG_DISPLAY_PATHS = {
+    7: Path(
+        "docs/geocontext/potential_framework/data/"
+        "trondelag_r7_app_bundle/hex.geojson"
+    ),
+    6: Path(
+        "docs/geocontext/potential_framework/data/trondelag_r7_app_bundle/"
+        "h3/trondelag_landscape_h3_r6_rollup.geojson"
+    ),
+    5: Path(
+        "docs/geocontext/potential_framework/data/trondelag_r7_app_bundle/"
+        "h3/trondelag_landscape_h3_r5_rollup.geojson"
+    ),
+}
+TRONDELAG_DISPLAY_COUNTS = {7: 13_735, 6: 2_163, 5: 365}
 ROAD_LARGE_EXPECTATIONS = {
-    300.0: {
-        "raw_mean": 0.9690997039924916,
-        "display_mean": 0.968838733163451,
-        "display_blocked": 428,
+    7: {
+        300.0: {
+            "display_mean": 0.968838733163451,
+            "display_blocked": 428,
+        },
+        1000.0: {
+            "display_mean": 0.9554751146705496,
+            "display_blocked": 434,
+        },
     },
-    1000.0: {
-        "raw_mean": 0.9558480037542414,
-        "display_mean": 0.9554751146705496,
-        "display_blocked": 434,
+    6: {
+        300.0: {
+            "display_mean": 0.9223300970873787,
+            "display_blocked": 168,
+        },
+        1000.0: {
+            "display_mean": 0.9101944059177069,
+            "display_blocked": 170,
+        },
     },
+    5: {
+        300.0: {
+            "display_mean": 0.8191780821917808,
+            "display_blocked": 66,
+        },
+        1000.0: {
+            "display_mean": 0.8089936986301369,
+            "display_blocked": 66,
+        },
+    },
+}
+ROAD_LARGE_RAW_MEANS = {
+    300.0: 0.9690997039924916,
+    1000.0: 0.9558480037542414,
 }
 
 
@@ -66,56 +103,80 @@ def _v2_roads_oracle(contract, threshold: float) -> tuple[int, int, float]:
     return len(by_hex), blocked, acceptance_sum / len(by_hex)
 
 
-def _trondelag_r7_display_cell_ids(source_root: Path) -> tuple[str, ...]:
-    path = source_root / TRONDELAG_R7_DISPLAY_PATH
+def _trondelag_display_cell_ids(
+    source_root: Path,
+    resolution: int,
+) -> tuple[str, ...]:
+    path = source_root / TRONDELAG_DISPLAY_PATHS[resolution]
     raw = json.loads(path.read_text(encoding="utf-8"))
     cell_ids = tuple(
         str(feature["properties"]["hex_id"])
         for feature in raw.get("features") or []
     )
-    if len(cell_ids) != 13_735 or len(set(cell_ids)) != 13_735:
+    expected_count = TRONDELAG_DISPLAY_COUNTS[resolution]
+    if len(cell_ids) != expected_count or len(set(cell_ids)) != expected_count:
         raise ValueError(
-            f"{path} must contain exactly 13,735 unique Trøndelag R7 display cells"
+            f"{path} must contain exactly {expected_count:,} unique "
+            f"Trondelag R{resolution} display cells"
         )
     return cell_ids
 
 
-def _v2_layer_cell_oracle(
+def _v2_layer_rollup_oracle(
     contract,
     layer_id: str,
     threshold: float,
-    analysis_cell_ids: tuple[str, ...],
-) -> dict[str, float]:
-    """Independent cellwise implementation of frozen V2 soft-distance semantics."""
+    target_resolution: int,
+    target_cell_ids: tuple[str, ...],
+) -> dict[str, tuple[float, bool, bool, float]]:
+    """Independently reproduce frozen raw-distance rollup and soft acceptance."""
     path = resolve_layer_assets(contract.layers[layer_id]).distance_path
-    rows: dict[str, tuple[float, bool]] = {}
+    rolled: dict[str, tuple[float, bool]] = {}
+    seen_source_ids: set[str] = set()
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
         for row in csv.DictReader(handle):
             cell_id = str(row["hex_id"])
-            if cell_id in rows:
+            if cell_id in seen_source_ids:
                 raise ValueError(f"Duplicate oracle cell id: {cell_id}")
-            rows[cell_id] = (
+            seen_source_ids.add(cell_id)
+            if int(h3.get_resolution(cell_id)) != 7:
+                raise ValueError(f"Oracle source cell is not R7: {cell_id}")
+            target_id = (
+                cell_id
+                if target_resolution == 7
+                else str(h3.cell_to_parent(cell_id, target_resolution))
+            )
+            value = (
                 float(row["distance_m"]),
                 str(row["intersects"]).strip().lower() in {"1", "true", "yes"},
             )
+            previous = rolled.get(target_id)
+            if previous is None:
+                rolled[target_id] = value
+            else:
+                rolled[target_id] = (
+                    min(previous[0], value[0]),
+                    previous[1] or value[1],
+                )
 
-    acceptance: dict[str, float] = {}
+    oracle: dict[str, tuple[float, bool, bool, float]] = {}
     ramp_end = max(threshold * 2.0, threshold + 1.0)
-    for cell_id in analysis_cell_ids:
-        if cell_id not in rows:
+    for cell_id in target_cell_ids:
+        if cell_id not in rolled:
             raise ValueError(f"Oracle is missing analysis cell: {cell_id}")
-        distance, intersects = rows[cell_id]
+        distance, intersects = rolled[cell_id]
+        blocked = intersects or distance <= threshold
         if intersects:
-            value = 0.0
+            acceptance = 0.0
         elif threshold <= 0:
-            value = 1.0
+            acceptance = 1.0
         else:
-            value = max(
+            acceptance = max(
                 0.0,
                 min(1.0, (distance - threshold) / (ramp_end - threshold)),
             )
-        acceptance[cell_id] = value
-    return acceptance
+        oracle[cell_id] = (distance, intersects, blocked, acceptance)
+    return oracle
 
 
 def _assert_invalid_distance_rows_fail_closed() -> int:
@@ -217,63 +278,133 @@ def main() -> int:
         assert buffer_contract.validate_value(312) == 312.0
         checks += 3
 
-    display_cell_ids = _trondelag_r7_display_cell_ids(source_root)
+    display_cell_ids_by_resolution = {
+        resolution: _trondelag_display_cell_ids(source_root, resolution)
+        for resolution in (7, 6, 5)
+    }
+    display_cell_ids = display_cell_ids_by_resolution[7]
     assert trondelag.analysis_domain is not None
     assert (
         trondelag.analysis_domain.cell_kind,
         trondelag.analysis_domain.resolution,
         trondelag.analysis_domain.expected_cell_count,
     ) == ("h3", 7, 13_735)
-    assert resolve_analysis_domain_cell_ids(trondelag) == display_cell_ids
+    assert set(trondelag.analysis_domain.rollups) == {6, 5}
     checks += 2
-    for threshold, expected in ROAD_LARGE_EXPECTATIONS.items():
-        parameters = {"roads_large": {"buffer_m": threshold}}
-        raw_result = run_analysis(
-            "trondelag",
-            "wind",
-            ["roads_large"],
-            parameters,
+
+    for resolution, target_cell_ids in display_cell_ids_by_resolution.items():
+        assert (
+            resolve_analysis_domain_cell_ids(trondelag, resolution)
+            == target_cell_ids
         )
-        display_result = run_analysis(
-            "trondelag",
-            "wind",
-            ["roads_large"],
-            parameters,
-            analysis_cell_ids=display_cell_ids,
-        )
-        raw_group = raw_result.groups[0]
-        display_group = display_result.groups[0]
-        assert raw_group.cell_count == 13_851
-        assert len(raw_group.cells) == 13_851
-        assert abs(raw_group.mean_acceptance - expected["raw_mean"]) < 1e-12
-        assert display_group.cell_count == 13_735
-        assert len(display_group.cells) == 13_735
-        assert display_group.blocked_cell_count == expected["display_blocked"]
-        assert abs(display_group.mean_acceptance - expected["display_mean"]) < 1e-12
-        assert {cell.cell_id for cell in display_group.cells} == set(display_cell_ids)
-        oracle = _v2_layer_cell_oracle(
-            trondelag,
-            "roads_large",
-            threshold,
-            display_cell_ids,
-        )
-        actual = {
-            cell.cell_id: cell.acceptance
-            for cell in display_group.cells
-        }
-        assert actual.keys() == oracle.keys()
-        assert max(
-            abs(actual[cell_id] - oracle[cell_id])
-            for cell_id in oracle
-        ) < 1e-12
-        checks += 9
-        print(
-            f"PASS trondelag roads_large {threshold:g} m: "
-            f"raw universe {raw_group.cell_count} cells at "
-            f"{raw_group.mean_acceptance:.15f} mean acceptance; "
-            f"R7 display domain {display_group.cell_count} cells at "
-            f"{display_group.mean_acceptance:.15f}"
-        )
+        assert len(target_cell_ids) == TRONDELAG_DISPLAY_COUNTS[resolution]
+        if resolution < 7:
+            assert {
+                str(h3.cell_to_parent(cell_id, resolution))
+                for cell_id in display_cell_ids
+            } == set(target_cell_ids)
+        checks += 3
+
+        for threshold, expected in ROAD_LARGE_EXPECTATIONS[resolution].items():
+            parameters = {"roads_large": {"buffer_m": threshold}}
+            if resolution == 7:
+                raw_result = run_analysis(
+                    "trondelag",
+                    "wind",
+                    ["roads_large"],
+                    parameters,
+                )
+                raw_group = raw_result.groups[0]
+                assert raw_group.cell_count == 13_851
+                assert len(raw_group.cells) == 13_851
+                assert (
+                    abs(
+                        raw_group.mean_acceptance
+                        - ROAD_LARGE_RAW_MEANS[threshold]
+                    )
+                    < 1e-12
+                )
+                checks += 3
+
+            display_result = run_analysis(
+                "trondelag",
+                "wind",
+                ["roads_large"],
+                parameters,
+                target_resolution=resolution,
+            )
+            display_group = display_result.groups[0]
+            assert display_group.cell_count == TRONDELAG_DISPLAY_COUNTS[resolution]
+            assert len(display_group.cells) == TRONDELAG_DISPLAY_COUNTS[resolution]
+            assert (
+                display_group.blocked_cell_count
+                == expected["display_blocked"]
+            )
+            assert (
+                abs(
+                    display_group.mean_acceptance
+                    - expected["display_mean"]
+                )
+                < 1e-12
+            )
+            assert {
+                cell.cell_id for cell in display_group.cells
+            } == set(target_cell_ids)
+
+            oracle = _v2_layer_rollup_oracle(
+                trondelag,
+                "roads_large",
+                threshold,
+                resolution,
+                target_cell_ids,
+            )
+            actual = {
+                cell.cell_id: cell
+                for cell in display_group.cells
+            }
+            assert actual.keys() == oracle.keys()
+            for cell_id, (
+                expected_distance,
+                expected_intersection,
+                expected_blocked,
+                expected_acceptance,
+            ) in oracle.items():
+                cell = actual[cell_id]
+                assert abs(cell.min_distance_m - expected_distance) < 1e-12
+                assert cell.any_intersection is expected_intersection
+                assert cell.blocked is expected_blocked
+                assert abs(cell.acceptance - expected_acceptance) < 1e-12
+            checks += 10
+            print(
+                f"PASS trondelag roads_large R{resolution} "
+                f"{threshold:g} m: {display_group.cell_count} cells, "
+                f"{display_group.blocked_cell_count} blocked, "
+                f"{display_group.mean_acceptance:.15f} mean acceptance"
+            )
+
+    r6_anchor = run_analysis(
+        "trondelag",
+        "wind",
+        ["roads_large"],
+        {"roads_large": {"buffer_m": 300}},
+        target_resolution=6,
+    ).groups[0]
+    r5_anchor = run_analysis(
+        "trondelag",
+        "wind",
+        ["roads_large"],
+        {"roads_large": {"buffer_m": 300}},
+        target_resolution=5,
+    ).groups[0]
+    assert {
+        cell.cell_id: cell.min_distance_m
+        for cell in r6_anchor.cells
+    }["86083312fffffff"] == 26161.1
+    assert {
+        cell.cell_id: cell.min_distance_m
+        for cell in r5_anchor.cells
+    }["85083313fffffff"] == 25717.5
+    checks += 2
 
     missing_cell_id = "87fffffffffffff"
     try:
@@ -290,6 +421,88 @@ def main() -> int:
     else:
         raise AssertionError("Missing display-domain cell did not fail closed")
     checks += 2
+
+    try:
+        run_analysis(
+            "trondelag",
+            "wind",
+            ["roads_large"],
+            {"roads_large": {"buffer_m": 300}},
+            analysis_cell_ids=display_cell_ids_by_resolution[6][:-1],
+            target_resolution=6,
+        )
+    except ValueError as exc:
+        assert "do not match the canonical analysis domain" in str(exc)
+    else:
+        raise AssertionError("Incomplete R6 target domain did not fail closed")
+    checks += 1
+
+    for undeclared_resolution in (8, 4):
+        try:
+            run_analysis(
+                "trondelag",
+                "wind",
+                ["roads_large"],
+                {"roads_large": {"buffer_m": 300}},
+                target_resolution=undeclared_resolution,
+            )
+        except ValueError as exc:
+            assert "has no R" in str(exc)
+        else:
+            raise AssertionError(
+                f"Undeclared R{undeclared_resolution} did not fail closed"
+            )
+        checks += 1
+
+    for invalid_resolution in (6.5, True, "6"):
+        try:
+            run_analysis(
+                "trondelag",
+                "wind",
+                ["roads_large"],
+                {"roads_large": {"buffer_m": 300}},
+                target_resolution=invalid_resolution,
+            )
+        except TypeError as exc:
+            assert "must be an integer" in str(exc)
+        else:
+            raise AssertionError(
+                f"Non-integral target resolution {invalid_resolution!r} "
+                "did not fail closed"
+            )
+        checks += 1
+
+    source_id = display_cell_ids_by_resolution[7][0]
+    mixed_resolution_id = display_cell_ids_by_resolution[6][0]
+    try:
+        _rollup_distance_rows(
+            {
+                source_id: (100.0, False),
+                mixed_resolution_id: (200.0, False),
+            },
+            7,
+            6,
+            frozenset({str(h3.cell_to_parent(source_id, 6))}),
+        )
+    except ValueError as exc:
+        assert "expected R7" in str(exc)
+    else:
+        raise AssertionError("Mixed-resolution distance rows did not fail closed")
+    checks += 1
+
+    try:
+        _rollup_distance_rows(
+            {source_id: (100.0, False)},
+            7,
+            8,
+            frozenset(),
+        )
+    except ValueError as exc:
+        assert "cannot roll up" in str(exc)
+    else:
+        raise AssertionError("Upward distance rollup did not fail closed")
+    checks += 1
+
     checks += _assert_invalid_distance_rows_fail_closed()
 
     print(f"Generic engine validation passed: {checks}/{checks} checks")

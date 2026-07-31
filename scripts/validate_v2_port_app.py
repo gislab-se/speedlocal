@@ -77,6 +77,20 @@ def _wind_share_pct(app: AppTest) -> float:
     return float(str(value).rstrip("%").replace(",", "."))
 
 
+def _safe_wind_share_pct(app: AppTest) -> tuple[float | None, str | None]:
+    try:
+        return _wind_share_pct(app), None
+    except (AssertionError, StopIteration, TypeError, ValueError) as exc:
+        return None, str(exc)
+
+
+def _session_state_value(app: AppTest, key: str):
+    try:
+        return app.session_state[key]
+    except (AttributeError, KeyError):
+        return None
+
+
 def _wind_apply_button(app: AppTest):
     return next(
         item
@@ -85,6 +99,21 @@ def _wind_apply_button(app: AppTest):
             "FormSubmitter:wind_unified_group_controls-"
         )
     )
+
+
+def _rendered_text(app: AppTest) -> str:
+    values: list[str] = []
+    for collection_name in (
+        "caption",
+        "error",
+        "info",
+        "markdown",
+        "text",
+        "warning",
+    ):
+        for element in getattr(app, collection_name):
+            values.append(str(element.value))
+    return "\n".join(values)
 
 
 def _select_roads_large_only(app: AppTest) -> None:
@@ -171,6 +200,86 @@ def _check_roads_large_slice(report: Report) -> None:
         "trondelag: roads_large-only 1000 m result drifted: "
         f"expected 95.5%, got {second_share:.3f}%.",
     )
+
+    display_mode = _by_key(app.radio, "combined_h3_display_mode")
+    display_mode.set_value("selected").run(timeout=120)
+    display_exceptions = [str(item.value) for item in app.exception]
+    display_errors = [str(item.value) for item in app.error]
+    if display_exceptions or display_errors:
+        report.check(
+            False,
+            "",
+            "trondelag: switching to selected H3 resolution failed: "
+            f"exceptions={display_exceptions}, errors={display_errors}",
+        )
+        return
+    resolution_control = _by_key(app.radio, "combined_h3_resolution")
+    report.check(
+        len(resolution_control.options) == 3
+        and all(
+            any(str(option).startswith(f"R{resolution}") for option in resolution_control.options)
+            for resolution in (7, 6, 5)
+        ),
+        "trondelag: the real V2 Final resolution control exposes R7/R6/R5.",
+        "trondelag: the V2 Final resolution options drifted: "
+        f"{resolution_control.options}.",
+    )
+
+    expected_resolution_shares = {
+        1000: {6: 91.0, 5: 80.9},
+        300: {6: 92.2, 5: 81.9},
+    }
+    for buffer_m, expected_shares in expected_resolution_shares.items():
+        if buffer_m != 1000:
+            road_slider = _by_key(
+                app.slider,
+                "wind_control__analysis__transport",
+            )
+            road_slider.set_value(buffer_m)
+            _wind_apply_button(app).click().run(timeout=120)
+            buffer_exceptions = [str(item.value) for item in app.exception]
+            buffer_errors = [str(item.value) for item in app.error]
+            if buffer_exceptions or buffer_errors:
+                report.check(
+                    False,
+                    "",
+                    f"trondelag: applying {buffer_m} m before the R6/R5 "
+                    f"display checks failed: exceptions={buffer_exceptions}, "
+                    f"errors={buffer_errors}",
+                )
+                return
+
+        for resolution, expected_share in expected_shares.items():
+            resolution_control = _by_key(app.radio, "combined_h3_resolution")
+            resolution_control.set_value(resolution).run(timeout=120)
+            resolution_exceptions = [str(item.value) for item in app.exception]
+            resolution_errors = [str(item.value) for item in app.error]
+            runtime_failure = (
+                "Vindruntime kunde inte köras"
+                in _rendered_text(app)
+            )
+            resolution_state = _session_state_value(
+                app,
+                "combined_h3_resolution",
+            )
+            resolution_share, share_error = _safe_wind_share_pct(app)
+            report.check(
+                not resolution_exceptions
+                and not resolution_errors
+                and not runtime_failure
+                and resolution_state == resolution
+                and resolution_share is not None
+                and abs(resolution_share - expected_share) <= 0.05,
+                f"trondelag: roads_large-only V2 Final builds the canonical "
+                f"R{resolution} result at {buffer_m} m "
+                f"({expected_share:.1f}%).",
+                f"trondelag: R{resolution}/{buffer_m} m display failed: "
+                f"exceptions={resolution_exceptions}, "
+                f"errors={resolution_errors}, "
+                f"runtime_failure={runtime_failure}, "
+                f"state={resolution_state}, share={resolution_share}, "
+                f"share_error={share_error}.",
+            )
 
 
 def _check_missing_source_root(report: Report) -> None:

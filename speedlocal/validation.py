@@ -61,6 +61,35 @@ def validate_contract(contract: AnalysisContract) -> None:
             )
         if domain.expected_cell_count <= 0:
             raise ValueError("Analysis domain expected cell count must be positive")
+        for resolution, rollup in domain.rollups.items():
+            if resolution != rollup.resolution:
+                raise ValueError(
+                    f"Analysis-domain rollup key R{resolution} does not match "
+                    f"its declared R{rollup.resolution}"
+                )
+            if (
+                not rollup.provider.strip()
+                or not rollup.path.strip()
+                or not rollup.id_field.strip()
+            ):
+                raise ValueError(
+                    f"Analysis-domain R{resolution} rollup provider, path, "
+                    "and id field are required"
+                )
+            if resolution < 0 or resolution > 15:
+                raise ValueError(
+                    f"Invalid H3 analysis-domain rollup resolution: {resolution}"
+                )
+            if resolution >= domain.resolution:
+                raise ValueError(
+                    f"Analysis-domain rollup R{resolution} must be coarser "
+                    f"than the R{domain.resolution} source domain"
+                )
+            if rollup.expected_cell_count <= 0:
+                raise ValueError(
+                    f"Analysis-domain R{resolution} expected cell count "
+                    "must be positive"
+                )
     unknown_groups = set(contract.groups) - set(STANDARD_GROUP_IDS)
     if unknown_groups:
         raise ValueError(f"Unknown standard groups: {sorted(unknown_groups)}")

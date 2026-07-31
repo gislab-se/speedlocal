@@ -2,7 +2,7 @@
 
 Status: active
 Start: 2026-07-29
-Target acceptance review: 2026-08-26
+Target acceptance review: 2026-08-27
 
 This target assumes that reviewed Skaraborg data and energy-scenario inputs are
 available when their phases begin. Missing source data moves the date and must
@@ -28,17 +28,21 @@ The delivery is complete when:
 
 | Dates | Slice | Required outcome |
 |---|---|---|
-| 29–31 Jul | Roads | Trøndelag V2 characterization, dynamic road layers, contract validation, generic UI path |
-| 3–5 Aug | Population | Point/grid/polygon dispatch and Trøndelag V2 parity |
-| 6–7 Aug | Nature | Dynamic nature layers and hard-exclusion parity |
-| 10–11 Aug | Culture | Dynamic culture layers and hard-exclusion parity |
-| 12–13 Aug | Grid infrastructure | Proximity-feasibility operation and parity |
-| 14–17 Aug | Combined result | Common restriction composition and explanations |
-| 18–19 Aug | Wind and solar | Shared potential outputs and continuous technology mix |
-| 20–21 Aug | Energy scenarios and social acceptance | Scenario-to-area flow and acceptance overlay |
-| 24 Aug | Region onboarding | Bornholm V1 acceptance gate plus Skaraborg manifests, adapters, validation, and visible state |
-| 25 Aug | Product cleanup | Remove replaced V2 paths, simplify UI, update copy and labels |
-| 26 Aug | Acceptance review | Full regression, delivery docs, known limitations, release candidate |
+| 29 Jul–3 Aug | Roads | Trøndelag V2 characterization, dynamic road layers, contract validation, generic UI path |
+| 4–6 Aug | Population | Point/grid/polygon dispatch and Trøndelag V2 parity |
+| 7–10 Aug | Nature | Dynamic nature layers and hard-exclusion parity |
+| 11–12 Aug | Culture | Dynamic culture layers and hard-exclusion parity |
+| 13–14 Aug | Grid infrastructure | Proximity-feasibility operation and parity |
+| 17–18 Aug | Combined result | Common restriction composition and explanations |
+| 19–20 Aug | Wind and solar | Shared potential outputs and continuous technology mix |
+| 21–24 Aug | Energy scenarios and social acceptance | Scenario-to-area flow and acceptance overlay |
+| 25 Aug | Region onboarding | Bornholm V1 acceptance gate plus Skaraborg manifests, adapters, validation, and visible state |
+| 26 Aug | Product cleanup | Remove replaced V2 paths, simplify UI, update copy and labels |
+| 27 Aug | Acceptance review | Full regression, delivery docs, known limitations, release candidate |
+
+The schedule moved one business day on 2026-07-31 because the complete roads
+slice had not yet reached its promoted gate. Population does not begin until
+canonical `roads_medium`, combined-road behavior, and legacy-path removal pass.
 
 Current milestone status:
 
@@ -58,8 +62,10 @@ Current milestone status:
 - Bornholm V1 characterization and technical pinning: not started.
 - `roads_large` R7 canonical integration: automated gate, localhost visual
   approval, public-package cold start, and external deployment review complete.
-- `roads_large` full promotion: canonical R6/R5 rollups and their remaining
-  legacy-path removal remain.
+- `roads_large` R6/R5 canonical integration: automated engine, accepted-
+  reference, and real-app gates complete at 300/1000 m; localhost visual
+  approval and publication remain.
+- `roads_large` full promotion: pending that visual and publication gate.
 - Complete roads promotion: canonical `roads_medium`, combined-roads behavior,
   and removal of the temporary road-group adapter remain.
 

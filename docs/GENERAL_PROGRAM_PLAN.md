@@ -156,8 +156,8 @@ Implemented foundation:
 
 - generic contracts, catalog loading, source resolution, and validation under
   `speedlocal/`;
-- manifest-driven `roads_large` for active Trøndelag plus a Bornholm
-  onboarding/diagnostic contract;
+- manifest-driven `roads_large` at Trøndelag's public R7/R6/R5 resolutions plus
+  a Bornholm onboarding/diagnostic contract;
 - geometry-driven line adapter;
 - generic distance-exclusion execution;
 - distance-engine contract validation against both regional datasets in the
@@ -184,16 +184,19 @@ Current slice:
   parity or block Trøndelag roads promotion;
 - direct Bornholm routes fail closed on the manifest-driven landing page;
 - `roads_large` now executes through `speedlocal.run_analysis` in the actual
-  Trøndelag R7 V2 Final flow, restricted to the exact 13,735-cell public
-  analysis domain;
+  Trøndelag V2 Final flow at the exact public R7/R6/R5 domains: 13,735, 2,163,
+  and 365 cells;
+- coarser resolutions aggregate every valid raw R7 distance row by H3 parent
+  using minimum distance and any intersection before restricting the result to
+  the manifest-declared display domain;
 - the shared road slider reads its 300/100/2000/25 contract from the canonical
   manifest;
-- this is an R7 checkpoint, not full roads promotion: R6/R5 and
-  `roads_medium` remain on the legacy calculation path;
-- remaining promotion work: add canonical R6/R5 aggregation for
-  `roads_large`, migrate `roads_medium`, validate their combined group
-  behavior, then remove only the legacy road code those replacements make
-  obsolete.
+- the automated R7/R6/R5 `roads_large` checkpoint passes; localhost visual
+  approval and publication remain before it is called promoted;
+- `roads_medium` still uses the characterized legacy calculation path;
+- remaining roads work: approve the R6/R5 checkpoint visually, migrate
+  `roads_medium`, validate combined-road behavior, then remove only the legacy
+  road code those replacements make obsolete.
 
 ## Definition of done for a slice
 

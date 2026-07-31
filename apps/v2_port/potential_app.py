@@ -9507,12 +9507,12 @@ def _wind_fast_distance_runtime_result(
             if (
                 group_id == LEGACY_ROADS_GROUP_ID
                 and layer_id == MIGRATED_ROADS_LAYER_ID
-                and int(target_resolution) == 7
             ):
                 canonical_frame = roads_large_acceptance_frame(
                     region_id,
                     threshold_m,
                     frame["hex_id"].astype(str),
+                    int(target_resolution),
                 )
                 canonical_merged = frame[["hex_id"]].merge(
                     canonical_frame[["hex_id", "acceptance"]],
@@ -9523,7 +9523,7 @@ def _wind_fast_distance_runtime_result(
                 if canonical_merged["acceptance"].isna().any():
                     raise ValueError(
                         "Canonical roads_large result is incomplete for the "
-                        "R7 display domain"
+                        f"R{int(target_resolution)} display domain"
                     )
                 canonical_acceptance_parts.append(
                     canonical_merged["acceptance"].astype(float)

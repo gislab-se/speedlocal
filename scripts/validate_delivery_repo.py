@@ -55,6 +55,7 @@ REQUIRED_PATHS = [
     "docs/DAILY_WORKFLOW.md",
     "docs/daily/2026-07-29.md",
     "docs/daily/2026-07-30.md",
+    "docs/daily/2026-07-31.md",
     "docs/slices/roads.md",
     "docs/REPO_HYGIENE.md",
     "docs/FROZEN_V2_REFERENCE.md",

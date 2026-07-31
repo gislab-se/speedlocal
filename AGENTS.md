@@ -47,8 +47,8 @@
 - Implement the five standard groups in this order: roads, population, nature,
   culture, grid infrastructure.
 - The current slice is the complete public roads behavior. `roads_large` has
-  reached a canonical Trøndelag R7 checkpoint; do not call it fully promoted
-  until visual approval and canonical R6/R5 rollups pass. The complete roads
+  reached an automated canonical Trøndelag R7/R6/R5 checkpoint; do not call it
+  fully promoted until localhost visual approval passes. The complete roads
   slice also requires canonical `roads_medium` and combined-roads behavior.
 - Bornholm source and engine contracts may validate in parallel as onboarding
   diagnostics, but they do not block Trøndelag slice promotion.

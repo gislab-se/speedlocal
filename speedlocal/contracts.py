@@ -21,6 +21,15 @@ class SourceContract:
 
 
 @dataclass(frozen=True)
+class AnalysisDomainRollupContract:
+    provider: str
+    path: str
+    id_field: str
+    resolution: int
+    expected_cell_count: int
+
+
+@dataclass(frozen=True)
 class AnalysisDomainContract:
     provider: str
     path: str
@@ -28,6 +37,7 @@ class AnalysisDomainContract:
     cell_kind: str
     resolution: int
     expected_cell_count: int
+    rollups: dict[int, AnalysisDomainRollupContract] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -124,6 +134,25 @@ def analysis_domain_contract(
 ) -> AnalysisDomainContract | None:
     if not raw:
         return None
+    rollups: dict[int, AnalysisDomainRollupContract] = {}
+    for item in raw.get("rollups") or []:
+        raw_resolution = item["resolution"]
+        if isinstance(raw_resolution, bool) or not isinstance(raw_resolution, int):
+            raise ValueError(
+                "Analysis-domain rollup resolution must be an integer"
+            )
+        resolution = raw_resolution
+        if resolution in rollups:
+            raise ValueError(
+                f"Analysis domain contains duplicate R{resolution} rollups"
+            )
+        rollups[resolution] = AnalysisDomainRollupContract(
+            provider=str(item["provider"]),
+            path=str(item["path"]),
+            id_field=str(item["id_field"]),
+            resolution=resolution,
+            expected_cell_count=int(item["expected_cell_count"]),
+        )
     return AnalysisDomainContract(
         provider=str(raw["provider"]),
         path=str(raw["path"]),
@@ -131,6 +160,7 @@ def analysis_domain_contract(
         cell_kind=str(raw["cell_kind"]),
         resolution=int(raw["resolution"]),
         expected_cell_count=int(raw["expected_cell_count"]),
+        rollups=rollups,
     )
 
 

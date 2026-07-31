@@ -7,7 +7,6 @@ import pandas as pd
 from speedlocal.catalogs import load_analysis
 from speedlocal.contracts import ParameterContract
 from speedlocal.engine import run_analysis
-from speedlocal.sources import resolve_analysis_domain_cell_ids
 
 
 LEGACY_ROADS_GROUP_ID = "transport"
@@ -61,8 +60,9 @@ def roads_large_acceptance_frame(
     region_id: str,
     buffer_m: float,
     analysis_cell_ids: Collection[str],
+    target_resolution: int,
 ) -> pd.DataFrame:
-    """Adapt canonical R7 cell results to the V2 Final fast-distance frame."""
+    """Adapt canonical display-resolution results to V2 Final."""
     requested_ids = tuple(str(value).strip() for value in analysis_cell_ids)
     if not requested_ids:
         raise ValueError("roads_large requires a non-empty analysis-cell universe")
@@ -71,18 +71,6 @@ def roads_large_acceptance_frame(
     if len(requested_ids) != len(set(requested_ids)):
         raise ValueError("roads_large analysis-cell universe contains duplicate ids")
 
-    analysis = load_analysis(str(region_id), "wind")
-    canonical_ids = resolve_analysis_domain_cell_ids(analysis)
-    if len(requested_ids) != len(canonical_ids) or set(requested_ids) != set(
-        canonical_ids
-    ):
-        requested_set = set(requested_ids)
-        canonical_set = set(canonical_ids)
-        raise ValueError(
-            "V2 Final display cells do not match the canonical analysis domain: "
-            f"missing={len(canonical_set - requested_set)}, "
-            f"unexpected={len(requested_set - canonical_set)}"
-        )
     result = run_analysis(
         str(region_id),
         "wind",
@@ -92,7 +80,8 @@ def roads_large_acceptance_frame(
                 "buffer_m": float(buffer_m),
             }
         },
-        analysis_cell_ids=canonical_ids,
+        analysis_cell_ids=requested_ids,
+        target_resolution=target_resolution,
     )
     group = next(
         (
@@ -104,12 +93,12 @@ def roads_large_acceptance_frame(
     )
     if group is None:
         raise ValueError("Canonical roads_large result has no roads group")
-    if group.cell_count != len(canonical_ids) or len(group.cells) != len(
-        canonical_ids
+    if group.cell_count != len(requested_ids) or len(group.cells) != len(
+        requested_ids
     ):
         raise ValueError(
             "Canonical roads_large result does not cover the requested "
-            f"analysis domain ({len(group.cells)}/{len(canonical_ids)})"
+            f"analysis domain ({len(group.cells)}/{len(requested_ids)})"
         )
 
     frame = pd.DataFrame(

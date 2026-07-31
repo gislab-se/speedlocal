@@ -9,7 +9,23 @@
     "id_field": "hex_id",
     "cell_kind": "h3",
     "resolution": 7,
-    "expected_cell_count": 13735
+    "expected_cell_count": 13735,
+    "rollups": [
+      {
+        "provider": "v2_archive",
+        "path": "docs/geocontext/potential_framework/data/trondelag_r7_app_bundle/h3/trondelag_landscape_h3_r6_rollup.geojson",
+        "id_field": "hex_id",
+        "resolution": 6,
+        "expected_cell_count": 2163
+      },
+      {
+        "provider": "v2_archive",
+        "path": "docs/geocontext/potential_framework/data/trondelag_r7_app_bundle/h3/trondelag_landscape_h3_r5_rollup.geojson",
+        "id_field": "hex_id",
+        "resolution": 5,
+        "expected_cell_count": 365
+      }
+    ]
   },
   "layers": [
     {

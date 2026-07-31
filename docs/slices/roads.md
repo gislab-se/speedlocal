@@ -1,6 +1,6 @@
 # Roads slice characterization
 
-Status: Trøndelag `roads_large` canonical R7 checkpoint implemented and approved locally and in Streamlit Cloud; R6/R5 pending
+Status: Trøndelag `roads_large` canonical R7/R6/R5 checkpoint implemented; R7 approved and published, R6/R5 automated gates pass and visual approval is pending
 Behavior reference: frozen V2 for Trøndelag; Bornholm V1 acceptance baseline pending
 Integration target: V2 Final
 
@@ -38,9 +38,10 @@ The frozen archive contains two runtime representations:
 The canonical `speedlocal` roads engine validates the internal H3 distance
 contract: minimum distance across selected layers, any-intersection
 composition, `distance <= buffer_m` blocking, and the soft acceptance ramp.
-For Trøndelag R7, `roads_large` is now also connected to the actual V2 Final
-result flow and tested against the frozen V2 cell universe. Bornholm's generic
-engine execution remains contract/diagnostic evidence, not behavioral parity.
+For Trøndelag R7/R6/R5, `roads_large` is connected to the actual V2 Final
+result flow and tested against the frozen V2 cell universes. Bornholm's
+generic engine execution remains contract/diagnostic evidence, not behavioral
+parity.
 
 ## Relevant V2 code classification
 
@@ -75,8 +76,8 @@ These belong in each region's `analyses/wind.json`.
 - mapping from Streamlit state to an analysis request;
 - road result presentation.
 
-The R7 `roads_large` replacement now reads its slider contract and cell result
-from the common contract. The surrounding legacy group UI remains a
+The R7/R6/R5 `roads_large` replacement now reads its slider contract and cell
+result from the common contract. The surrounding legacy group UI remains a
 transitional adapter until `roads_medium` is migrated.
 
 ### Remove after promotion
@@ -145,9 +146,10 @@ Completed 2026-07-30 before calculation-level promotion:
 This bridge restores the Trøndelag working baseline without copying data and
 retains Bornholm provenance for later onboarding.
 
-## `roads_large` R7 checkpoint
+## `roads_large` R7/R6/R5 checkpoint
 
-Completed in code on 2026-07-30:
+R7 was completed and published on 2026-07-30. R6/R5 were completed in code on
+2026-07-31:
 
 - `ParameterContract` now carries the UI step;
 - both Trøndelag road layers declare one shared `buffer_m` contract:
@@ -158,7 +160,7 @@ Completed in code on 2026-07-30:
   `hex_id` field, resolution, and expected 13,735-cell count;
 - V2 Final's display-cell ids must match that canonical domain exactly;
 - a missing requested cell fails closed;
-- V2 Final sends `roads_large` through `speedlocal.run_analysis` at R7,
+- V2 Final sends `roads_large` through `speedlocal.run_analysis` at R7/R6/R5,
   including when it is combined with the still-legacy `roads_medium`;
 - the public slider reads its range, step, and default through the canonical
   road contract;
@@ -166,8 +168,11 @@ Completed in code on 2026-07-30:
   legacy `transport` capability to canonical `roads`.
 
 The source distance table has 13,851 valid R7 rows, while the public
-Trøndelag R7 map has 13,735 cells. The explicit display domain is therefore
-part of the parity contract; silently averaging all source rows is incorrect.
+Trøndelag R7 map has 13,735 cells. For R6/R5 parity, all 13,851 rows are first
+aggregated to their H3 parent using minimum distance and any intersection.
+Only then is the result restricted to the manifest-declared display domain.
+The 116 non-display R7 rows change minimum distance in three public R6 parents
+and two public R5 parents, so filtering them before aggregation is incorrect.
 
 With only `roads_large` enabled:
 
@@ -176,10 +181,20 @@ With only `roads_large` enabled:
 | 300 m | 13,735 | 428 | 96.8838733163451% |
 | 1000 m | 13,735 | 434 | 95.54751146705496% |
 
+At coarser public resolutions:
+
+| Resolution | Buffer | Display cells | Fully blocked | Remaining potential |
+|---:|---:|---:|---:|---:|
+| R6 | 300 m | 2,163 | 168 | 92.23300970873787% |
+| R6 | 1000 m | 2,163 | 170 | 91.01944059177069% |
+| R5 | 300 m | 365 | 66 | 81.91780821917808% |
+| R5 | 1000 m | 365 | 66 | 80.89936986301369% |
+
 Validation compares every `hex_id → acceptance` value with an independently
 calculated frozen-V2 oracle, not only aggregate means and blocked counts.
 Malformed distance rows with duplicate ids, invalid booleans, or blank
-distances also fail closed.
+distances also fail closed. Undeclared, non-integral, or upward H3 resolutions
+fail closed.
 
 The complete frozen default selection still renders 6.7% at 300 m and 6.2%
 at 1000 m in V2 Final.
@@ -188,11 +203,10 @@ The same full-flow values and isolated `roads_large` values pass when V2 Final
 is started from the reviewed 45-file cloud runtime package. That deployment
 artifact is transport evidence only; frozen V2 remains the behavior oracle.
 
-This is an R7 checkpoint, not full roads promotion:
+This is an automated R7/R6/R5 checkpoint, not full roads promotion:
 
-1. add canonical R7-to-R6/R5 rollups for `roads_large`;
-2. remove its remaining legacy R6/R5 calculation only after those views pass;
-3. migrate `roads_medium`;
-4. validate combined roads behavior;
-5. remove the temporary `transport`-to-`roads` UI adapter only when the whole
+1. visually approve and publish the R6/R5 `roads_large` views;
+2. migrate `roads_medium` at R7/R6/R5;
+3. validate combined roads behavior;
+4. remove the temporary `transport`-to-`roads` UI adapter only when the whole
    roads group is canonical.

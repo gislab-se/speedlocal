@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import csv
 import math
+import operator
 from dataclasses import dataclass, field
 from typing import Any, Iterable
 
+import h3
+
 from .catalogs import load_analysis
+from .sources import resolve_analysis_domain_cell_ids
 from .validation import ValidatedLayer, validate_contract, validate_layer
 
 
@@ -112,11 +116,24 @@ def _distance_exclusion(
     layer: ValidatedLayer,
     parameters: dict[str, Any],
     analysis_cell_ids: frozenset[str] | None,
+    source_resolution: int | None = None,
+    target_resolution: int | None = None,
 ) -> tuple[LayerResult, dict[str, tuple[float, bool]]]:
     parameter = layer.contract.parameters["buffer_m"]
     threshold = parameter.validate_value(parameters.get("buffer_m", parameter.default))
     rows = _distance_rows(layer)
-    if analysis_cell_ids is not None:
+    if target_resolution is not None:
+        if source_resolution is None or analysis_cell_ids is None:
+            raise ValueError(
+                "Distance rollup requires source resolution and target cell domain"
+            )
+        rows = _rollup_distance_rows(
+            rows,
+            source_resolution,
+            target_resolution,
+            analysis_cell_ids,
+        )
+    elif analysis_cell_ids is not None:
         missing = analysis_cell_ids - rows.keys()
         if missing:
             raise ValueError(
@@ -141,6 +158,55 @@ def _distance_exclusion(
         ),
         rows,
     )
+
+
+def _rollup_distance_rows(
+    rows: dict[str, tuple[float, bool]],
+    source_resolution: int,
+    target_resolution: int,
+    target_cell_ids: frozenset[str],
+) -> dict[str, tuple[float, bool]]:
+    if target_resolution > source_resolution:
+        raise ValueError(
+            f"Distance rows cannot roll up from R{source_resolution} "
+            f"to finer R{target_resolution}"
+        )
+
+    rolled: dict[str, tuple[float, bool]] = {}
+    for cell_id, (distance, intersects) in rows.items():
+        try:
+            cell_resolution = int(h3.get_resolution(cell_id))
+        except Exception as exc:
+            raise ValueError(f"Distance rows contain invalid H3 id: {cell_id}") from exc
+        if cell_resolution != source_resolution:
+            raise ValueError(
+                f"Distance row {cell_id} is R{cell_resolution}; "
+                f"expected R{source_resolution}"
+            )
+        target_id = (
+            cell_id
+            if target_resolution == source_resolution
+            else str(h3.cell_to_parent(cell_id, target_resolution))
+        )
+        previous = rolled.get(target_id)
+        if previous is None:
+            rolled[target_id] = (distance, intersects)
+        else:
+            rolled[target_id] = (
+                min(previous[0], distance),
+                previous[1] or intersects,
+            )
+
+    missing = target_cell_ids - rolled.keys()
+    if missing:
+        raise ValueError(
+            f"Distance rollup is missing R{target_resolution} analysis cells: "
+            f"{sorted(missing)}"
+        )
+    return {
+        cell_id: rolled[cell_id]
+        for cell_id in sorted(target_cell_ids)
+    }
 
 
 def _distance_group_result(
@@ -213,6 +279,7 @@ def run_analysis(
     parameters: dict[str, dict[str, Any]] | None = None,
     scenario: str | None = None,
     analysis_cell_ids: Iterable[str] | None = None,
+    target_resolution: int | None = None,
 ) -> AnalysisResult:
     contract = load_analysis(region, analysis)
     validate_contract(contract)
@@ -221,6 +288,35 @@ def run_analysis(
     if unknown:
         raise KeyError(f"Layers are not configured for {region}/{analysis}: {sorted(unknown)}")
     cell_domain = _analysis_cell_domain(analysis_cell_ids)
+    source_resolution: int | None = None
+    normalized_target_resolution: int | None = None
+    if target_resolution is not None:
+        if isinstance(target_resolution, bool):
+            raise TypeError("target_resolution must be an integer")
+        try:
+            normalized_target_resolution = int(operator.index(target_resolution))
+        except TypeError as exc:
+            raise TypeError("target_resolution must be an integer") from exc
+        domain = contract.analysis_domain
+        if domain is None:
+            raise ValueError(
+                f"{region}/{analysis} has no analysis-domain contract"
+            )
+        canonical_target_ids = frozenset(
+            resolve_analysis_domain_cell_ids(
+                contract,
+                normalized_target_resolution,
+            )
+        )
+        if cell_domain is not None and cell_domain != canonical_target_ids:
+            raise ValueError(
+                f"Requested R{normalized_target_resolution} cells do not match "
+                "the canonical analysis domain: "
+                f"missing={len(canonical_target_ids - cell_domain)}, "
+                f"unexpected={len(cell_domain - canonical_target_ids)}"
+            )
+        cell_domain = canonical_target_ids
+        source_resolution = domain.resolution
 
     results: list[LayerResult] = []
     distance_rows_by_group: dict[
@@ -234,6 +330,8 @@ def run_analysis(
                 validated,
                 (parameters or {}).get(layer_id, {}),
                 cell_domain,
+                source_resolution,
+                normalized_target_resolution,
             )
             results.append(result)
             distance_rows_by_group.setdefault(validated.contract.group_id, []).append(
