@@ -223,9 +223,16 @@ Current slice:
   R7/R6/R5; neither road layer falls through to the legacy distance loader,
   and localhost review of medium, large, combined, source, and buffer behavior
   was approved on 2026-07-31;
-- remaining roads work: move road labels, readiness, and source display off
-  the legacy registry, remove the temporary `transport` UI/data adapter, and
-  run the complete roads gate.
+- the public wind road group now uses canonical id `roads`; labels, ordering,
+  readiness, colors, source display, buffer display, and the shared distance
+  control come from validated manifest descriptors. Road entries and the
+  `transport` road parameter/label bridge are removed from the legacy wind
+  Python lists;
+- all automated complete-roads gates pass. The user approved reset and the
+  final manifest-backed UI in a clean localhost process on 2026-07-31, so the
+  complete roads slice is locally promoted. Publication remains separate and
+  waits for an eligible Tuesday or Friday window; population is the next
+  planned slice.
 
 ## Definition of done for a slice
 

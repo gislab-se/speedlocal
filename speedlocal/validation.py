@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from .contracts import (
@@ -122,6 +123,33 @@ def validate_contract(contract: AnalysisContract) -> None:
     unknown_groups = set(contract.groups) - set(STANDARD_GROUP_IDS)
     if unknown_groups:
         raise ValueError(f"Unknown standard groups: {sorted(unknown_groups)}")
+    if contract.ui is not None:
+        unknown_ui_groups = set(contract.ui.groups) - set(contract.groups)
+        if unknown_ui_groups:
+            raise ValueError(
+                "Analysis ui describes undeclared groups: "
+                f"{sorted(unknown_ui_groups)}"
+            )
+        for group_ui in contract.ui.groups.values():
+            if not all(
+                value.strip()
+                for value in (
+                    group_ui.label,
+                    group_ui.analysis_label,
+                    group_ui.interpretation,
+                )
+            ):
+                raise ValueError(
+                    f"Analysis ui group {group_ui.id} has blank copy"
+                )
+            if not 0 <= group_ui.blend_default <= 100:
+                raise ValueError(
+                    f"Analysis ui group {group_ui.id} blend_default must be 0-100"
+                )
+            if re.fullmatch(r"#[0-9a-fA-F]{6}", group_ui.group_color) is None:
+                raise ValueError(
+                    f"Analysis ui group {group_ui.id} has invalid group_color"
+                )
     for layer in contract.layers.values():
         if layer.group_id not in contract.groups:
             raise ValueError(f"Layer {layer.id} uses undeclared group {layer.group_id}")
@@ -130,6 +158,18 @@ def validate_contract(contract: AnalysisContract) -> None:
         unknown_families = set(layer.source.expected_geometry_families) - SUPPORTED_GEOMETRY_FAMILIES
         if unknown_families:
             raise ValueError(f"Unsupported geometry families for {layer.id}: {sorted(unknown_families)}")
+        if contract.ui is not None and layer.group_id in contract.ui.groups:
+            if layer.ui is None:
+                raise ValueError(
+                    f"Layer {layer.id} needs ui metadata for described group "
+                    f"{layer.group_id}"
+                )
+            if not layer.ui.note.strip():
+                raise ValueError(f"Layer {layer.id} ui note is blank")
+            if re.fullmatch(r"#[0-9a-fA-F]{6}", layer.ui.source_color) is None:
+                raise ValueError(f"Layer {layer.id} has invalid ui source_color")
+            if layer.ui.point_radius <= 0:
+                raise ValueError(f"Layer {layer.id} ui point_radius must be positive")
 
 
 def validate_layer(layer: LayerContract) -> ValidatedLayer:

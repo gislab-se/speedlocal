@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Collection
+from dataclasses import dataclass
+from pathlib import Path
 
 import pandas as pd
 
@@ -9,18 +12,55 @@ from speedlocal.contracts import AnalysisContract, ParameterContract
 from speedlocal.engine import run_analysis
 from speedlocal.geometry import VectorBufferPreview, build_vector_buffer_preview
 from speedlocal.sources import resolve_analysis_domain_cell_areas_km2
-from speedlocal.validation import validate_contract
+from speedlocal.validation import validate_contract, validate_layer
 
 
-LEGACY_ROADS_GROUP_ID = "transport"
 CANONICAL_ROADS_GROUP_ID = "roads"
-CANONICAL_TO_LEGACY_GROUP_ID = {
-    "roads": "transport",
+CANONICAL_TO_TRANSITIONAL_GROUP_ID = {
     "population": "settlement",
     "nature": "protected",
     "culture": "culture",
     "grid_infrastructure": "electrical",
 }
+
+
+@dataclass(frozen=True)
+class RoadLayerControlContract:
+    id: str
+    group_id: str
+    label: str
+    note: str
+    source_color: tuple[int, int, int]
+    point_radius: int
+    ready: bool
+    message: str
+
+
+@dataclass(frozen=True)
+class RoadGroupControlContract:
+    id: str
+    label: str
+    analysis_kind: str
+    analysis_label: str
+    analysis_min_m: int
+    analysis_max_m: int
+    analysis_step_m: int
+    analysis_default_m: int
+    blend_default: int
+    group_color: tuple[int, int, int]
+    interpretation: str
+    expanded_by_default: bool
+    layers: tuple[RoadLayerControlContract, ...]
+
+
+def _hex_color_to_rgb(value: str) -> tuple[int, int, int]:
+    normalized = str(value).strip().removeprefix("#")
+    if len(normalized) != 6:
+        raise ValueError(f"Invalid manifest UI color: {value!r}")
+    return tuple(
+        int(normalized[offset : offset + 2], 16)
+        for offset in (0, 2, 4)
+    )
 
 
 def _validated_wind_analysis(region_id: str) -> AnalysisContract:
@@ -46,25 +86,28 @@ def wind_analysis_domain_cell_areas_km2(
     return resolve_analysis_domain_cell_areas_km2(analysis, resolution)
 
 
-def transitional_public_legacy_group_ids(region_id: str) -> tuple[str, ...]:
-    """Map the current product-group whitelist to unmigrated registry ids."""
+def public_wind_group_ids(region_id: str) -> tuple[str, ...]:
+    """Return canonical ids for migrated groups and adapter ids for the rest."""
     analysis = _validated_wind_analysis(region_id)
-    return tuple(
-        CANONICAL_TO_LEGACY_GROUP_ID[group_id]
-        for group_id in analysis.groups
-        if group_id in CANONICAL_TO_LEGACY_GROUP_ID
-    )
+    group_ids: list[str] = []
+    for group_id in analysis.groups:
+        if group_id == CANONICAL_ROADS_GROUP_ID:
+            group_ids.append(group_id)
+            continue
+        transitional_id = CANONICAL_TO_TRANSITIONAL_GROUP_ID.get(group_id)
+        if transitional_id is not None:
+            group_ids.append(transitional_id)
+    return tuple(group_ids)
 
 
 def default_wind_layer_selection(region_id: str) -> dict[str, list[str]]:
-    """Adapt the canonical manifest's startup request to legacy registry ids."""
+    """Return the manifest startup request in current public group ids."""
     analysis = _validated_wind_analysis(region_id)
     if analysis.default_request is None:
         raise ValueError(f"{region_id}/wind has no default_request")
 
     selected: dict[str, list[str]] = {
-        legacy_group_id: []
-        for legacy_group_id in CANONICAL_TO_LEGACY_GROUP_ID.values()
+        group_id: [] for group_id in public_wind_group_ids(region_id)
     }
     for layer_id in analysis.default_request.selected_layer_ids:
         layer = analysis.layers.get(layer_id)
@@ -73,13 +116,17 @@ def default_wind_layer_selection(region_id: str) -> dict[str, list[str]]:
                 f"{region_id}/wind default request references unknown layer: "
                 f"{layer_id}"
             )
-        legacy_group_id = CANONICAL_TO_LEGACY_GROUP_ID.get(layer.group_id)
-        if legacy_group_id is None:
+        public_group_id = (
+            CANONICAL_ROADS_GROUP_ID
+            if layer.group_id == CANONICAL_ROADS_GROUP_ID
+            else CANONICAL_TO_TRANSITIONAL_GROUP_ID.get(layer.group_id)
+        )
+        if public_group_id is None:
             raise ValueError(
                 f"{region_id}/wind default layer {layer_id} belongs to an "
                 f"unsupported public group: {layer.group_id}"
             )
-        selected.setdefault(legacy_group_id, []).append(layer_id)
+        selected.setdefault(public_group_id, []).append(layer_id)
     return selected
 
 
@@ -133,8 +180,84 @@ def canonical_road_layer_ids(region_id: str) -> tuple[str, ...]:
     return layer_ids
 
 
+def roads_control_contract(region_id: str) -> RoadGroupControlContract:
+    """Build the complete public roads control contract from the manifest."""
+    analysis = _validated_wind_analysis(region_id)
+    if analysis.ui is None:
+        raise ValueError(f"{region_id}/wind has no ui contract")
+    group_ui = analysis.ui.groups.get(CANONICAL_ROADS_GROUP_ID)
+    if group_ui is None:
+        raise ValueError(f"{region_id}/wind has no roads ui descriptor")
+    parameter = roads_buffer_parameter_contract(region_id)
+    if (
+        parameter.minimum is None
+        or parameter.maximum is None
+        or parameter.step is None
+    ):
+        raise ValueError(
+            f"{region_id}/wind roads buffer must declare minimum, maximum and step"
+        )
+
+    layer_controls: list[RoadLayerControlContract] = []
+    for layer_id in canonical_road_layer_ids(region_id):
+        layer = analysis.layers[layer_id]
+        if layer.ui is None:
+            raise ValueError(f"{region_id}/wind layer {layer_id} has no ui")
+        ready = True
+        message = layer.ui.note
+        try:
+            validate_layer(layer)
+        except (FileNotFoundError, KeyError, OSError, ValueError) as exc:
+            ready = False
+            message = f"{layer.ui.note} Datakällan är inte redo: {exc}"
+        layer_controls.append(
+            RoadLayerControlContract(
+                id=layer.id,
+                group_id=CANONICAL_ROADS_GROUP_ID,
+                label=layer.label,
+                note=layer.ui.note,
+                source_color=_hex_color_to_rgb(layer.ui.source_color),
+                point_radius=layer.ui.point_radius,
+                ready=ready,
+                message=message,
+            )
+        )
+
+    return RoadGroupControlContract(
+        id=CANONICAL_ROADS_GROUP_ID,
+        label=group_ui.label,
+        analysis_kind="distance_conflict",
+        analysis_label=group_ui.analysis_label,
+        analysis_min_m=int(parameter.minimum),
+        analysis_max_m=int(parameter.maximum),
+        analysis_step_m=int(parameter.step),
+        analysis_default_m=int(parameter.default),
+        blend_default=group_ui.blend_default,
+        group_color=_hex_color_to_rgb(group_ui.group_color),
+        interpretation=group_ui.interpretation,
+        expanded_by_default=group_ui.expanded_by_default,
+        layers=tuple(layer_controls),
+    )
+
+
+def road_source_geojson(region_id: str, layer_id: str) -> dict:
+    """Read one validated canonical road source through the provider resolver."""
+    analysis = _validated_wind_analysis(region_id)
+    if layer_id not in canonical_road_layer_ids(region_id):
+        raise ValueError(
+            f"{region_id}/wind has no canonical road source: {layer_id}"
+        )
+    validated = validate_layer(analysis.layers[layer_id])
+    source_path: Path = validated.assets.geojson_path
+    with source_path.open("r", encoding="utf-8") as handle:
+        payload = json.load(handle)
+    if not isinstance(payload, dict):
+        raise ValueError(f"Canonical road source is not a GeoJSON object: {layer_id}")
+    return payload
+
+
 def roads_buffer_parameter_contract(region_id: str) -> ParameterContract:
-    """Return the one shared road-buffer contract used by the transitional UI."""
+    """Return the shared manifest road-buffer contract."""
     analysis = _validated_wind_analysis(region_id)
     parameters: list[ParameterContract] = []
     for layer_id in canonical_road_layer_ids(region_id):

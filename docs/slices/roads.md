@@ -1,6 +1,6 @@
 # Roads slice characterization
 
-Status: Trøndelag road calculation and map review are locally approved but unpublished; complete roads promotion awaits removal of the temporary legacy road UI/data adapter and the final roads gate
+Status: locally promoted on 2026-07-31; publication pending
 Behavior reference: frozen V2 for Trøndelag; Bornholm V1 acceptance baseline pending
 Integration target: V2 Final
 
@@ -76,18 +76,17 @@ These belong in each region's `analyses/wind.json`.
 - mapping from Streamlit state to an analysis request;
 - road result presentation.
 
-The R7/R6/R5 road replacement now reads its slider contract, selected layer
-set, and cell result from the common contract. The surrounding legacy
-`transport` UI, labels, readiness, and source-display path remain a
-transitional adapter until the complete road slice is promoted.
+The R7/R6/R5 road replacement reads its slider contract, selected layer set,
+labels, ordering, readiness, colors, source display, buffer display, and cell
+result from the validated wind manifest. The public wind group id is canonical
+`roads`; the legacy `transport` wind UI/data adapter has been removed.
 
-### Remove after promotion
+### Removed in the final UI/data increment
 
-- road entries in `WIND_GROUP_LAYER_DEFAULTS` after the canonical road UI is
-  connected;
-- road filtering performed by `normalize_group_layer_map`;
-- road-specific dependence on `GROUP_PARAM_MAP`;
-- duplicate road selector paths no longer used by the public UI.
+- completed: road entries in `WIND_GROUP_LAYER_DEFAULTS`;
+- completed: legacy `transport` filtering in the public wind selection;
+- completed: road-specific dependence on legacy `GROUP_PARAM_MAP` and labels;
+- completed: the unused duplicate road selector path.
 
 ## Trøndelag parity and shared-contract requirements
 
@@ -166,8 +165,9 @@ R7 was completed and published on 2026-07-30. R6/R5 were completed in code on
   `speedlocal.run_analysis` request at R7/R6/R5;
 - the public slider reads its range, step, and default through the canonical
   road contract;
-- no region id selects the new algorithm. The temporary adapter maps the
-  legacy `transport` capability to canonical `roads`.
+- no region id selects the new algorithm. The public wind request and state
+  use canonical `roads`; Bornholm's `transport` polygon replay exists only in
+  its separate diagnostic validator and is not a product route.
 
 The source distance table has 13,851 valid R7 rows, while the public
 Trøndelag R7 map has 13,735 cells. For R6/R5 parity, all 13,851 rows are first
@@ -248,16 +248,17 @@ R7 display domain first would incorrectly produce 13,342.0 m.
 The user approved medium-only, large-only, combined-road, source-preview, and
 buffer-preview behavior in localhost on 2026-07-31. The map-review toggles are
 intentionally outside the analysis form so they cannot change the numerical
-result. This increment therefore has complete automated and visual evidence,
-but it is not complete roads promotion while the temporary UI/data adapter
-remains.
-The remaining order is:
+result. This calculation increment therefore has complete automated and visual
+evidence. The final UI/data increment now adds validated manifest presentation
+descriptors, uses them in the actual controls and map review, fixes reset
+through a pre-rerun callback, removes legacy wind road list/parameter/label
+entries, and passes the complete automated roads gate.
 
-1. move road labels, readiness, and source display from the legacy registry to
-   canonical manifest descriptors;
-2. remove the temporary `transport` UI/data adapter and road entries from the
-   legacy Python lists;
-3. run the complete roads gate, then publish only in an eligible window.
+The user approved reset and the final manifest-backed road UI in a clean
+localhost process on 2026-07-31. A few questionable source lines were observed
+but classified as replaceable input-data quality, not a functional defect in
+the manifest-driven road flow. The slice is locally promoted; publish only in
+an eligible Tuesday or Friday window.
 
 ## Manifest-start, map review, and model-area checkpoint
 

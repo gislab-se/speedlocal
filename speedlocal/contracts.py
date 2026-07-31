@@ -104,6 +104,29 @@ class ParameterContract:
 
 
 @dataclass(frozen=True)
+class GroupUIContract:
+    id: str
+    label: str
+    analysis_label: str
+    interpretation: str
+    expanded_by_default: bool
+    blend_default: int
+    group_color: str
+
+
+@dataclass(frozen=True)
+class LayerUIContract:
+    note: str
+    source_color: str
+    point_radius: int
+
+
+@dataclass(frozen=True)
+class AnalysisUIContract:
+    groups: dict[str, GroupUIContract]
+
+
+@dataclass(frozen=True)
 class LayerContract:
     id: str
     label: str
@@ -111,6 +134,7 @@ class LayerContract:
     source: SourceContract
     operation: str
     parameters: dict[str, ParameterContract] = field(default_factory=dict)
+    ui: LayerUIContract | None = None
 
 
 @dataclass(frozen=True)
@@ -126,6 +150,7 @@ class AnalysisContract:
     layers: dict[str, LayerContract]
     default_request: DefaultRequestContract | None = None
     analysis_domain: AnalysisDomainContract | None = None
+    ui: AnalysisUIContract | None = None
 
 
 def source_contract(raw: dict[str, Any]) -> SourceContract:
@@ -190,6 +215,48 @@ def parameter_contract(parameter_id: str, raw: dict[str, Any]) -> ParameterContr
     )
 
 
+def group_ui_contract(raw: dict[str, Any]) -> GroupUIContract:
+    return GroupUIContract(
+        id=str(raw["id"]),
+        label=str(raw["label"]),
+        analysis_label=str(raw["analysis_label"]),
+        interpretation=str(raw["interpretation"]),
+        expanded_by_default=bool(raw.get("expanded_by_default", False)),
+        blend_default=int(raw.get("blend_default", 50)),
+        group_color=str(raw["group_color"]),
+    )
+
+
+def layer_ui_contract(raw: dict[str, Any] | None) -> LayerUIContract | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("Layer ui must be an object")
+    return LayerUIContract(
+        note=str(raw["note"]),
+        source_color=str(raw["source_color"]),
+        point_radius=int(raw.get("point_radius", 4)),
+    )
+
+
+def analysis_ui_contract(
+    raw: dict[str, Any] | None,
+) -> AnalysisUIContract | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("Analysis ui must be an object")
+    groups: dict[str, GroupUIContract] = {}
+    for item in raw.get("groups") or []:
+        group = group_ui_contract(item)
+        if group.id in groups:
+            raise ValueError(
+                f"Analysis ui contains duplicate group descriptor: {group.id}"
+            )
+        groups[group.id] = group
+    return AnalysisUIContract(groups=groups)
+
+
 def default_request_contract(
     raw: dict[str, Any] | None,
 ) -> DefaultRequestContract | None:
@@ -225,6 +292,7 @@ def analysis_contract(raw: dict[str, Any]) -> AnalysisContract:
                 str(key): parameter_contract(str(key), value)
                 for key, value in (item.get("parameters") or {}).items()
             },
+            ui=layer_ui_contract(item.get("ui")),
         )
     return AnalysisContract(
         id=str(raw["analysis_id"]),
@@ -233,4 +301,5 @@ def analysis_contract(raw: dict[str, Any]) -> AnalysisContract:
         layers=layers,
         default_request=default_request_contract(raw.get("default_request")),
         analysis_domain=analysis_domain_contract(raw.get("analysis_domain")),
+        ui=analysis_ui_contract(raw.get("ui")),
     )

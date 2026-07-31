@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import sys
 import tempfile
@@ -21,6 +22,25 @@ from acceptance_model.layers import load_registry  # noqa: E402
 from acceptance_model.runtime_geometry import (  # noqa: E402
     _resolve_confined_artifact_path,
 )
+
+
+def _bornholm_diagnostic_runtime_result(
+    region: dict[str, Any],
+    params: dict[str, float],
+    selection: dict[str, list[str]],
+) -> dict[str, Any]:
+    """Replay the frozen diagnostic fixture outside the product wind path."""
+    payload = json.loads(
+        app._wind_runtime_config_json(params, layer_selection=selection)
+    )
+    groups = payload.get("groups") or {}
+    roads = groups.pop("roads", None)
+    if roads is not None:
+        groups["transport"] = roads
+    return app.run_geometry_runtime(
+        json.dumps(payload, sort_keys=True, ensure_ascii=False),
+        str(region.get("region_id") or ""),
+    )
 
 
 class Report:
@@ -152,7 +172,7 @@ def main() -> int:
         params = app._reference_default_wind_params()
         params["road_distance_m"] = road_distance
         try:
-            result = app._wind_runtime_result(
+            result = _bornholm_diagnostic_runtime_result(
                 bornholm_region,
                 params,
                 selection,
@@ -199,7 +219,7 @@ def main() -> int:
     invalid_params = app._reference_default_wind_params()
     invalid_params["road_distance_m"] = 425.0
     try:
-        app._wind_runtime_result(
+        _bornholm_diagnostic_runtime_result(
             bornholm_region,
             invalid_params,
             selection,

@@ -93,8 +93,11 @@ Current milestone status:
   R7/R6/R5 accepted-reference/real-app gates complete at 300/1000 m; localhost
   review of calculation plus map-only source/buffer behavior was approved on
   2026-07-31.
-- Complete roads local promotion: remove the temporary legacy `transport`
-  UI/data adapter and pass the complete roads gate.
+- Complete roads UI/data adapter removal: complete. The public wind group is
+  canonical `roads`, its UI/source/buffer metadata is manifest-driven, and the
+  complete automated roads gate passes. Clean-process localhost review was
+  approved on 2026-07-31; the complete roads slice is locally promoted but
+  unpublished. Population is the next planned slice.
 
 ## Slice gates
 

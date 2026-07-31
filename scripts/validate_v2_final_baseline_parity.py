@@ -265,10 +265,10 @@ def main() -> int:
             )
     roads_large_only = {
         group_id: []
-        for group_id in app.WIND_GROUP_LAYER_DEFAULTS
+        for group_id in app.public_wind_group_ids("trondelag")
     }
     roads_large_r7_frames: dict[float, pd.DataFrame] = {}
-    roads_large_only["transport"] = ["roads_large"]
+    roads_large_only["roads"] = ["roads_large"]
     for resolution, expectations in ROADS_LARGE_EXPECTATIONS.items():
         display_geometry_path = app._h3_display_geometry_path(
             trondelag_region,
@@ -420,9 +420,9 @@ def main() -> int:
     ):
         road_selection = {
             group_id: []
-            for group_id in app.WIND_GROUP_LAYER_DEFAULTS
+            for group_id in app.public_wind_group_ids("trondelag")
         }
-        road_selection["transport"] = list(layer_ids)
+        road_selection["roads"] = list(layer_ids)
         for resolution, expectations in resolution_expectations.items():
             display_geometry_path = app._h3_display_geometry_path(
                 trondelag_region,
@@ -550,9 +550,9 @@ def main() -> int:
     ):
         invalid_selection = {
             group_id: []
-            for group_id in app.WIND_GROUP_LAYER_DEFAULTS
+            for group_id in app.public_wind_group_ids("trondelag")
         }
-        invalid_selection["transport"] = list(invalid_layer_ids)
+        invalid_selection["roads"] = list(invalid_layer_ids)
         try:
             app._wind_fast_distance_runtime_result(
                 trondelag_region,
@@ -601,9 +601,9 @@ def main() -> int:
                     {
                         **{
                             group_id: []
-                            for group_id in app.WIND_GROUP_LAYER_DEFAULTS
+                            for group_id in app.public_wind_group_ids("trondelag")
                         },
-                        "transport": list(selected_road_layers),
+                        "roads": list(selected_road_layers),
                     },
                     resolution,
                 )
@@ -616,9 +616,9 @@ def main() -> int:
             {
                 **{
                     group_id: []
-                    for group_id in app.WIND_GROUP_LAYER_DEFAULTS
+                    for group_id in app.public_wind_group_ids("trondelag")
                 },
-                "transport": ["roads_large", "roads_medium"],
+                "roads": ["roads_large", "roads_medium"],
             },
             7,
         )

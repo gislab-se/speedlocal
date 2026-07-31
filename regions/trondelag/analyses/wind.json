@@ -3,6 +3,19 @@
   "analysis_id": "wind",
   "region_id": "trondelag",
   "groups": ["roads", "population", "nature", "culture", "grid_infrastructure"],
+  "ui": {
+    "groups": [
+      {
+        "id": "roads",
+        "label": "Transportinfrastruktur",
+        "analysis_label": "Minsta avstånd",
+        "interpretation": "För nära är dåligt. Valda väglager kombineras till en gemensam avståndsrestriktion utan regionspecifik kod.",
+        "expanded_by_default": true,
+        "blend_default": 50,
+        "group_color": "#b18421"
+      }
+    ]
+  },
   "default_request": {
     "selected_layer_ids": []
   },
@@ -39,7 +52,7 @@
   "layers": [
     {
       "id": "roads_medium",
-      "label": "Mellanstora vägar",
+      "label": "Mellanvägar",
       "group_id": "roads",
       "source": {
         "provider": "v2_archive",
@@ -58,6 +71,11 @@
           "maximum": 2000,
           "step": 25
         }
+      },
+      "ui": {
+        "note": "Härledd från norsk N500 vägkategori F.",
+        "source_color": "#b18421",
+        "point_radius": 40
       }
     },
     {
@@ -81,6 +99,11 @@
           "maximum": 2000,
           "step": 25
         }
+      },
+      "ui": {
+        "note": "Härledd från norska N500 vägkategorier E och R.",
+        "source_color": "#855913",
+        "point_radius": 40
       }
     }
   ]

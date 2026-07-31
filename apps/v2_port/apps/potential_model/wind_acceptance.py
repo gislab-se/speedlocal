@@ -25,7 +25,6 @@ WIND_GROUP_LAYER_DEFAULTS: dict[str, list[str]] = {
         "built_centre",
         "built_low_selection",
     ],
-    "transport": ["roads_medium", "roads_large"],
     "electrical": [
         "high_voltage_lines",
         "underground_cables",
@@ -58,7 +57,6 @@ WIND_GROUP_LAYER_DEFAULTS: dict[str, list[str]] = {
 
 GROUP_PARAM_MAP = {
     "settlement": "settlement_distance_m",
-    "transport": "road_distance_m",
     "electrical": "grid_max_distance_m",
     "protected": "protected_buffer_m",
     "coastal": "coastal_buffer_m",
@@ -71,7 +69,6 @@ GROUP_PARAM_MAP = {
 
 GROUP_LABELS = {
     "settlement": "Boende och bebyggelse",
-    "transport": "Vagar och transport",
     "electrical": "Elinfrastruktur",
     "protected": "Skyddad natur",
     "coastal": "Kust och strand",
@@ -83,7 +80,7 @@ GROUP_LABELS = {
 }
 
 HARD_EXCLUSION_GROUPS = {"protected", "coastal", "culture", "reindeer", "aviation_approach", "military"}
-ALWAYS_ACTIVE_GROUPS = {"settlement", "transport", "electrical"}
+ALWAYS_ACTIVE_GROUPS = {"settlement", "electrical"}
 
 
 def _iter_geojson_geometries(geojson: dict[str, Any] | None) -> list[dict[str, Any]]:

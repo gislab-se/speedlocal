@@ -40,7 +40,8 @@ from acceptance_model.layers import (  # noqa: E402
 from potential_model.manifests import load_region, v2_source_root  # noqa: E402
 from potential_model.speedlocal_bridge import (  # noqa: E402
     default_wind_layer_selection,
-    transitional_public_legacy_group_ids,
+    public_wind_group_ids,
+    roads_control_contract,
 )
 from speedlocal.catalogs import load_analysis  # noqa: E402
 
@@ -154,9 +155,9 @@ def _ready_public_ui_contract(
     region_id: str,
 ) -> tuple[set[str], set[str], set[str], set[str]]:
     registry_groups, registry_layers, registry_meta = load_registry(region_id)
-    public_group_ids = set(
-        transitional_public_legacy_group_ids(region_id)
-    )
+    public_group_ids = set(public_wind_group_ids(region_id))
+    legacy_public_group_ids = public_group_ids - {"roads"}
+    roads_group = roads_control_contract(region_id)
     status_frame = layer_status_table(registry_meta)
     status_by_layer = {
         str(row["layer_id"]): row.to_dict()
@@ -176,18 +177,27 @@ def _ready_public_ui_contract(
     ready_layer_ids = {
         str(layer_id)
         for layer_id, layer in registry_layers.items()
-        if str(layer.group_id) in public_group_ids and is_ready(str(layer_id))
+        if str(layer.group_id) in legacy_public_group_ids
+        and is_ready(str(layer_id))
     }
+    ready_layer_ids.update(
+        layer.id for layer in roads_group.layers if layer.ready
+    )
     ready_group_ids = {
         str(registry_layers[layer_id].group_id)
         for layer_id in ready_layer_ids
+        if layer_id in registry_layers
+        and layer_id not in {layer.id for layer in roads_group.layers}
     }
+    if any(layer.ready for layer in roads_group.layers):
+        ready_group_ids.add("roads")
     public_layer_ids = {
         str(layer_id)
         for layer_id, layer in registry_layers.items()
-        if str(layer.group_id) in public_group_ids
+        if str(layer.group_id) in legacy_public_group_ids
     }
-    extra_group_ids = set(registry_groups) - public_group_ids
+    public_layer_ids.update(layer.id for layer in roads_group.layers)
+    extra_group_ids = set(registry_groups) - legacy_public_group_ids - {"transport"}
     return (
         ready_group_ids,
         ready_layer_ids,
@@ -310,7 +320,7 @@ def _check_manifest_empty_start_and_public_controls(
     try:
         road_slider = _by_key(
             app.slider,
-            f"{WIND_ANALYSIS_KEY_PREFIX}transport",
+            f"{WIND_ANALYSIS_KEY_PREFIX}roads",
         )
     except Exception as exc:
         report.check(
@@ -345,6 +355,38 @@ def _check_manifest_empty_start_and_public_controls(
         f"{sorted(visual_ids)}.",
     )
 
+    try:
+        _select_road_layers(app, ("roads_large",))
+        _wind_apply_button(app).click().run(timeout=120)
+        _by_key(app.button, "wind_unified_reset_filters").click().run(
+            timeout=120
+        )
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            f"{region_id}: Nollställ filter failed during interaction: {exc}",
+        )
+    else:
+        reset_exceptions, reset_errors = _app_failures(app)
+        reset_selection = _session_state_value(app, WIND_SELECTION_STATE_KEY)
+        report.check(
+            not reset_exceptions
+            and not reset_errors
+            and isinstance(reset_selection, dict)
+            and not any(reset_selection.values())
+            and _session_state_value(
+                app,
+                WIND_EMPTY_SELECTION_STATE_KEY,
+            )
+            is True,
+            f"{region_id}: Nollställ filter clears instantiated wind "
+            "widgets through a pre-rerun callback.",
+            f"{region_id}: Nollställ filter did not return to the empty "
+            f"state: selection={reset_selection}, exceptions="
+            f"{reset_exceptions}, errors={reset_errors}.",
+        )
+
 
 def _select_road_layers(app: AppTest, layer_ids: tuple[str, ...]) -> None:
     selected_layer_ids = set(layer_ids)
@@ -369,8 +411,8 @@ def _check_wind_map_review_toggles(
         _session_state_value(app, WIND_PARAMS_STATE_KEY)
     )
     baseline_share, baseline_share_error = _safe_wind_share_pct(app)
-    source_key = f"{WIND_VISUAL_SOURCE_KEY_PREFIX}transport"
-    buffer_key = f"{WIND_VISUAL_BUFFER_KEY_PREFIX}transport"
+    source_key = f"{WIND_VISUAL_SOURCE_KEY_PREFIX}roads"
+    buffer_key = f"{WIND_VISUAL_BUFFER_KEY_PREFIX}roads"
     try:
         source_toggle = _by_key(app.toggle, source_key)
         buffer_toggle = _by_key(app.toggle, buffer_key)
@@ -473,7 +515,7 @@ def _check_roads_large_slice(report: Report) -> None:
         _select_road_layers(app, ("roads_large",))
         road_slider = _by_key(
             app.slider,
-            "wind_control__analysis__transport",
+            "wind_control__analysis__roads",
         )
     except Exception as exc:
         report.check(
@@ -498,11 +540,11 @@ def _check_roads_large_slice(report: Report) -> None:
     first_share, first_share_error = _safe_wind_share_pct(app)
     report.check(
         isinstance(selected, dict)
-        and selected.get("transport") == ["roads_large"]
+        and selected.get("roads") == ["roads_large"]
         and not any(
             layer_ids
             for group_id, layer_ids in selected.items()
-            if group_id != "transport"
+            if group_id != "roads"
         )
         and first_share is not None
         and abs(first_share - 96.9) <= 0.05,
@@ -519,7 +561,7 @@ def _check_roads_large_slice(report: Report) -> None:
 
     road_slider = _by_key(
         app.slider,
-        "wind_control__analysis__transport",
+        "wind_control__analysis__roads",
     )
     road_slider.set_value(1000)
     _wind_apply_button(app).click().run(timeout=120)
@@ -576,7 +618,7 @@ def _check_roads_large_slice(report: Report) -> None:
         if buffer_m != 1000:
             road_slider = _by_key(
                 app.slider,
-                "wind_control__analysis__transport",
+                "wind_control__analysis__roads",
             )
             road_slider.set_value(buffer_m)
             _wind_apply_button(app).click().run(timeout=120)
@@ -648,7 +690,7 @@ def _check_canonical_road_selection(
         _select_road_layers(app, layer_ids)
         road_slider = _by_key(
             app.slider,
-            "wind_control__analysis__transport",
+            "wind_control__analysis__roads",
         )
         road_slider.set_value(300)
         _wind_apply_button(app).click().run(timeout=120)
@@ -668,11 +710,11 @@ def _check_canonical_road_selection(
         not first_exceptions
         and not first_errors
         and isinstance(selected, dict)
-        and selected.get("transport") == list(layer_ids)
+        and selected.get("roads") == list(layer_ids)
         and not any(
             selected_layer_ids
             for group_id, selected_layer_ids in selected.items()
-            if group_id != "transport"
+            if group_id != "roads"
         )
         and first_share is not None
         and abs(first_share - expected_first_share) <= 0.05,
@@ -706,7 +748,7 @@ def _check_canonical_road_selection(
     for buffer_m, resolution_expectations in expected_shares.items():
         road_slider = _by_key(
             app.slider,
-            "wind_control__analysis__transport",
+            "wind_control__analysis__roads",
         )
         road_slider.set_value(buffer_m)
         _wind_apply_button(app).click().run(timeout=120)
