@@ -91,9 +91,10 @@ Current milestone status:
   pending state.
 - `roads_medium` and combined roads: canonical calculation and automated
   R7/R6/R5 accepted-reference/real-app gates complete at 300/1000 m; localhost
-  visual review is pending.
+  review of calculation plus map-only source/buffer behavior was approved on
+  2026-07-31.
 - Complete roads local promotion: remove the temporary legacy `transport`
-  UI/data adapter after that visual review and pass the complete roads gate.
+  UI/data adapter and pass the complete roads gate.
 
 ## Slice gates
 

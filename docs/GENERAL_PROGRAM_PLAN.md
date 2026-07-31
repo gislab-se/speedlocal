@@ -220,10 +220,12 @@ Current slice:
   approved but remains unpublished;
 - `roads_medium` alone and medium-plus-large now pass exact frozen-V2 cell,
   aggregate, model-area, and real-Streamlit checks at 300 and 1000 m for
-  R7/R6/R5; neither road layer falls through to the legacy distance loader;
-- remaining roads work: visually approve the medium/combined increment, move
-  road labels, readiness, and source display off the legacy registry, remove
-  the temporary `transport` UI/data adapter, and run the complete roads gate.
+  R7/R6/R5; neither road layer falls through to the legacy distance loader,
+  and localhost review of medium, large, combined, source, and buffer behavior
+  was approved on 2026-07-31;
+- remaining roads work: move road labels, readiness, and source display off
+  the legacy registry, remove the temporary `transport` UI/data adapter, and
+  run the complete roads gate.
 
 ## Definition of done for a slice
 

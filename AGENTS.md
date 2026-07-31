@@ -63,10 +63,10 @@
 - The current slice is the complete public roads behavior. `roads_large` and
   the verification-cleanup increment are locally approved but unpublished.
   `roads_medium` and combined roads now use one canonical Trøndelag R7/R6/R5
-  calculation path and have automated accepted-reference and real-app gates.
-  Do not call the complete roads slice locally promoted until that increment
-  passes localhost visual review and the temporary legacy `transport` UI/data
-  adapter is removed.
+  calculation path, have automated accepted-reference and real-app gates, and
+  passed localhost visual review on 2026-07-31. Do not call the complete roads
+  slice locally promoted until the temporary legacy `transport` UI/data
+  adapter is removed and the complete roads gate passes.
 - Bornholm source and engine contracts may validate in parallel as onboarding
   diagnostics, but they do not block Trøndelag slice promotion.
 - Do not implement regional exceptions yet.

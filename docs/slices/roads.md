@@ -1,6 +1,6 @@
 # Roads slice characterization
 
-Status: Trøndelag `roads_large` and verification cleanup are locally approved but the new development checkpoint is unpublished; `roads_medium` and combined roads are canonical with automated R7/R6/R5 gates, pending localhost visual review and removal of the temporary legacy road UI/data adapter
+Status: Trøndelag road calculation and map review are locally approved but unpublished; complete roads promotion awaits removal of the temporary legacy road UI/data adapter and the final roads gate
 Behavior reference: frozen V2 for Trøndelag; Bornholm V1 acceptance baseline pending
 Integration target: V2 Final
 
@@ -245,17 +245,19 @@ endpoints, layer-order invariance, and the real Streamlit controls. R5 cell
 `850803b3fffffff` pins the raw-first medium rollup at 10,560.1 m; filtering the
 R7 display domain first would incorrectly produce 13,342.0 m.
 
-This development increment has complete automated evidence, but it is not
-complete roads promotion.
+The user approved medium-only, large-only, combined-road, source-preview, and
+buffer-preview behavior in localhost on 2026-07-31. The map-review toggles are
+intentionally outside the analysis form so they cannot change the numerical
+result. This increment therefore has complete automated and visual evidence,
+but it is not complete roads promotion while the temporary UI/data adapter
+remains.
 The remaining order is:
 
-1. visually review medium-only and medium-plus-large at 300/1000 m and
-   R7/R6/R5 in one clean localhost process;
-2. move road labels, readiness, and source display from the legacy registry to
+1. move road labels, readiness, and source display from the legacy registry to
    canonical manifest descriptors;
-3. remove the temporary `transport` UI/data adapter and road entries from the
+2. remove the temporary `transport` UI/data adapter and road entries from the
    legacy Python lists;
-4. run the complete roads gate, then publish only in an eligible window.
+3. run the complete roads gate, then publish only in an eligible window.
 
 ## Manifest-start, map review, and model-area checkpoint
 
