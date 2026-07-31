@@ -7881,12 +7881,16 @@ def _reference_default_wind_params() -> dict[str, float]:
     return params
 
 
-def _reference_default_wind_layer_selection() -> dict[str, list[str]]:
-    region_id = _wind_region_id()
+def _reference_default_wind_layer_selection(
+    region_id: str,
+) -> dict[str, list[str]]:
+    normalized_region_id = _wind_region_id(region_id)
     return normalize_group_layer_map(
         {
             "settlement": [WIND_POPULATION_SOURCE_LAYER_ID],
-            WIND_ROADS_GROUP_ID: list(canonical_road_layer_ids(region_id)),
+            WIND_ROADS_GROUP_ID: list(
+                canonical_road_layer_ids(normalized_region_id)
+            ),
             "electrical": [],
             "protected": ["protected_areas"],
             "coastal": [],
@@ -7904,15 +7908,15 @@ def _reference_default_wind_layer_selection() -> dict[str, list[str]]:
             "aviation_bird": [],
             "military": [],
         },
-        region_id,
+        normalized_region_id,
     )
 
 
 def _apply_reference_default_wind_to_controls() -> None:
     params = _reference_default_wind_params()
-    selected = _reference_default_wind_layer_selection()
-    st.session_state[WIND_LAYER_SELECTION_KEY] = selected
     region_id = _wind_region_id()
+    selected = _reference_default_wind_layer_selection(region_id)
+    st.session_state[WIND_LAYER_SELECTION_KEY] = selected
     for group in _wind_control_groups(region_id):
         group_id = str(group.id)
         layer_ids = _wind_control_layers(region_id, group)
@@ -8520,11 +8524,12 @@ def _social_acceptance_establishment_summary(
 
 
 def _wind_region_id(region_id: str | None = None) -> str:
-    normalized = str(
+    candidate = (
         region_id
-        or st.session_state.get("potential_selected_region_id")
-        or "trondelag"
-    ).strip().lower()
+        if region_id is not None
+        else st.session_state.get(REGION_SELECT_KEY)
+    )
+    normalized = str(candidate or "").strip().lower()
     if not normalized:
         raise ValueError("A wind region id is required")
     return normalized
@@ -12356,9 +12361,11 @@ def _wind_source_status_frame() -> pd.DataFrame:
 def _wind_runtime_config_json(
     ui_params: dict[str, float],
     layer_selection: dict[str, list[str]] | None = None,
+    region_id: str | None = None,
 ) -> str:
     selected = normalize_group_layer_map(
-        layer_selection or _selected_wind_layers()
+        layer_selection or _selected_wind_layers(),
+        region_id,
     )
     groups_payload: dict[str, dict[str, Any]] = {}
     for group_id, layer_ids in selected.items():
@@ -12387,7 +12394,11 @@ def _wind_runtime_result(
             "Canonical roads must run through the manifest engine; the legacy "
             "geometry runtime no longer accepts wind roads"
         )
-    runtime_cfg = _wind_runtime_config_json(ui_params, layer_selection=layer_selection)
+    runtime_cfg = _wind_runtime_config_json(
+        ui_params,
+        layer_selection=layer_selection,
+        region_id=str(region.get("region_id") or ""),
+    )
     result = run_geometry_runtime(
         runtime_cfg,
         str(region.get("region_id") or ""),

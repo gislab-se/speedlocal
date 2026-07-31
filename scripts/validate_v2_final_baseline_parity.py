@@ -234,7 +234,27 @@ def main() -> int:
         "Trøndelag frozen-V2 behavior authority or runtime strategy is invalid.",
     )
 
-    selection = app._reference_default_wind_layer_selection()
+    selection = app._reference_default_wind_layer_selection("trondelag")
+    report.check(
+        app._wind_region_id("TrOndElAg") == "trondelag",
+        "Wind helpers normalize an explicitly supplied region id.",
+        "Wind helpers did not normalize an explicitly supplied region id.",
+    )
+    try:
+        app._wind_region_id("")
+    except ValueError as exc:
+        report.check(
+            "region id is required" in str(exc).lower(),
+            "Wind helpers fail closed when neither an explicit nor active "
+            "region id exists.",
+            f"Wind helpers raised the wrong missing-region error: {exc}",
+        )
+    else:
+        report.check(
+            False,
+            "",
+            "Wind helpers still fall back to an implicit region id.",
+        )
     for resolution, expectations in FULL_DEFAULT_EXPECTATIONS.items():
         for road_distance, expected_share in expectations.items():
             params = app._reference_default_wind_params()

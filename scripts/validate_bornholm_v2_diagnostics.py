@@ -31,7 +31,11 @@ def _bornholm_diagnostic_runtime_result(
 ) -> dict[str, Any]:
     """Replay the frozen diagnostic fixture outside the product wind path."""
     payload = json.loads(
-        app._wind_runtime_config_json(params, layer_selection=selection)
+        app._wind_runtime_config_json(
+            params,
+            layer_selection=selection,
+            region_id=str(region.get("region_id") or ""),
+        )
     )
     groups = payload.get("groups") or {}
     roads = groups.pop("roads", None)
@@ -163,7 +167,7 @@ def main() -> int:
 
     _check_path_confinement(report)
 
-    selection = app._reference_default_wind_layer_selection()
+    selection = app._reference_default_wind_layer_selection("bornholm")
     expected_fixtures = (
         (300.0, "frozen_default_roads_300m", 3.9),
         (400.0, "frozen_roads_400m", 3.3),
