@@ -1,6 +1,6 @@
 # Roads slice characterization
 
-Status: Trøndelag `roads_large` canonical R7/R6/R5 checkpoint implemented; R7 approved and published, R6/R5 automated gates pass but localhost visual approval is pending, so R6/R5 are not locally promoted or published
+Status: Trøndelag `roads_large` and verification cleanup are locally approved but the new development checkpoint is unpublished; `roads_medium` and combined roads are canonical with automated R7/R6/R5 gates, pending localhost visual review and removal of the temporary legacy road UI/data adapter
 Behavior reference: frozen V2 for Trøndelag; Bornholm V1 acceptance baseline pending
 Integration target: V2 Final
 
@@ -38,10 +38,10 @@ The frozen archive contains two runtime representations:
 The canonical `speedlocal` roads engine validates the internal H3 distance
 contract: minimum distance across selected layers, any-intersection
 composition, `distance <= buffer_m` blocking, and the soft acceptance ramp.
-For Trøndelag R7/R6/R5, `roads_large` is connected to the actual V2 Final
-result flow and tested against the frozen V2 cell universes. Bornholm's
-generic engine execution remains contract/diagnostic evidence, not behavioral
-parity.
+For Trøndelag R7/R6/R5, medium-only, large-only, and combined roads are
+connected to the actual V2 Final result flow and tested against the frozen V2
+cell universes. Bornholm's generic engine execution remains
+contract/diagnostic evidence, not behavioral parity.
 
 ## Relevant V2 code classification
 
@@ -76,13 +76,15 @@ These belong in each region's `analyses/wind.json`.
 - mapping from Streamlit state to an analysis request;
 - road result presentation.
 
-The R7/R6/R5 `roads_large` replacement now reads its slider contract and cell
-result from the common contract. The surrounding legacy group UI remains a
-transitional adapter until `roads_medium` is migrated.
+The R7/R6/R5 road replacement now reads its slider contract, selected layer
+set, and cell result from the common contract. The surrounding legacy
+`transport` UI, labels, readiness, and source-display path remain a
+transitional adapter until the complete road slice is promoted.
 
 ### Remove after promotion
 
-- road entries in `WIND_GROUP_LAYER_DEFAULTS`;
+- road entries in `WIND_GROUP_LAYER_DEFAULTS` after the canonical road UI is
+  connected;
 - road filtering performed by `normalize_group_layer_map`;
 - road-specific dependence on `GROUP_PARAM_MAP`;
 - duplicate road selector paths no longer used by the public UI.
@@ -160,8 +162,8 @@ R7 was completed and published on 2026-07-30. R6/R5 were completed in code on
   `hex_id` field, resolution, and expected 13,735-cell count;
 - V2 Final's display-cell ids must match that canonical domain exactly;
 - a missing requested cell fails closed;
-- V2 Final sends `roads_large` through `speedlocal.run_analysis` at R7/R6/R5,
-  including when it is combined with the still-legacy `roads_medium`;
+- V2 Final sends every selected road layer through one
+  `speedlocal.run_analysis` request at R7/R6/R5;
 - the public slider reads its range, step, and default through the canonical
   road contract;
 - no region id selects the new algorithm. The temporary adapter maps the
@@ -204,17 +206,56 @@ The same full-flow values and isolated `roads_large` values pass when V2 Final
 is started from the reviewed 45-file cloud runtime package. That deployment
 artifact is transport evidence only; frozen V2 remains the behavior oracle.
 
-This is an automated R7/R6/R5 checkpoint, not full roads promotion:
+The `roads_large` R7/R6/R5 and verification-cleanup checkpoint received
+localhost approval on 2026-07-31. It is locally promoted but remains
+unpublished; publication is a separate Tuesday/Friday-window state.
 
-1. visually approve the R6/R5 `roads_large` views and record the checkpoint as
-   locally promoted;
-2. publish that exact reviewed checkpoint in the next Tuesday or Friday
-   publication window; publication does not block the remaining work inside
-   the roads slice after local promotion;
-3. migrate `roads_medium` at R7/R6/R5;
-4. validate combined roads behavior;
-5. remove the temporary `transport`-to-`roads` UI adapter only when the whole
-   roads group is canonical.
+## `roads_medium` and combined-roads checkpoint
+
+Frozen V2 divides the same N500 source into manifest layers:
+
+- `roads_medium`: `vegkategor == "F"`, 2,252 line features;
+- `roads_large`: `vegkategor in ["E", "R"]`, 327 line features.
+
+Both layers use one shared distance slider. Each has 13,851 R7 distance rows.
+For medium-plus-large, distance is the minimum across selected layers and
+intersection is logical OR. The pinned accepted V2 Final parity and manifest
+default is 300 m; the old registry contains a conflicting 100 m fallback that
+does not redefine the accepted checkpoint.
+
+Frozen unweighted mean-cell anchors are:
+
+| Selection | Buffer | R7 | R6 | R5 |
+|---|---:|---:|---:|---:|
+| Medium | 300 m | 76.825627957772% | 55.016181229773% | 31.232876712329% |
+| Medium | 1000 m | 69.568545322170% | 50.732810910772% | 29.520657534247% |
+| Medium + large | 300 m | 75.012741172188% | 52.288488210818% | 27.123287671233% |
+| Medium + large | 1000 m | 67.438307972333% | 47.875053166898% | 25.533698630137% |
+
+V2 Final now sends medium-only and medium-plus-large through the same generic
+road-group request as large-only. The generic bridge derives available road
+layers and their manifest order from the wind contract; it fails closed on
+empty, duplicate, or undeclared selections. No selected road layer reaches
+the legacy distance loader.
+
+Validation reads the frozen CSVs independently, rolls all raw R7 rows before
+display-domain filtering, and compares every target cell at R7/R6/R5 and 300/
+1000 m. It also checks fixed means, blocked counts, manifest model area, slider
+endpoints, layer-order invariance, and the real Streamlit controls. R5 cell
+`850803b3fffffff` pins the raw-first medium rollup at 10,560.1 m; filtering the
+R7 display domain first would incorrectly produce 13,342.0 m.
+
+This development increment has complete automated evidence, but it is not
+complete roads promotion.
+The remaining order is:
+
+1. visually review medium-only and medium-plus-large at 300/1000 m and
+   R7/R6/R5 in one clean localhost process;
+2. move road labels, readiness, and source display from the legacy registry to
+   canonical manifest descriptors;
+3. remove the temporary `transport` UI/data adapter and road entries from the
+   legacy Python lists;
+4. run the complete roads gate, then publish only in an eligible window.
 
 ## Manifest-start, map review, and model-area checkpoint
 

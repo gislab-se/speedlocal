@@ -346,13 +346,13 @@ def _check_manifest_empty_start_and_public_controls(
     )
 
 
-def _select_roads_large_only(app: AppTest) -> None:
+def _select_road_layers(app: AppTest, layer_ids: tuple[str, ...]) -> None:
+    selected_layer_ids = set(layer_ids)
     for checkbox in app.checkbox:
         key = str(checkbox.key or "")
         if key.startswith("wind_control__layer__") and not checkbox.disabled:
-            checkbox.set_value(
-                key == "wind_control__layer__roads_large"
-            )
+            layer_id = key[len("wind_control__layer__"):]
+            checkbox.set_value(layer_id in selected_layer_ids)
         elif key.startswith("wind_control__group__") and not checkbox.disabled:
             checkbox.set_value(False)
 
@@ -470,7 +470,7 @@ def _check_roads_large_slice(report: Report) -> None:
         return
 
     try:
-        _select_roads_large_only(app)
+        _select_road_layers(app, ("roads_large",))
         road_slider = _by_key(
             app.slider,
             "wind_control__analysis__transport",
@@ -625,6 +625,126 @@ def _check_roads_large_slice(report: Report) -> None:
             )
 
 
+def _check_canonical_road_selection(
+    report: Report,
+    layer_ids: tuple[str, ...],
+    expected_shares: dict[int, dict[int, float]],
+) -> None:
+    selection_label = "+".join(layer_ids)
+    app = AppTest.from_file(str(APP_PATH), default_timeout=120)
+    app.query_params["region"] = "trondelag"
+    app.run(timeout=120)
+    initial_exceptions, initial_errors = _app_failures(app)
+    if initial_exceptions or initial_errors:
+        report.check(
+            False,
+            "",
+            f"trondelag: {selection_label} setup failed: "
+            f"exceptions={initial_exceptions}, errors={initial_errors}",
+        )
+        return
+
+    try:
+        _select_road_layers(app, layer_ids)
+        road_slider = _by_key(
+            app.slider,
+            "wind_control__analysis__transport",
+        )
+        road_slider.set_value(300)
+        _wind_apply_button(app).click().run(timeout=120)
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            f"trondelag: {selection_label} controls failed: {exc}",
+        )
+        return
+
+    first_exceptions, first_errors = _app_failures(app)
+    selected = _session_state_value(app, WIND_SELECTION_STATE_KEY)
+    first_share, first_share_error = _safe_wind_share_pct(app)
+    expected_first_share = expected_shares[300][7]
+    report.check(
+        not first_exceptions
+        and not first_errors
+        and isinstance(selected, dict)
+        and selected.get("transport") == list(layer_ids)
+        and not any(
+            selected_layer_ids
+            for group_id, selected_layer_ids in selected.items()
+            if group_id != "transport"
+        )
+        and first_share is not None
+        and abs(first_share - expected_first_share) <= 0.05,
+        f"trondelag: {selection_label} is canonical in the real R7 app at "
+        f"300 m ({expected_first_share:.1f}%).",
+        f"trondelag: {selection_label} R7/300 m drifted: selection="
+        f"{selected}, share={first_share}, share_error={first_share_error}, "
+        f"exceptions={first_exceptions}, errors={first_errors}.",
+    )
+    if first_share is None or first_exceptions or first_errors:
+        return
+
+    if len(layer_ids) > 1:
+        _check_wind_map_review_toggles(
+            report,
+            app,
+            expected_share=expected_first_share,
+        )
+
+    try:
+        display_mode = _by_key(app.radio, "combined_h3_display_mode")
+        display_mode.set_value("selected").run(timeout=120)
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            f"trondelag: {selection_label} resolution mode failed: {exc}",
+        )
+        return
+
+    for buffer_m, resolution_expectations in expected_shares.items():
+        road_slider = _by_key(
+            app.slider,
+            "wind_control__analysis__transport",
+        )
+        road_slider.set_value(buffer_m)
+        _wind_apply_button(app).click().run(timeout=120)
+        buffer_exceptions, buffer_errors = _app_failures(app)
+        if buffer_exceptions or buffer_errors:
+            report.check(
+                False,
+                "",
+                f"trondelag: {selection_label}/{buffer_m} m failed: "
+                f"exceptions={buffer_exceptions}, errors={buffer_errors}",
+            )
+            return
+
+        for resolution, expected_share in resolution_expectations.items():
+            resolution_control = _by_key(
+                app.radio,
+                "combined_h3_resolution",
+            )
+            resolution_control.set_value(resolution).run(timeout=120)
+            resolution_exceptions, resolution_errors = _app_failures(app)
+            resolution_share, share_error = _safe_wind_share_pct(app)
+            runtime_failure = "Vindruntime kunde inte köras" in _rendered_text(app)
+            report.check(
+                not resolution_exceptions
+                and not resolution_errors
+                and not runtime_failure
+                and resolution_share is not None
+                and abs(resolution_share - expected_share) <= 0.05,
+                f"trondelag: {selection_label} builds canonical R{resolution} "
+                f"at {buffer_m} m ({expected_share:.1f}%).",
+                f"trondelag: {selection_label} R{resolution}/{buffer_m} m "
+                f"drifted: share={resolution_share}, "
+                f"share_error={share_error}, runtime_failure="
+                f"{runtime_failure}, exceptions={resolution_exceptions}, "
+                f"errors={resolution_errors}.",
+            )
+
+
 def _check_missing_source_root(report: Report) -> None:
     configured = os.environ.pop(V2_SOURCE_ROOT_ENV, None)
     app = None
@@ -685,6 +805,22 @@ def main() -> int:
     _check_manifest_empty_start_and_public_controls(report)
     _check_disabled_bornholm_route(report)
     _check_roads_large_slice(report)
+    _check_canonical_road_selection(
+        report,
+        ("roads_medium",),
+        {
+            300: {7: 76.8, 6: 55.0, 5: 31.2},
+            1000: {7: 69.6, 6: 50.7, 5: 29.5},
+        },
+    )
+    _check_canonical_road_selection(
+        report,
+        ("roads_medium", "roads_large"),
+        {
+            300: {7: 75.0, 6: 52.3, 5: 27.1},
+            1000: {7: 67.4, 6: 47.9, 5: 25.5},
+        },
+    )
     return report.emit()
 
 

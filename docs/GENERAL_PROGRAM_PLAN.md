@@ -172,8 +172,8 @@ Implemented foundation:
 
 - generic contracts, catalog loading, source resolution, and validation under
   `speedlocal/`;
-- manifest-driven `roads_large` at Trøndelag's public R7/R6/R5 resolutions plus
-  a Bornholm onboarding/diagnostic contract;
+- manifest-driven medium, large, and combined roads at Trøndelag's public
+  R7/R6/R5 resolutions plus a Bornholm onboarding/diagnostic contract;
 - geometry-driven line adapter;
 - generic distance-exclusion execution;
 - distance-engine contract validation against both regional datasets in the
@@ -199,9 +199,9 @@ Current slice:
   fail closed for undeclared combinations, but they do not establish product
   parity or block Trøndelag roads promotion;
 - direct Bornholm routes fail closed on the manifest-driven landing page;
-- `roads_large` now executes through `speedlocal.run_analysis` in the actual
-  Trøndelag V2 Final flow at the exact public R7/R6/R5 domains: 13,735, 2,163,
-  and 365 cells;
+- every selected Trøndelag road layer now executes in one
+  `speedlocal.run_analysis` request in the actual V2 Final flow at the exact
+  public R7/R6/R5 domains: 13,735, 2,163, and 365 cells;
 - coarser resolutions aggregate every valid raw R7 distance row by H3 parent
   using minimum distance and any intersection before restricting the result to
   the manifest-declared display domain;
@@ -216,13 +216,14 @@ Current slice:
 - wind potential, establishment rollups, and scenario allocation use validated
   per-cell `display_area_m2`; Frozen V2's unweighted cell mean remains the
   parity oracle, and exact polygon-clipped land area remains later work;
-- the automated R7/R6/R5 `roads_large` checkpoint passes; localhost visual
-  approval remains before it is locally promoted, and publication remains a
-  separate pending state;
-- `roads_medium` still uses the characterized legacy calculation path;
-- remaining roads work: approve the R6/R5 checkpoint visually, migrate
-  `roads_medium`, validate combined-road behavior, then remove only the legacy
-  road code those replacements make obsolete.
+- the R7/R6/R5 `roads_large` and verification-cleanup checkpoint is locally
+  approved but remains unpublished;
+- `roads_medium` alone and medium-plus-large now pass exact frozen-V2 cell,
+  aggregate, model-area, and real-Streamlit checks at 300 and 1000 m for
+  R7/R6/R5; neither road layer falls through to the legacy distance loader;
+- remaining roads work: visually approve the medium/combined increment, move
+  road labels, readiness, and source display off the legacy registry, remove
+  the temporary `transport` UI/data adapter, and run the complete roads gate.
 
 ## Definition of done for a slice
 

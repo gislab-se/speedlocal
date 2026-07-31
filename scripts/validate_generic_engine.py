@@ -49,41 +49,36 @@ TRONDELAG_DISPLAY_PATHS = {
 }
 TRONDELAG_DISPLAY_COUNTS = {7: 13_735, 6: 2_163, 5: 365}
 TRONDELAG_ANALYSIS_DOMAIN_AREA_KM2 = 45_213.18864360976
-ROAD_LARGE_EXPECTATIONS = {
-    7: {
-        300.0: {
-            "display_mean": 0.968838733163451,
-            "display_blocked": 428,
-        },
-        1000.0: {
-            "display_mean": 0.9554751146705496,
-            "display_blocked": 434,
-        },
+ROAD_SELECTION_EXPECTATIONS = {
+    ("roads_large",): {
+        7: {300.0: (0.968838733163451, 428), 1000.0: (0.9554751146705496, 434)},
+        6: {300.0: (0.9223300970873787, 168), 1000.0: (0.9101944059177069, 170)},
+        5: {300.0: (0.8191780821917808, 66), 1000.0: (0.8089936986301369, 66)},
     },
-    6: {
-        300.0: {
-            "display_mean": 0.9223300970873787,
-            "display_blocked": 168,
-        },
-        1000.0: {
-            "display_mean": 0.9101944059177069,
-            "display_blocked": 170,
-        },
+    ("roads_medium",): {
+        7: {300.0: (0.7682562795777211, 3183), 1000.0: (0.6956854532216964, 3227)},
+        6: {300.0: (0.5501618122977346, 973), 1000.0: (0.5073281091077207, 975)},
+        5: {300.0: (0.3123287671232877, 251), 1000.0: (0.2952065753424657, 251)},
     },
-    5: {
-        300.0: {
-            "display_mean": 0.8191780821917808,
-            "display_blocked": 66,
-        },
-        1000.0: {
-            "display_mean": 0.8089936986301369,
-            "display_blocked": 66,
-        },
+    ("roads_medium", "roads_large"): {
+        7: {300.0: (0.7501274117218785, 3432), 1000.0: (0.6743830797233345, 3475)},
+        6: {300.0: (0.5228848821081831, 1032), 1000.0: (0.4787505316689782, 1034)},
+        5: {300.0: (0.2712328767123288, 266), 1000.0: (0.2553369863013699, 266)},
     },
 }
-ROAD_LARGE_RAW_MEANS = {
-    300.0: 0.9690997039924916,
-    1000.0: 0.9558480037542414,
+ROAD_SELECTION_RAW_EXPECTATIONS = {
+    ("roads_large",): {
+        300.0: (0.9690997039924916, 428),
+        1000.0: (0.9558480037542414, 434),
+    },
+    ("roads_medium",): {
+        300.0: (0.7701970976824778, 3183),
+        1000.0: (0.6982340408634755, 3227),
+    },
+    ("roads_medium", "roads_large"): {
+        300.0: (0.7522200563136235, 3432),
+        1000.0: (0.6771100714749835, 3475),
+    },
 }
 
 
@@ -134,42 +129,48 @@ def _trondelag_display_cell_ids(
     return cell_ids
 
 
-def _v2_layer_rollup_oracle(
+def _v2_road_selection_rollup_oracle(
     contract,
-    layer_id: str,
+    layer_ids: tuple[str, ...],
     threshold: float,
     target_resolution: int,
     target_cell_ids: tuple[str, ...],
 ) -> dict[str, tuple[float, bool, bool, float]]:
     """Independently reproduce frozen raw-distance rollup and soft acceptance."""
-    path = resolve_layer_assets(contract.layers[layer_id]).distance_path
     rolled: dict[str, tuple[float, bool]] = {}
-    seen_source_ids: set[str] = set()
-    with path.open("r", encoding="utf-8-sig", newline="") as handle:
-        for row in csv.DictReader(handle):
-            cell_id = str(row["hex_id"])
-            if cell_id in seen_source_ids:
-                raise ValueError(f"Duplicate oracle cell id: {cell_id}")
-            seen_source_ids.add(cell_id)
-            if int(h3.get_resolution(cell_id)) != 7:
-                raise ValueError(f"Oracle source cell is not R7: {cell_id}")
-            target_id = (
-                cell_id
-                if target_resolution == 7
-                else str(h3.cell_to_parent(cell_id, target_resolution))
-            )
-            value = (
-                float(row["distance_m"]),
-                str(row["intersects"]).strip().lower() in {"1", "true", "yes"},
-            )
-            previous = rolled.get(target_id)
-            if previous is None:
-                rolled[target_id] = value
-            else:
-                rolled[target_id] = (
-                    min(previous[0], value[0]),
-                    previous[1] or value[1],
+    for layer_id in layer_ids:
+        path = resolve_layer_assets(contract.layers[layer_id]).distance_path
+        seen_source_ids: set[str] = set()
+        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+            for row in csv.DictReader(handle):
+                cell_id = str(row["hex_id"])
+                if cell_id in seen_source_ids:
+                    raise ValueError(
+                        f"Duplicate {layer_id} oracle cell id: {cell_id}"
+                    )
+                seen_source_ids.add(cell_id)
+                if int(h3.get_resolution(cell_id)) != 7:
+                    raise ValueError(
+                        f"{layer_id} oracle source cell is not R7: {cell_id}"
+                    )
+                target_id = (
+                    cell_id
+                    if target_resolution == 7
+                    else str(h3.cell_to_parent(cell_id, target_resolution))
                 )
+                value = (
+                    float(row["distance_m"]),
+                    str(row["intersects"]).strip().lower()
+                    in {"1", "true", "yes"},
+                )
+                previous = rolled.get(target_id)
+                if previous is None:
+                    rolled[target_id] = value
+                else:
+                    rolled[target_id] = (
+                        min(previous[0], value[0]),
+                        previous[1] or value[1],
+                    )
 
     oracle: dict[str, tuple[float, bool, bool, float]] = {}
     ramp_end = max(threshold * 2.0, threshold + 1.0)
@@ -634,82 +635,94 @@ def main() -> int:
             )
         checks += 7
 
-        for threshold, expected in ROAD_LARGE_EXPECTATIONS[resolution].items():
-            parameters = {"roads_large": {"buffer_m": threshold}}
-            if resolution == 7:
-                raw_result = run_analysis(
+        for layer_ids, selection_expectations in (
+            ROAD_SELECTION_EXPECTATIONS.items()
+        ):
+            for threshold, (expected_mean, expected_blocked) in (
+                selection_expectations[resolution].items()
+            ):
+                parameters = {
+                    layer_id: {"buffer_m": threshold}
+                    for layer_id in layer_ids
+                }
+                if resolution == 7:
+                    raw_result = run_analysis(
+                        "trondelag",
+                        "wind",
+                        list(layer_ids),
+                        parameters,
+                    )
+                    raw_group = raw_result.groups[0]
+                    expected_raw_mean, expected_raw_blocked = (
+                        ROAD_SELECTION_RAW_EXPECTATIONS[layer_ids][threshold]
+                    )
+                    assert tuple(raw_group.layer_ids) == layer_ids
+                    assert raw_group.cell_count == 13_851
+                    assert len(raw_group.cells) == 13_851
+                    assert raw_group.blocked_cell_count == expected_raw_blocked
+                    assert (
+                        abs(raw_group.mean_acceptance - expected_raw_mean)
+                        < 1e-12
+                    )
+                    checks += 5
+
+                display_result = run_analysis(
                     "trondelag",
                     "wind",
-                    ["roads_large"],
+                    list(layer_ids),
                     parameters,
+                    target_resolution=resolution,
                 )
-                raw_group = raw_result.groups[0]
-                assert raw_group.cell_count == 13_851
-                assert len(raw_group.cells) == 13_851
+                display_group = display_result.groups[0]
+                assert tuple(display_group.layer_ids) == layer_ids
                 assert (
-                    abs(
-                        raw_group.mean_acceptance
-                        - ROAD_LARGE_RAW_MEANS[threshold]
-                    )
+                    display_group.cell_count
+                    == TRONDELAG_DISPLAY_COUNTS[resolution]
+                )
+                assert (
+                    len(display_group.cells)
+                    == TRONDELAG_DISPLAY_COUNTS[resolution]
+                )
+                assert display_group.blocked_cell_count == expected_blocked
+                assert (
+                    abs(display_group.mean_acceptance - expected_mean)
                     < 1e-12
                 )
-                checks += 3
+                assert {
+                    cell.cell_id for cell in display_group.cells
+                } == set(target_cell_ids)
 
-            display_result = run_analysis(
-                "trondelag",
-                "wind",
-                ["roads_large"],
-                parameters,
-                target_resolution=resolution,
-            )
-            display_group = display_result.groups[0]
-            assert display_group.cell_count == TRONDELAG_DISPLAY_COUNTS[resolution]
-            assert len(display_group.cells) == TRONDELAG_DISPLAY_COUNTS[resolution]
-            assert (
-                display_group.blocked_cell_count
-                == expected["display_blocked"]
-            )
-            assert (
-                abs(
-                    display_group.mean_acceptance
-                    - expected["display_mean"]
+                oracle = _v2_road_selection_rollup_oracle(
+                    trondelag,
+                    layer_ids,
+                    threshold,
+                    resolution,
+                    target_cell_ids,
                 )
-                < 1e-12
-            )
-            assert {
-                cell.cell_id for cell in display_group.cells
-            } == set(target_cell_ids)
-
-            oracle = _v2_layer_rollup_oracle(
-                trondelag,
-                "roads_large",
-                threshold,
-                resolution,
-                target_cell_ids,
-            )
-            actual = {
-                cell.cell_id: cell
-                for cell in display_group.cells
-            }
-            assert actual.keys() == oracle.keys()
-            for cell_id, (
-                expected_distance,
-                expected_intersection,
-                expected_blocked,
-                expected_acceptance,
-            ) in oracle.items():
-                cell = actual[cell_id]
-                assert abs(cell.min_distance_m - expected_distance) < 1e-12
-                assert cell.any_intersection is expected_intersection
-                assert cell.blocked is expected_blocked
-                assert abs(cell.acceptance - expected_acceptance) < 1e-12
-            checks += 10
-            print(
-                f"PASS trondelag roads_large R{resolution} "
-                f"{threshold:g} m: {display_group.cell_count} cells, "
-                f"{display_group.blocked_cell_count} blocked, "
-                f"{display_group.mean_acceptance:.15f} mean acceptance"
-            )
+                actual = {
+                    cell.cell_id: cell
+                    for cell in display_group.cells
+                }
+                assert actual.keys() == oracle.keys()
+                for cell_id, (
+                    expected_distance,
+                    expected_intersection,
+                    expected_cell_blocked,
+                    expected_acceptance,
+                ) in oracle.items():
+                    cell = actual[cell_id]
+                    assert abs(cell.min_distance_m - expected_distance) < 1e-12
+                    assert cell.any_intersection is expected_intersection
+                    assert cell.blocked is expected_cell_blocked
+                    assert abs(cell.acceptance - expected_acceptance) < 1e-12
+                checks += 11
+                selection_label = "+".join(layer_ids)
+                print(
+                    f"PASS trondelag {selection_label} R{resolution} "
+                    f"{threshold:g} m: {display_group.cell_count} cells, "
+                    f"{display_group.blocked_cell_count} blocked, "
+                    f"{display_group.mean_acceptance:.15f} mean acceptance"
+                )
 
     assert len({round(value, 12) for value in area_by_resolution[7].values()}) > 1
     checks += 1
@@ -738,6 +751,75 @@ def main() -> int:
         for cell in r5_anchor.cells
     }["85083313fffffff"] == 25717.5
     checks += 2
+
+    medium_r5_anchor = run_analysis(
+        "trondelag",
+        "wind",
+        ["roads_medium"],
+        {"roads_medium": {"buffer_m": 300}},
+        target_resolution=5,
+    ).groups[0]
+    assert {
+        cell.cell_id: cell.min_distance_m
+        for cell in medium_r5_anchor.cells
+    }["850803b3fffffff"] == 10_560.1
+    checks += 1
+
+    combined_parameters = {
+        layer_id: {"buffer_m": 300}
+        for layer_id in ("roads_medium", "roads_large")
+    }
+    combined_forward = run_analysis(
+        "trondelag",
+        "wind",
+        ["roads_medium", "roads_large"],
+        combined_parameters,
+        target_resolution=7,
+    ).groups[0]
+    combined_reversed = run_analysis(
+        "trondelag",
+        "wind",
+        ["roads_large", "roads_medium"],
+        combined_parameters,
+        target_resolution=7,
+    ).groups[0]
+    assert {
+        cell.cell_id: (
+            cell.min_distance_m,
+            cell.any_intersection,
+            cell.blocked,
+            cell.acceptance,
+        )
+        for cell in combined_forward.cells
+    } == {
+        cell.cell_id: (
+            cell.min_distance_m,
+            cell.any_intersection,
+            cell.blocked,
+            cell.acceptance,
+        )
+        for cell in combined_reversed.cells
+    }
+    checks += 1
+
+    for layer_ids in ROAD_SELECTION_EXPECTATIONS:
+        endpoint_results = []
+        for threshold in (100.0, 2000.0):
+            group = run_analysis(
+                "trondelag",
+                "wind",
+                list(layer_ids),
+                {
+                    layer_id: {"buffer_m": threshold}
+                    for layer_id in layer_ids
+                },
+                target_resolution=7,
+            ).groups[0]
+            endpoint_results.append(group)
+        narrow, wide = endpoint_results
+        assert wide.blocked_cell_count >= narrow.blocked_cell_count
+        assert wide.mean_acceptance <= narrow.mean_acceptance
+        checks += 2
 
     missing_cell_id = "87fffffffffffff"
     try:

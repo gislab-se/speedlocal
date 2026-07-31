@@ -40,6 +40,36 @@ ROADS_LARGE_EXPECTATIONS = {
         1000.0: (80.8993698630137, 66),
     },
 }
+ROAD_MEDIUM_AND_COMBINED_EXPECTATIONS = {
+    ("roads_medium",): {
+        7: {
+            300.0: (76.82562795777211, 3183, 34_782.45959671358),
+            1000.0: (69.56854532216964, 3227, 31_517.54459863800),
+        },
+        6: {
+            300.0: (55.016181229773466, 973, 24_111.32845244986),
+            1000.0: (50.73281091077208, 975, 22_267.33676707529),
+        },
+        5: {
+            300.0: (31.232876712328768, 251, 9_824.02466410935),
+            1000.0: (29.520657534246578, 251, 9_034.54651309651),
+        },
+    },
+    ("roads_medium", "roads_large"): {
+        7: {
+            300.0: (75.01274117218784, 3432, 33_957.99514111903),
+            1000.0: (67.43830797233346, 3475, 30_548.72439396808),
+        },
+        6: {
+            300.0: (52.28848821081831, 1032, 22_789.15790342790),
+            1000.0: (47.87505316689782, 1034, 20_879.03706801618),
+        },
+        5: {
+            300.0: (27.123287671232877, 266, 8_023.09983239515),
+            1000.0: (25.533698630136985, 266, 7_308.52821170669),
+        },
+    },
+}
 ROADS_LARGE_R7_AREA_EXPECTATIONS = {
     300.0: (43_798.14161191527, 96.87027817735104),
     1000.0: (43_191.99545890840, 95.52963804293191),
@@ -114,46 +144,53 @@ class Report:
         return 1 if self.failures else 0
 
 
-def _roads_large_acceptance_oracle(
+def _roads_acceptance_oracle(
     registry: dict,
+    layer_ids: tuple[str, ...],
     threshold_m: float,
     target_resolution: int,
     target_cell_ids: set[str],
 ) -> dict[str, float]:
-    distance = distance_table_for_layer(registry, "roads_large")
-    if distance["hex_id"].astype(str).duplicated().any():
-        raise ValueError("Frozen roads_large distance table has duplicate hex ids")
     ramp_end = max(threshold_m * 2.0, threshold_m + 1.0)
     rolled: dict[str, tuple[float, bool]] = {}
-    for row in distance.itertuples(index=False):
-        cell_id = str(row.hex_id)
-        if int(h3.get_resolution(cell_id)) != 7:
-            raise ValueError(f"Frozen roads_large row is not R7: {cell_id}")
-        target_id = (
-            cell_id
-            if target_resolution == 7
-            else str(h3.cell_to_parent(cell_id, target_resolution))
-        )
-        intersects = str(row.intersects).strip().lower() in {
-            "1",
-            "true",
-            "yes",
-        }
-        value = (float(row.distance_m), intersects)
-        previous = rolled.get(target_id)
-        if previous is None:
-            rolled[target_id] = value
-        else:
-            rolled[target_id] = (
-                min(previous[0], value[0]),
-                previous[1] or value[1],
+    for layer_id in layer_ids:
+        distance = distance_table_for_layer(registry, layer_id)
+        if distance["hex_id"].astype(str).duplicated().any():
+            raise ValueError(
+                f"Frozen {layer_id} distance table has duplicate hex ids"
             )
+        for row in distance.itertuples(index=False):
+            cell_id = str(row.hex_id)
+            if int(h3.get_resolution(cell_id)) != 7:
+                raise ValueError(
+                    f"Frozen {layer_id} row is not R7: {cell_id}"
+                )
+            target_id = (
+                cell_id
+                if target_resolution == 7
+                else str(h3.cell_to_parent(cell_id, target_resolution))
+            )
+            intersects = str(row.intersects).strip().lower() in {
+                "1",
+                "true",
+                "yes",
+            }
+            value = (float(row.distance_m), intersects)
+            previous = rolled.get(target_id)
+            if previous is None:
+                rolled[target_id] = value
+            else:
+                rolled[target_id] = (
+                    min(previous[0], value[0]),
+                    previous[1] or value[1],
+                )
 
     oracle: dict[str, float] = {}
     for cell_id in target_cell_ids:
         if cell_id not in rolled:
             raise ValueError(
-                f"Frozen roads_large rollup is missing target cell: {cell_id}"
+                "Frozen roads rollup is missing target cell: "
+                f"{cell_id}"
             )
         distance_m, intersects = rolled[cell_id]
         if intersects:
@@ -217,7 +254,8 @@ def main() -> int:
             report.check(
                 result is not None
                 and result.get("fast_distance") is True
-                and result.get("canonical_layer_ids") == ["roads_large"]
+                and result.get("canonical_layer_ids")
+                == ["roads_large", "roads_medium"]
                 and abs(actual_share - expected_share) <= 1e-12,
                 f"Trøndelag R{resolution} at {road_distance:.0f} m preserves "
                 f"frozen full-flow output ({expected_share:.12f}%).",
@@ -267,8 +305,9 @@ def main() -> int:
                 if frame is not None
                 else -1
             )
-            oracle = _roads_large_acceptance_oracle(
+            oracle = _roads_acceptance_oracle(
                 trondelag_registry,
+                ("roads_large",),
                 road_distance,
                 resolution,
                 target_cell_ids,
@@ -375,6 +414,258 @@ def main() -> int:
                     f"potential={actual_area:.12f}, "
                     f"weighted={actual_weighted_share:.12f}.",
                 )
+
+    for layer_ids, resolution_expectations in (
+        ROAD_MEDIUM_AND_COMBINED_EXPECTATIONS.items()
+    ):
+        road_selection = {
+            group_id: []
+            for group_id in app.WIND_GROUP_LAYER_DEFAULTS
+        }
+        road_selection["transport"] = list(layer_ids)
+        for resolution, expectations in resolution_expectations.items():
+            display_geometry_path = app._h3_display_geometry_path(
+                trondelag_region,
+                resolution,
+            )
+            target_cell_ids = set(
+                app.load_h3_display_geometries(display_geometry_path)
+            )
+            for road_distance, (
+                expected_share,
+                expected_blocked,
+                expected_area,
+            ) in expectations.items():
+                params = app._reference_default_wind_params()
+                params["road_distance_m"] = road_distance
+                result = app._wind_fast_distance_runtime_result(
+                    trondelag_region,
+                    params,
+                    road_selection,
+                    resolution,
+                )
+                frame = (
+                    (result or {}).get("fast_distance_frame")
+                    if isinstance(result, dict)
+                    else None
+                )
+                actual_share = float(
+                    ((result or {}).get("combined") or {}).get(
+                        "land_share_pct",
+                        -1.0,
+                    )
+                )
+                actual_area = (
+                    float(frame["potential_area_km2"].sum())
+                    if frame is not None
+                    else -1.0
+                )
+                actual_blocked = (
+                    int(frame["potential_area_share_pct"].eq(0.0).sum())
+                    if frame is not None
+                    else -1
+                )
+                oracle = _roads_acceptance_oracle(
+                    trondelag_registry,
+                    layer_ids,
+                    road_distance,
+                    resolution,
+                    target_cell_ids,
+                )
+                actual_by_hex = (
+                    {
+                        str(row.hex_id):
+                        float(row.potential_area_share_pct) / 100.0
+                        for row in frame.itertuples(index=False)
+                    }
+                    if frame is not None
+                    else {}
+                )
+                max_cell_error = (
+                    max(
+                        abs(actual_by_hex[cell_id] - oracle[cell_id])
+                        for cell_id in actual_by_hex
+                    )
+                    if actual_by_hex
+                    and actual_by_hex.keys() == oracle.keys()
+                    else float("inf")
+                )
+                expected_canonical_ids = sorted(layer_ids)
+                selection_label = "+".join(layer_ids)
+                report.check(
+                    result is not None
+                    and result.get("canonical_layer_ids")
+                    == expected_canonical_ids
+                    and frame is not None
+                    and len(frame) == DISPLAY_COUNTS[resolution]
+                    and set(frame["hex_id"].astype(str)) == target_cell_ids
+                    and actual_blocked == expected_blocked
+                    and abs(actual_share - expected_share) <= 1e-12
+                    and abs(actual_area - expected_area) <= 1e-9
+                    and max_cell_error <= 1e-12,
+                    f"Trøndelag {selection_label} R{resolution} uses one "
+                    f"canonical SpeedLocal result at {road_distance:.0f} m "
+                    f"({expected_share:.12f}%, {expected_blocked} blocked).",
+                    f"Trøndelag {selection_label} R{resolution} drifted at "
+                    f"{road_distance:.0f} m: share={actual_share:.12f}, "
+                    f"blocked={actual_blocked}, area={actual_area:.12f}, "
+                    f"max_cell_error={max_cell_error}, canonical="
+                    f"{((result or {}).get('canonical_layer_ids') or [])}.",
+                )
+
+    invalid_road_request_errors: list[str] = []
+    for invalid_layer_ids, expected_message in (
+        ((), "at least one layer"),
+        (("roads_medium", "roads_medium"), "duplicate layer ids"),
+        (("roads_unknown",), "no canonical road layers"),
+    ):
+        try:
+            app.roads_acceptance_frame(
+                "trondelag",
+                invalid_layer_ids,
+                300.0,
+                ("placeholder",),
+                7,
+            )
+        except ValueError as exc:
+            if expected_message not in str(exc):
+                invalid_road_request_errors.append(str(exc))
+        else:
+            invalid_road_request_errors.append(
+                f"{invalid_layer_ids!r} did not fail closed"
+            )
+    report.check(
+        not invalid_road_request_errors,
+        "Canonical road requests fail closed on empty, duplicate, and "
+        "undeclared layer selections.",
+        "Canonical road request validation drifted: "
+        f"{invalid_road_request_errors}",
+    )
+
+    invalid_app_selection_errors: list[str] = []
+    for invalid_layer_ids, expected_message in (
+        (("roads_medium", "roads_medium"), "duplicate layer ids"),
+        (("roads_unknown",), "undeclared road layers"),
+        (("",), "blank layer id"),
+    ):
+        invalid_selection = {
+            group_id: []
+            for group_id in app.WIND_GROUP_LAYER_DEFAULTS
+        }
+        invalid_selection["transport"] = list(invalid_layer_ids)
+        try:
+            app._wind_fast_distance_runtime_result(
+                trondelag_region,
+                app._reference_default_wind_params(),
+                invalid_selection,
+                7,
+            )
+        except ValueError as exc:
+            if expected_message not in str(exc):
+                invalid_app_selection_errors.append(str(exc))
+        else:
+            invalid_app_selection_errors.append(
+                f"{invalid_layer_ids!r} did not fail closed"
+            )
+    report.check(
+        not invalid_app_selection_errors,
+        "The V2 Final runtime rejects duplicate, blank, and undeclared raw "
+        "road selections before legacy normalization.",
+        "The V2 Final road-selection boundary validation drifted: "
+        f"{invalid_app_selection_errors}",
+    )
+
+    legacy_distance_loader = app.distance_table_for_layer
+    canonical_coverage_results: dict[
+        tuple[tuple[str, ...], int],
+        dict | None,
+    ] = {}
+    try:
+        def _reject_legacy_road_distance(*_args, **_kwargs):
+            raise AssertionError("Road selection reached legacy distance loading")
+
+        app.distance_table_for_layer = _reject_legacy_road_distance
+        for selected_road_layers in (
+            ("roads_medium",),
+            ("roads_medium", "roads_large"),
+        ):
+            for resolution in (7, 6, 5):
+                canonical_coverage_results[
+                    (selected_road_layers, resolution)
+                ] = app._wind_fast_distance_runtime_result(
+                    trondelag_region,
+                    {
+                        **app._reference_default_wind_params(),
+                        "road_distance_m": 300.0,
+                    },
+                    {
+                        **{
+                            group_id: []
+                            for group_id in app.WIND_GROUP_LAYER_DEFAULTS
+                        },
+                        "transport": list(selected_road_layers),
+                    },
+                    resolution,
+                )
+        canonical_only_result = canonical_coverage_results[
+            (("roads_medium", "roads_large"), 7)
+        ]
+        reversed_result = app._wind_fast_distance_runtime_result(
+            trondelag_region,
+            {**app._reference_default_wind_params(), "road_distance_m": 300.0},
+            {
+                **{
+                    group_id: []
+                    for group_id in app.WIND_GROUP_LAYER_DEFAULTS
+                },
+                "transport": ["roads_large", "roads_medium"],
+            },
+            7,
+        )
+    except Exception as exc:
+        canonical_only_result = None
+        reversed_result = None
+        canonical_coverage_results = {}
+        canonical_only_error = str(exc)
+    else:
+        canonical_only_error = ""
+    finally:
+        app.distance_table_for_layer = legacy_distance_loader
+    canonical_frame = (
+        canonical_only_result.get("fast_distance_frame")
+        if isinstance(canonical_only_result, dict)
+        else None
+    )
+    reversed_frame = (
+        reversed_result.get("fast_distance_frame")
+        if isinstance(reversed_result, dict)
+        else None
+    )
+    complete_canonical_coverage = all(
+        result is not None
+        and result.get("canonical_layer_ids") == sorted(layer_ids)
+        for (layer_ids, _resolution), result
+        in canonical_coverage_results.items()
+    ) and len(canonical_coverage_results) == 6
+    report.check(
+        complete_canonical_coverage,
+        "Trøndelag road selections do not fall through to the legacy "
+        "distance loader at R7/R6/R5.",
+        "Trøndelag roads still depend on the legacy distance loader: "
+        f"{canonical_only_error}",
+    )
+    report.check(
+        reversed_result is not None
+        and reversed_result.get("canonical_layer_ids")
+        == ["roads_large", "roads_medium"]
+        and isinstance(canonical_frame, pd.DataFrame)
+        and isinstance(reversed_frame, pd.DataFrame)
+        and canonical_frame[["hex_id", "potential_area_share_pct"]].equals(
+            reversed_frame[["hex_id", "potential_area_share_pct"]]
+        ),
+        "Canonical combined roads are invariant to selected-layer order.",
+        "Canonical combined roads changed with selected-layer order.",
+    )
 
     for road_distance, source_frame in roads_large_r7_frames.items():
         expected_area = ROADS_LARGE_R7_AREA_EXPECTATIONS[road_distance][0]

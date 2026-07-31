@@ -81,10 +81,10 @@ from potential_model.social_acceptance import (  # noqa: E402
 )
 from potential_model.speedlocal_bridge import (  # noqa: E402
     LEGACY_ROADS_GROUP_ID,
-    MIGRATED_ROADS_LAYER_ID,
+    canonical_road_layer_ids,
     default_wind_layer_selection,
+    roads_acceptance_frame,
     roads_buffer_parameter_contract,
-    roads_large_acceptance_frame,
     transitional_public_legacy_group_ids,
     vector_buffer_preview,
     vector_preview_layer_ids,
@@ -9738,7 +9738,38 @@ def _wind_fast_distance_runtime_result(
     region_id = str(region.get("region_id", "")).strip().lower()
     if not region_id:
         return None
+    canonical_road_ids = canonical_road_layer_ids(region_id)
+    raw_road_selection = (layer_selection or {}).get(
+        LEGACY_ROADS_GROUP_ID,
+        [],
+    )
+    if raw_road_selection is None:
+        raw_road_selection = []
+    if isinstance(raw_road_selection, (str, bytes)):
+        raise TypeError("A V2 Final road selection must be a list of layer ids")
+    raw_road_layer_ids = tuple(
+        str(layer_id).strip()
+        for layer_id in raw_road_selection
+    )
+    if any(not layer_id for layer_id in raw_road_layer_ids):
+        raise ValueError("A V2 Final road selection contains a blank layer id")
+    if len(raw_road_layer_ids) != len(set(raw_road_layer_ids)):
+        raise ValueError(
+            "A V2 Final road selection contains duplicate layer ids"
+        )
+    unknown_road_layers = set(raw_road_layer_ids) - set(canonical_road_ids)
+    if unknown_road_layers:
+        raise ValueError(
+            f"{region_id}/wind selected undeclared road layers: "
+            f"{sorted(unknown_road_layers)}"
+        )
     selected = normalize_group_layer_map(layer_selection)
+    raw_road_layer_set = set(raw_road_layer_ids)
+    selected[LEGACY_ROADS_GROUP_ID] = [
+        layer_id
+        for layer_id in canonical_road_ids
+        if layer_id in raw_road_layer_set
+    ]
     if not any(selected.values()):
         return None
     groups, layers, registry_meta = load_acceptance_registry(region_id)
@@ -9770,40 +9801,38 @@ def _wind_fast_distance_runtime_result(
             if threshold_key
             else float(group.analysis_default_m)
         )
-        for layer_id in layer_ids:
-            if (
-                group_id == LEGACY_ROADS_GROUP_ID
-                and layer_id == MIGRATED_ROADS_LAYER_ID
-            ):
-                canonical_frame = roads_large_acceptance_frame(
-                    region_id,
-                    threshold_m,
-                    frame["hex_id"].astype(str),
-                    int(target_resolution),
-                )
-                canonical_merged = frame[["hex_id"]].merge(
-                    canonical_frame[["hex_id", "acceptance"]],
-                    on="hex_id",
-                    how="left",
-                    validate="one_to_one",
-                )
-                if canonical_merged["acceptance"].isna().any():
-                    raise ValueError(
-                        "Canonical roads_large result is incomplete for the "
-                        f"R{int(target_resolution)} display domain"
-                    )
-                canonical_acceptance_parts.append(
-                    canonical_merged["acceptance"].astype(float)
-                )
-                canonical_layer_ids.append(layer_id)
-                continue
-            layer_df = _target_resolution_distance_frame(
-                distance_table_for_layer(registry_meta, layer_id),
+        if group_id == LEGACY_ROADS_GROUP_ID:
+            canonical_frame = roads_acceptance_frame(
+                region_id,
+                layer_ids,
+                threshold_m,
+                frame["hex_id"].astype(str),
                 int(target_resolution),
-                display_geometry_path,
             )
-            if not layer_df.empty:
-                distance_parts.append(layer_df)
+            canonical_merged = frame[["hex_id"]].merge(
+                canonical_frame[["hex_id", "acceptance"]],
+                on="hex_id",
+                how="left",
+                validate="one_to_one",
+            )
+            if canonical_merged["acceptance"].isna().any():
+                raise ValueError(
+                    "Canonical roads result is incomplete for the "
+                    f"R{int(target_resolution)} display domain"
+                )
+            canonical_acceptance_parts.append(
+                canonical_merged["acceptance"].astype(float)
+            )
+            canonical_layer_ids.extend(layer_ids)
+        else:
+            for layer_id in layer_ids:
+                layer_df = _target_resolution_distance_frame(
+                    distance_table_for_layer(registry_meta, layer_id),
+                    int(target_resolution),
+                    display_geometry_path,
+                )
+                if not layer_df.empty:
+                    distance_parts.append(layer_df)
         if not distance_parts and not canonical_acceptance_parts:
             continue
         acceptance_parts = list(canonical_acceptance_parts)

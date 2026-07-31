@@ -14,8 +14,6 @@ from speedlocal.validation import validate_contract
 
 LEGACY_ROADS_GROUP_ID = "transport"
 CANONICAL_ROADS_GROUP_ID = "roads"
-CANONICAL_ROADS_LAYER_IDS = ("roads_medium", "roads_large")
-MIGRATED_ROADS_LAYER_ID = "roads_large"
 CANONICAL_TO_LEGACY_GROUP_ID = {
     "roads": "transport",
     "population": "settlement",
@@ -121,11 +119,25 @@ def vector_buffer_preview(
     )
 
 
+def canonical_road_layer_ids(region_id: str) -> tuple[str, ...]:
+    """Return road layers in manifest order for the active wind contract."""
+    analysis = _validated_wind_analysis(region_id)
+    layer_ids = tuple(
+        layer.id
+        for layer in analysis.layers.values()
+        if layer.group_id == CANONICAL_ROADS_GROUP_ID
+        and layer.operation == "distance_exclusion"
+    )
+    if not layer_ids:
+        raise ValueError(f"{region_id}/wind declares no canonical road layers")
+    return layer_ids
+
+
 def roads_buffer_parameter_contract(region_id: str) -> ParameterContract:
     """Return the one shared road-buffer contract used by the transitional UI."""
     analysis = _validated_wind_analysis(region_id)
     parameters: list[ParameterContract] = []
-    for layer_id in CANONICAL_ROADS_LAYER_IDS:
+    for layer_id in canonical_road_layer_ids(region_id):
         layer = analysis.layers.get(layer_id)
         if layer is None:
             raise KeyError(
@@ -162,29 +174,56 @@ def roads_buffer_parameter_contract(region_id: str) -> ParameterContract:
     return parameters[0]
 
 
-def roads_large_acceptance_frame(
+def roads_acceptance_frame(
     region_id: str,
+    layer_ids: Collection[str],
     buffer_m: float,
     analysis_cell_ids: Collection[str],
     target_resolution: int,
 ) -> pd.DataFrame:
-    """Adapt canonical display-resolution results to V2 Final."""
+    """Adapt one manifest-selected canonical roads result to V2 Final."""
+    raw_requested_layers = tuple(str(value).strip() for value in layer_ids)
+    if not raw_requested_layers:
+        raise ValueError("A canonical roads request requires at least one layer")
+    if any(not value for value in raw_requested_layers):
+        raise ValueError("A canonical roads request contains a blank layer id")
+    if len(raw_requested_layers) != len(set(raw_requested_layers)):
+        raise ValueError("A canonical roads request contains duplicate layer ids")
+    available_layers = canonical_road_layer_ids(region_id)
+    requested_layer_set = set(raw_requested_layers)
+    unknown_layers = requested_layer_set - set(available_layers)
+    if unknown_layers:
+        raise ValueError(
+            f"{region_id}/wind has no canonical road layers: "
+            f"{sorted(unknown_layers)}"
+        )
+    requested_layers = tuple(
+        layer_id
+        for layer_id in available_layers
+        if layer_id in requested_layer_set
+    )
+
     requested_ids = tuple(str(value).strip() for value in analysis_cell_ids)
     if not requested_ids:
-        raise ValueError("roads_large requires a non-empty analysis-cell universe")
+        raise ValueError(
+            "Canonical roads require a non-empty analysis-cell universe"
+        )
     if any(not value for value in requested_ids):
-        raise ValueError("roads_large analysis-cell universe contains a blank id")
+        raise ValueError("Canonical roads analysis-cell universe contains a blank id")
     if len(requested_ids) != len(set(requested_ids)):
-        raise ValueError("roads_large analysis-cell universe contains duplicate ids")
+        raise ValueError(
+            "Canonical roads analysis-cell universe contains duplicate ids"
+        )
 
     result = run_analysis(
         str(region_id),
         "wind",
-        [MIGRATED_ROADS_LAYER_ID],
+        list(requested_layers),
         {
-            MIGRATED_ROADS_LAYER_ID: {
+            layer_id: {
                 "buffer_m": float(buffer_m),
             }
+            for layer_id in requested_layers
         },
         analysis_cell_ids=requested_ids,
         target_resolution=target_resolution,
@@ -198,12 +237,17 @@ def roads_large_acceptance_frame(
         None,
     )
     if group is None:
-        raise ValueError("Canonical roads_large result has no roads group")
+        raise ValueError("Canonical roads result has no roads group")
+    if tuple(group.layer_ids) != requested_layers:
+        raise ValueError(
+            "Canonical roads result does not preserve the requested layers: "
+            f"{group.layer_ids}"
+        )
     if group.cell_count != len(requested_ids) or len(group.cells) != len(
         requested_ids
     ):
         raise ValueError(
-            "Canonical roads_large result does not cover the requested "
+            "Canonical roads result does not cover the requested "
             f"analysis domain ({len(group.cells)}/{len(requested_ids)})"
         )
 
@@ -219,5 +263,5 @@ def roads_large_acceptance_frame(
         )
     )
     if frame["hex_id"].duplicated().any():
-        raise ValueError("Canonical roads_large result contains duplicate cells")
+        raise ValueError("Canonical roads result contains duplicate cells")
     return frame.sort_values("hex_id").reset_index(drop=True)

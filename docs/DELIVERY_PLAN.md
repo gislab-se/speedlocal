@@ -80,16 +80,20 @@ Current milestone status:
   approval, public-package cold start, and external deployment review complete.
 - `roads_large` R6/R5 canonical integration: automated engine, accepted-
   reference, and real-app gates complete at 300/1000 m; localhost visual
-  approval remains, so it is neither locally promoted nor published.
+  review was approved on 2026-07-31, so the increment is locally promoted but
+  not yet published.
 - V2 Final verification cleanup: empty manifest startup, map-only road source
   and buffer review, and manifest-cell-area propagation through wind
-  establishment/allocation are automated; localhost approval and a
-  `v2-final-dev` checkpoint remain. Non-roads controls still use the declared
-  legacy-registry adapter until their slices migrate.
-- `roads_large` full local promotion: pending that visual gate. Publication
-  remains a separate pending state.
-- Complete roads local promotion: canonical `roads_medium`, combined-roads
-  behavior, and removal of the temporary road-group adapter remain.
+  establishment/allocation are locally approved on `v2-final-dev`. Non-roads
+  controls still use the declared legacy-registry adapter until their slices
+  migrate.
+- `roads_large` full local promotion: complete. Publication remains a separate
+  pending state.
+- `roads_medium` and combined roads: canonical calculation and automated
+  R7/R6/R5 accepted-reference/real-app gates complete at 300/1000 m; localhost
+  visual review is pending.
+- Complete roads local promotion: remove the temporary legacy `transport`
+  UI/data adapter after that visual review and pass the complete roads gate.
 
 ## Slice gates
 
