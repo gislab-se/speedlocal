@@ -669,7 +669,8 @@ def main() -> int:
                         not list(root_app.exception)
                         and not list(root_app.error)
                         and any(
-                            metric.label == "Vind: potentiell landandel"
+                            metric.label
+                            == "Vind: genomsnittlig potential per analyscell"
                             for metric in root_app.metric
                         )
                     )

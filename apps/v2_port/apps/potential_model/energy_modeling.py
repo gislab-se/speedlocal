@@ -869,6 +869,7 @@ def allocate_wind_area_from_core_hexes(
     hex_area_km2: float,
     min_share_pct: float = 65.0,
     avoid_hex_ids: set[str] | None = None,
+    cell_area_column: str | None = None,
 ) -> tuple[pd.DataFrame, dict[str, float]]:
     empty = pd.DataFrame(
         columns=[
@@ -898,6 +899,29 @@ def allocate_wind_area_from_core_hexes(
         }
 
     candidates = frame.copy()
+    if cell_area_column is not None:
+        if cell_area_column not in candidates.columns:
+            raise ValueError(
+                f"Wind allocation requires cell-area column: {cell_area_column}"
+            )
+        cell_areas = pd.to_numeric(
+            candidates[cell_area_column],
+            errors="coerce",
+        )
+        valid_cell_areas = cell_areas.notna() & cell_areas.map(
+            lambda value: math.isfinite(float(value)) and float(value) > 0.0
+        )
+        if not bool(valid_cell_areas.all()):
+            raise ValueError(
+                f"Wind allocation cell areas in {cell_area_column} must be "
+                "positive and finite"
+            )
+        candidates["allocation_cell_area_km2"] = cell_areas.astype(float)
+    else:
+        candidates["allocation_cell_area_km2"] = float(hex_area_km2)
+    reference_cell_area_km2 = float(
+        candidates["allocation_cell_area_km2"].mean()
+    )
     candidates["potential_area_share_pct"] = pd.to_numeric(
         candidates.get("potential_area_share_pct", pd.Series(0.0, index=candidates.index)),
         errors="coerce",
@@ -921,7 +945,9 @@ def allocate_wind_area_from_core_hexes(
             "selected_potential_area_km2": 0.0,
             "selected_hex_footprint_km2": 0.0,
             "unmet_area_km2": float(area_need_km2),
-            "needed_hex": int(math.ceil(area_need_km2 / hex_area_km2)),
+            "needed_hex": int(
+                math.ceil(area_need_km2 / reference_cell_area_km2)
+            ),
             "selected_hex_count": 0,
             "available_candidate_hex": 0,
             "primary_candidate_hex": 0,
@@ -938,7 +964,10 @@ def allocate_wind_area_from_core_hexes(
         candidates["potential_area_km2"] = pd.to_numeric(candidates["potential_area_km2"], errors="coerce").fillna(0.0).clip(lower=0.0)
     else:
         candidates["potential_area_km2"] = (
-            candidates["potential_area_share_pct"].clip(lower=0.0, upper=100.0).div(100.0) * float(hex_area_km2)
+            candidates["potential_area_share_pct"]
+            .clip(lower=0.0, upper=100.0)
+            .div(100.0)
+            * candidates["allocation_cell_area_km2"]
         )
     candidates = candidates[candidates["potential_area_km2"].gt(0.0)].copy()
     if candidates.empty:
@@ -947,7 +976,9 @@ def allocate_wind_area_from_core_hexes(
             "selected_potential_area_km2": 0.0,
             "selected_hex_footprint_km2": 0.0,
             "unmet_area_km2": float(area_need_km2),
-            "needed_hex": int(math.ceil(area_need_km2 / hex_area_km2)),
+            "needed_hex": int(
+                math.ceil(area_need_km2 / reference_cell_area_km2)
+            ),
             "selected_hex_count": 0,
             "available_candidate_hex": 0,
             "primary_candidate_hex": 0,
@@ -978,7 +1009,11 @@ def allocate_wind_area_from_core_hexes(
         record["selected_rank"] = rank
         record["reserved_by_other_technology"] = bool(getattr(row, "reserved_by_other_technology", False))
         record["allocated_area_km2"] = allocated_area
-        record["allocated_hex_share_pct"] = (allocated_area / max(float(hex_area_km2), 1e-9)) * 100.0
+        record["allocated_hex_share_pct"] = (
+            allocated_area
+            / float(getattr(row, "allocation_cell_area_km2"))
+            * 100.0
+        )
         remaining_area = max(0.0, remaining_area - allocated_area)
         record["remaining_area_after_km2"] = remaining_area
         selected_rows.append(record)
@@ -988,8 +1023,17 @@ def allocate_wind_area_from_core_hexes(
     selected = pd.DataFrame(selected_rows) if selected_rows else empty.copy()
     selected_area = float(selected["allocated_area_km2"].sum()) if not selected.empty else 0.0
     selected_potential_area = float(selected["potential_area_km2"].sum()) if not selected.empty else 0.0
-    selected_hex_footprint = float(len(selected) * float(hex_area_km2))
-    needed_hex = int(math.ceil(float(area_need_km2) / max(float(hex_area_km2), 1e-9)))
+    selected_hex_footprint = (
+        float(selected["allocation_cell_area_km2"].sum())
+        if not selected.empty
+        else 0.0
+    )
+    needed_hex = int(
+        math.ceil(
+            float(area_need_km2)
+            / max(reference_cell_area_km2, 1e-9)
+        )
+    )
     phase_counts = selected["allocation_phase"].value_counts().to_dict() if not selected.empty else {}
     return selected, {
         "selected_area_km2": selected_area,

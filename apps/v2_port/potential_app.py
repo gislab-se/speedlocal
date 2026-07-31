@@ -12,7 +12,7 @@ from pathlib import Path
 import subprocess
 import sys
 import time
-from typing import Any
+from typing import Any, Mapping
 
 import pandas as pd
 import streamlit as st
@@ -82,8 +82,14 @@ from potential_model.social_acceptance import (  # noqa: E402
 from potential_model.speedlocal_bridge import (  # noqa: E402
     LEGACY_ROADS_GROUP_ID,
     MIGRATED_ROADS_LAYER_ID,
+    default_wind_layer_selection,
     roads_buffer_parameter_contract,
     roads_large_acceptance_frame,
+    transitional_public_legacy_group_ids,
+    vector_buffer_preview,
+    vector_preview_layer_ids,
+    wind_analysis_domain_cell_areas_km2,
+    wind_analysis_domain_resolution,
 )
 from potential_model.wind_acceptance import (  # noqa: E402
     GROUP_LABELS,
@@ -202,7 +208,7 @@ WIND_LAYER_SELECTION_KEY = "wind_builder_selected_layers"
 WIND_RUNTIME_OVERLAY_KEY = "wind_builder_runtime_overlay_enabled"
 SOLAR_APPLIED_CONFIG_KEY = "solar_applied_config"
 START_DEFAULT_VERSION_KEY = "potential_start_default_version"
-START_DEFAULT_VERSION = "trondelag_decision_default_v5"
+START_DEFAULT_VERSION = "manifest_empty_selection_v6"
 WIND_EMPTY_SELECTION_ACTIVE_KEY = "wind_empty_selection_active"
 WIND_CONTROL_LANGUAGE = "sv"
 WIND_RUNTIME_BASE_RESOLUTION = 10
@@ -380,38 +386,6 @@ SOLAR_FILTER_GROUP_SPECS: dict[str, dict[str, Any]] = {
     },
 }
 SOLAR_FILTER_GROUP_IDS = tuple(SOLAR_FILTER_GROUP_SPECS)
-DEFAULT_WIND_ESTABLISHMENT_LAYER_SELECTION = {
-    group_id: (
-        [WIND_POPULATION_SOURCE_LAYER_ID]
-        if group_id == WIND_SETTLEMENT_GROUP_ID
-        else list(WIND_GROUP_LAYER_DEFAULTS.get(SOLAR_ROAD_GROUP_ID, []))
-        if group_id == SOLAR_ROAD_GROUP_ID
-        else []
-        if group_id == SOLAR_ELECTRICAL_GROUP_ID
-        else ["protected_areas"]
-        if group_id == SOLAR_PROTECTED_GROUP_ID
-        else [
-            layer_id
-            for layer_id in ("cultural_preservation", "valuable_cultural_environment")
-            if layer_id in WIND_GROUP_LAYER_DEFAULTS.get(WIND_CULTURE_GROUP_ID, [])
-        ]
-        if group_id == WIND_CULTURE_GROUP_ID
-        else [
-            layer_id
-            for layer_id in ("reindeer_grazing_merged",)
-            if layer_id in WIND_GROUP_LAYER_DEFAULTS.get(WIND_REINDEER_GROUP_ID, [])
-        ]
-        if group_id == WIND_REINDEER_GROUP_ID
-        else []
-    )
-    for group_id in WIND_GROUP_LAYER_DEFAULTS
-}
-DEFAULT_WIND_ADVANCED_LAYER_SELECTION = {
-    WIND_SETTLEMENT_GROUP_ID: [WIND_POPULATION_SOURCE_LAYER_ID],
-    SOLAR_PROTECTED_GROUP_ID: list(SOLAR_PROTECTED_LAYER_IDS),
-    WIND_CULTURE_GROUP_ID: list(WIND_GROUP_LAYER_DEFAULTS.get(WIND_CULTURE_GROUP_ID, [])),
-    WIND_REINDEER_GROUP_ID: list(WIND_GROUP_LAYER_DEFAULTS.get(WIND_REINDEER_GROUP_ID, [])),
-}
 SOLAR_VISUAL_SOURCE_GROUPS_KEY = "visible_source_groups"
 SOLAR_VISUAL_BUFFER_GROUPS_KEY = "visible_buffer_groups"
 SOLAR_SMALL_POPULATION_VISUAL_GROUP_ID = "small_population"
@@ -420,31 +394,19 @@ DEFAULT_SOLAR_APPLIED_CONFIG = {
     "small_population_active": False,
     "large_unfiltered_land_active": False,
     "large_scale_active": True,
-    "large_population_active": True,
-    "large_protected_layer_ids": ["protected_areas"],
-    "large_protected_active": True,
-    "large_land_use_layer_ids": [SOLAR_FOREST_LAYER_ID],
+    "large_population_active": False,
+    "large_protected_layer_ids": [],
+    "large_protected_active": False,
+    "large_land_use_layer_ids": [],
     "large_land_use_active": False,
-    "large_road_layer_ids": list(WIND_GROUP_LAYER_DEFAULTS.get(SOLAR_ROAD_GROUP_ID, [])),
-    "large_road_active": True,
-    "large_electrical_layer_ids": [
-        layer_id
-        for layer_id in ("high_voltage_lines", "underground_cables")
-        if layer_id in WIND_GROUP_LAYER_DEFAULTS.get(SOLAR_ELECTRICAL_GROUP_ID, [])
-    ],
+    "large_road_layer_ids": [],
+    "large_road_active": False,
+    "large_electrical_layer_ids": [],
     "large_electrical_active": False,
-    "large_culture_layer_ids": [
-        layer_id
-        for layer_id in ("cultural_preservation", "valuable_cultural_environment")
-        if layer_id in WIND_GROUP_LAYER_DEFAULTS.get(SOLAR_CULTURE_GROUP_ID, [])
-    ],
-    "large_culture_active": True,
-    "large_reindeer_layer_ids": [
-        layer_id
-        for layer_id in ("reindeer_grazing_merged",)
-        if layer_id in WIND_GROUP_LAYER_DEFAULTS.get(SOLAR_REINDEER_GROUP_ID, [])
-    ],
-    "large_reindeer_active": True,
+    "large_culture_layer_ids": [],
+    "large_culture_active": False,
+    "large_reindeer_layer_ids": [],
+    "large_reindeer_active": False,
     "large_coastal_layer_ids": [],
     "large_coastal_active": False,
     "panel_area_m2_per_person": 10.0,
@@ -2265,7 +2227,6 @@ def _workspace_calculation_fingerprint(
     solar_large_filter_configs: list[dict[str, Any]],
     wind_selected_layers: dict[str, list[str]],
     wind_ui_params: dict[str, Any],
-    wind_visual_options: dict[str, Any],
     energy_model_state: dict[str, Any],
 ) -> str:
     """Hash the calculation inputs, deliberately excluding UI language."""
@@ -2288,12 +2249,18 @@ def _workspace_calculation_fingerprint(
         "social_acceptance_impact_pct": float(social_acceptance_impact_pct),
         "social_acceptance_allocation_priority_pct": float(social_acceptance_allocation_priority_pct),
         "selected_factor": str(selected_factor),
-        "applied_solar_config": applied_solar_config,
+        "applied_solar_config": {
+            key: value
+            for key, value in applied_solar_config.items()
+            if key not in {
+                SOLAR_VISUAL_SOURCE_GROUPS_KEY,
+                SOLAR_VISUAL_BUFFER_GROUPS_KEY,
+            }
+        },
         "solar_params": solar_params,
         "solar_large_filter_configs": solar_large_filter_configs,
         "wind_selected_layers": normalize_group_layer_map(wind_selected_layers),
         "wind_ui_params": wind_ui_params,
-        "wind_visual_options": wind_visual_options,
         "energy_debug_run_id": energy_model_state.get("debug_run_id"),
         "energy_available": bool(energy_model_state.get("available")),
         "energy_show_proposal": bool(energy_model_state.get("show_proposal")),
@@ -3754,7 +3721,10 @@ def _session_h3_resolution(region: dict[str, Any], state_key: str, preferred_hin
     return int(preferred)
 
 
-def _analysis_h3_resolution(region: dict[str, Any], preferred: int | None = None) -> int:
+def _workspace_analysis_h3_resolution(
+    region: dict[str, Any],
+    preferred: int | None = None,
+) -> int:
     available = _available_h3_resolutions(region)
     try:
         default_resolution = int(region.get("default_h3_resolution") or 9)
@@ -3765,6 +3735,18 @@ def _analysis_h3_resolution(region: dict[str, Any], preferred: int | None = None
     if preferred is not None and int(preferred) in available:
         return int(preferred)
     return _preferred_h3_resolution(region, default_resolution)
+
+
+def _wind_analysis_h3_resolution(region: dict[str, Any]) -> int:
+    available = _available_h3_resolutions(region)
+    region_id = str(region.get("region_id") or "")
+    resolution = int(wind_analysis_domain_resolution(region_id))
+    if resolution not in available:
+        raise ValueError(
+            f"{region_id}/wind analysis domain is R{resolution}, but no "
+            "matching display geometry is available"
+        )
+    return resolution
 
 
 def _h3_display_geometry_path(region: dict[str, Any], resolution: int) -> str | None:
@@ -4328,11 +4310,15 @@ def _ensure_default_start_state(region: dict[str, Any], force: bool = False) -> 
     start_default_key = _region_start_default_key(region)
     if not force and st.session_state.get(start_default_key) == START_DEFAULT_VERSION:
         return
-    _apply_reference_default_wind_to_controls()
+    selected_wind = _apply_wind_layer_selection_state(
+        _default_wind_layer_selection()
+    )
     for group_id in WIND_GROUP_LAYER_DEFAULTS:
         st.session_state[_wind_control_key("visual_source", str(group_id))] = False
         st.session_state[_wind_control_key("visual_buffer", str(group_id))] = False
-    st.session_state[WIND_EMPTY_SELECTION_ACTIVE_KEY] = False
+    st.session_state[WIND_EMPTY_SELECTION_ACTIVE_KEY] = not any(
+        selected_wind.values()
+    )
     default_solar_config = dict(DEFAULT_SOLAR_APPLIED_CONFIG)
     st.session_state[SOLAR_APPLIED_CONFIG_KEY] = default_solar_config
     region_id = str(region.get("region_id", "region") or "region")
@@ -4506,8 +4492,11 @@ def _solar_default_filter_config_values(config: dict[str, Any] | None = None) ->
     values: dict[str, Any] = {}
     for group_id, spec in SOLAR_FILTER_GROUP_SPECS.items():
         layer_ids = _solar_control_selected_filter_layer_ids(source, group_id) if source else []
+        active = bool(source.get(str(spec["active_key"]), bool(layer_ids)))
+        if not active:
+            layer_ids = []
         values[str(spec["layer_ids_key"])] = layer_ids
-        values[str(spec["active_key"])] = bool(layer_ids)
+        values[str(spec["active_key"])] = bool(active and layer_ids)
         values[str(spec["buffer_key"])] = float(
             source.get(str(spec["buffer_key"]), spec.get("buffer_default_m", 0.0)) or 0.0
         )
@@ -4609,6 +4598,7 @@ def _prime_solar_draft_state(config: dict[str, Any]) -> None:
     for group_id, spec in SOLAR_FILTER_GROUP_SPECS.items():
         selected_layer_ids = set(_solar_control_selected_filter_layer_ids(config, group_id))
         default_layer_ids = set(_solar_default_filter_layer_ids(group_id))
+        group_active = bool(config.get(str(spec["active_key"]), False))
         st.session_state.setdefault(
             str(spec["draft_buffer_key"]),
             float(config.get(str(spec["buffer_key"]), spec.get("buffer_default_m", 0.0)) or 0.0),
@@ -4616,9 +4606,45 @@ def _prime_solar_draft_state(config: dict[str, Any]) -> None:
         for layer_id in _solar_filter_layer_ids(group_id):
             st.session_state.setdefault(
                 _solar_filter_layer_control_key(group_id, layer_id),
-                layer_id in selected_layer_ids or (not selected_layer_ids and layer_id in default_layer_ids),
+                group_active
+                and (
+                    layer_id in selected_layer_ids
+                    or (not selected_layer_ids and layer_id in default_layer_ids)
+                ),
             )
-        st.session_state.setdefault(str(spec["draft_active_key"]), bool(selected_layer_ids))
+        st.session_state.setdefault(
+            str(spec["draft_active_key"]),
+            bool(group_active and selected_layer_ids),
+        )
+
+
+def _reset_solar_filter_state() -> None:
+    config = dict(DEFAULT_SOLAR_APPLIED_CONFIG)
+    st.session_state[SOLAR_APPLIED_CONFIG_KEY] = config
+    st.session_state["solar_draft_small_population_active"] = False
+    st.session_state["solar_draft_large_population_active"] = False
+    st.session_state["solar_draft_area_m2_per_person"] = float(
+        config.get("panel_area_m2_per_person", 10.0) or 10.0
+    )
+    st.session_state["solar_draft_population_buffer_m"] = float(
+        config.get("population_buffer_m", 500.0) or 500.0
+    )
+    for group_id in _solar_visual_group_order():
+        st.session_state[_solar_visual_control_key("source", group_id)] = False
+        st.session_state[_solar_visual_control_key("buffer", group_id)] = False
+    for group_id, spec in SOLAR_FILTER_GROUP_SPECS.items():
+        st.session_state[str(spec["draft_active_key"])] = False
+        st.session_state[str(spec["draft_buffer_key"])] = float(
+            config.get(
+                str(spec["buffer_key"]),
+                spec.get("buffer_default_m", 0.0),
+            )
+            or 0.0
+        )
+        for layer_id in _solar_filter_layer_ids(group_id):
+            st.session_state[
+                _solar_filter_layer_control_key(group_id, layer_id)
+            ] = False
 
 
 def _solar_draft_config_from_session() -> dict[str, Any]:
@@ -4689,17 +4715,6 @@ def _render_solar_filter_control(group_id: str) -> list[str]:
                 )
                 if active and checked and bool(option["ready"]):
                     selected_layer_ids.append(layer_id)
-            st.caption("Kartvisning: valda lager används i analysen även när källa och buffert är dolda på kartan.")
-            st.checkbox(
-                "Visa källa i kartan",
-                key=_solar_visual_control_key("source", group_id),
-                disabled=not bool(options),
-            )
-            st.checkbox(
-                "Visa buffert i kartan",
-                key=_solar_visual_control_key("buffer", group_id),
-                disabled=not bool(options),
-            )
         if not options:
             st.caption(f"Inga lager hittades för {label.lower()} i acceptansregistret.")
         elif not active:
@@ -4717,6 +4732,111 @@ def _render_solar_filter_control(group_id: str) -> list[str]:
             help=str(spec.get("slider_help") or "0 m tar bort själva källgeometrin. Högre värden lägger till buffert."),
         )
     return selected_layer_ids
+
+
+def _render_solar_map_review_controls(
+    region: dict[str, Any],
+    config: dict[str, Any],
+) -> None:
+    """Render map-only solar controls for the currently applied filters."""
+    active_groups: list[tuple[str, str, list[str], bool]] = []
+    if bool(config.get("small_population_active", False)):
+        active_groups.append(
+            (
+                SOLAR_SMALL_POPULATION_VISUAL_GROUP_ID,
+                str(SOLAR_SMALL_SCALE_LABEL),
+                [],
+                True,
+            )
+        )
+    if bool(config.get("large_population_active", False)):
+        active_groups.append(
+            (
+                SOLAR_LARGE_POPULATION_VISUAL_GROUP_ID,
+                "Befolkning",
+                [],
+                True,
+            )
+        )
+    for filter_config in _solar_active_filter_configs(config):
+        group_id = str(filter_config.get("group_id", ""))
+        spec = SOLAR_FILTER_GROUP_SPECS.get(group_id, {})
+        active_groups.append(
+            (
+                group_id,
+                str(spec.get("label") or filter_config.get("label") or group_id),
+                [str(value) for value in filter_config.get("layer_ids", [])],
+                False,
+            )
+        )
+
+    active_group_ids = {group_id for group_id, _, _, _ in active_groups}
+    for group_id in _solar_visual_group_order():
+        if group_id not in active_group_ids:
+            st.session_state[_solar_visual_control_key("source", group_id)] = False
+            st.session_state[_solar_visual_control_key("buffer", group_id)] = False
+
+    if active_groups:
+        expanded = any(
+            bool(st.session_state.get(_solar_visual_control_key(kind, group_id), False))
+            for group_id in active_group_ids
+            for kind in ("source", "buffer")
+        )
+        with st.expander("Kartgranskning", expanded=expanded):
+            st.caption(
+                "Dessa val ändrar bara kartan. De påverkar inte analysen "
+                "eller resultattabellen."
+            )
+            for group_id, label, layer_ids, special_population in active_groups:
+                st.markdown(f"**{label}**")
+                st.toggle(
+                    "Visa källa i kartan",
+                    key=_solar_visual_control_key("source", group_id),
+                    on_change=_invalidate_workspace_cache,
+                    args=("solar source preview changed",),
+                )
+                buffer_supported = bool(special_population)
+                if not buffer_supported:
+                    st.session_state[_solar_visual_control_key(
+                        "buffer", group_id
+                    )] = False
+                st.toggle(
+                    "Visa buffert i kartan",
+                    key=_solar_visual_control_key("buffer", group_id),
+                    disabled=not buffer_supported,
+                    on_change=_invalidate_workspace_cache,
+                    args=("solar buffer preview changed",),
+                    help=(
+                        "Bufferten byggs från den tillämpade källan."
+                        if buffer_supported
+                        else "Buffertvisning aktiveras när gruppens "
+                        "vektorkontrakt har migrerats."
+                    ),
+                )
+
+    config[SOLAR_VISUAL_SOURCE_GROUPS_KEY] = [
+        group_id
+        for group_id in _solar_visual_group_order()
+        if group_id in active_group_ids
+        and bool(
+            st.session_state.get(
+                _solar_visual_control_key("source", group_id),
+                False,
+            )
+        )
+    ]
+    config[SOLAR_VISUAL_BUFFER_GROUPS_KEY] = [
+        group_id
+        for group_id in _solar_visual_group_order()
+        if group_id in active_group_ids
+        and bool(
+            st.session_state.get(
+                _solar_visual_control_key("buffer", group_id),
+                False,
+            )
+        )
+    ]
+    st.session_state[SOLAR_APPLIED_CONFIG_KEY] = dict(config)
 
 
 def _has_selected_wind_layers(layer_selection: dict[str, list[str]] | None = None) -> bool:
@@ -5817,6 +5937,45 @@ def _solar_filter_buffer_geojson(
     return geojson if isinstance(geojson, dict) else None
 
 
+@st.cache_data(show_spinner=False, max_entries=32)
+def _cached_vector_buffer_preview(
+    region_id: str,
+    layer_ids: tuple[str, ...],
+    buffer_m: float,
+) -> dict[str, Any]:
+    """Return a serializable manifest-resolved preview for map inspection."""
+    preview = vector_buffer_preview(
+        str(region_id),
+        tuple(str(layer_id) for layer_id in layer_ids),
+        float(buffer_m),
+    )
+    return {
+        "geojson": preview.geojson,
+        "layer_ids": list(preview.layer_ids),
+        "buffer_m": float(preview.buffer_m),
+        "semantics": str(preview.semantics),
+        "geometry_type": str(preview.geometry_type),
+        "source_feature_count": int(preview.source_feature_count),
+        "area_m2": float(preview.area_m2),
+    }
+
+
+def _vector_preview_supported(
+    region_id: str,
+    layer_ids: list[str] | tuple[str, ...] | None,
+) -> bool:
+    requested = {str(layer_id) for layer_id in (layer_ids or ())}
+    if not requested:
+        return False
+    supported = set(vector_preview_layer_ids(str(region_id)))
+    return requested.issubset(supported)
+
+
+def _safe_preview_error_code(error: Exception) -> str:
+    code = str(getattr(error, "code", "preview_failed") or "preview_failed")
+    return code if code.replace("_", "").isalnum() else "preview_failed"
+
+
 def _solar_protected_buffer_geojson(
     buffer_m: float,
     layer_ids: list[str] | tuple[str, ...] | None = None,
@@ -6110,6 +6269,7 @@ def _solar_filter_buffer_layer(
 
 
 def _wind_filter_buffer_layer(
+    region_id: str,
     group_id: str,
     buffer_m: float,
     layer_ids: list[str] | tuple[str, ...] | None = None,
@@ -6117,10 +6277,17 @@ def _wind_filter_buffer_layer(
     if str(group_id) not in SOLAR_FILTER_GROUP_SPECS:
         return None
     spec = _solar_filter_spec(group_id)
-    selected_layer_ids = _solar_available_filter_layer_ids(group_id, layer_ids)
-    if not selected_layer_ids:
+    selected_layer_ids = tuple(
+        sorted(str(layer_id) for layer_id in (layer_ids or ()))
+    )
+    if not _vector_preview_supported(str(region_id), selected_layer_ids):
         return None
-    buffer_geojson = _solar_filter_buffer_geojson(group_id, float(buffer_m or 0.0), selected_layer_ids)
+    preview = _cached_vector_buffer_preview(
+        str(region_id),
+        selected_layer_ids,
+        float(buffer_m or 0.0),
+    )
+    buffer_geojson = preview.get("geojson")
     if not buffer_geojson:
         return None
     features = buffer_geojson.get("features") if isinstance(buffer_geojson, dict) else None
@@ -6139,9 +6306,9 @@ def _wind_filter_buffer_layer(
     layer_name = f"Vind nära nät: {label}" if is_feasibility else f"Vindbuffert: {label}"
     measure_label = "Max avstånd" if is_feasibility else "Buffert"
     tooltip_body = (
-        f"Inom {float(buffer_m or 0.0):.0f} m"
+        f"Inom {float(buffer_m or 0.0):.0f} m · {float(preview['area_m2']) / 1_000_000.0:.1f} km²"
         if is_feasibility
-        else f"{float(buffer_m or 0.0):.0f} m buffert"
+        else f"{float(buffer_m or 0.0):.0f} m buffert · {float(preview['area_m2']) / 1_000_000.0:.1f} km²"
     )
     legend_label = (
         f"Inom maxavstånd till {label.lower()}"
@@ -6159,6 +6326,7 @@ def _wind_filter_buffer_layer(
         props["popup"] = (
             f"<strong>{layer_name}</strong><br>"
             f"{measure_label}: {float(buffer_m or 0.0):.0f} m<br>"
+            f"Buffertyta före klippning: {float(preview['area_m2']) / 1_000_000.0:.1f} km²<br>"
             f"{caption}"
         )
         props["tooltip_title"] = layer_name
@@ -8284,10 +8452,11 @@ def _social_acceptance_establishment_summary(
 
 
 def _default_wind_layer_selection() -> dict[str, list[str]]:
-    return {
-        group_id: list(DEFAULT_WIND_ESTABLISHMENT_LAYER_SELECTION.get(group_id, []))
-        for group_id in WIND_GROUP_LAYER_DEFAULTS
-    }
+    _, _, registry_meta = load_acceptance_registry()
+    region_id = str(registry_meta.get("_region_id") or "")
+    if not region_id:
+        raise ValueError("Acceptance registry has no active region id")
+    return normalize_group_layer_map(default_wind_layer_selection(region_id))
 
 
 def _selected_wind_layers() -> dict[str, list[str]]:
@@ -8426,31 +8595,6 @@ def _wind_group_has_ready_layers(group_id: str, group_layers: list[Any], availab
     return any(_wind_layer_is_ready(str(layer.id), availability) for layer in group_layers)
 
 
-def _default_wind_advanced_layer_ids(
-    group_id: str,
-    group_layers: list[Any],
-    availability: dict[str, dict[str, Any]],
-) -> list[str]:
-    layer_ids = [str(layer.id) for layer in group_layers]
-    preferred_ids = [layer_id for layer_id in DEFAULT_WIND_ADVANCED_LAYER_SELECTION.get(str(group_id), []) if layer_id in layer_ids]
-    ready_preferred = [layer_id for layer_id in preferred_ids if _wind_layer_is_ready(layer_id, availability)]
-    if ready_preferred:
-        return ready_preferred
-    return [layer_id for layer_id in layer_ids if _wind_layer_is_ready(layer_id, availability)][:1]
-
-
-def _seed_wind_advanced_layer_defaults(
-    group_id: str,
-    group_layers: list[Any],
-    availability: dict[str, dict[str, Any]],
-) -> None:
-    existing_keys = [_wind_control_key("layer", layer.id) for layer in group_layers]
-    if any(bool(st.session_state.get(key, False)) for key in existing_keys):
-        return
-    for layer_id in _default_wind_advanced_layer_ids(group_id, group_layers, availability):
-        st.session_state[_wind_control_key("layer", layer_id)] = True
-
-
 def _wind_blend_value(group_id: str) -> int:
     try:
         value = int(st.session_state.get(_wind_control_key("blend", group_id), 50))
@@ -8475,11 +8619,22 @@ def _wind_group_controls(
     groups, layers, registry_meta = load_acceptance_registry()
     region_id = str(registry_meta.get("_region_id") or "")
     availability = _wind_layer_status_lookup(registry_meta)
+    public_group_ids = set(transitional_public_legacy_group_ids(region_id))
     selected: dict[str, list[str]] = {group.id: [] for group in ordered_groups()}
 
     st.header(ui_text("groups_header", language))
+    current_selected_count = sum(
+        len(layer_ids) for layer_ids in _selected_wind_layers().values()
+    )
+    st.caption(
+        "Inga aktiva filter – hela analysdomänen visas."
+        if current_selected_count == 0
+        else f"{current_selected_count} aktiva filter."
+    )
     with st.form(f"{widget_prefix}_group_controls", clear_on_submit=False):
         for group in ordered_groups():
+            if str(group.id) not in public_group_ids:
+                continue
             (
                 analysis_min_m,
                 analysis_max_m,
@@ -8492,13 +8647,15 @@ def _wind_group_controls(
             is_reindeer_group = group.id == WIND_REINDEER_GROUP_ID
             group_layers = [item for item in ordered_layers() if item.group_id == group.id]
             group_available = _wind_group_has_ready_layers(group.id, group_layers, availability)
+            if not group_available:
+                continue
             if is_protected_group:
                 display_group_label = _protected_group_label()
             elif is_settlement_group:
                 display_group_label = _settlement_group_label()
             else:
                 display_group_label = group_label(group, language, group.label)
-            expander_label = display_group_label if group_available else f"{display_group_label} - ej tillgänglig"
+            expander_label = display_group_label
             with st.expander(expander_label, expanded=group.id in {"settlement", "transport", "electrical"}):
                 st.caption(group_interpretation(group, language, group.interpretation))
                 if not group_available:
@@ -8514,8 +8671,6 @@ def _wind_group_controls(
                 )
                 group_enabled = True
                 if is_protected_group or is_settlement_group or is_culture_group or is_reindeer_group:
-                    if group_available:
-                        _seed_wind_advanced_layer_defaults(group.id, group_layers, availability)
                     group_layer_keys = [
                         _wind_control_key("layer", layer.id)
                         for layer in group_layers
@@ -8582,20 +8737,9 @@ def _wind_group_controls(
                     for layer in advanced_layers:
                         render_layer_checkbox(layer)
                     if not advanced_layers and main_layers:
-                        st.caption("Del-lagren väljs ovanför. Avancerade inställningar styr bara kartvisningen.")
+                        st.caption("Del-lagren väljs ovanför.")
                     elif not advanced_layers:
                         st.caption("Inga del-lager är kopplade ännu.")
-                    st.caption("Kartvisning: valda lager används i analysen även när källa och buffert är dolda på kartan.")
-                    st.checkbox(
-                        "Visa källa i kartan",
-                        key=_wind_control_key("visual_source", group.id),
-                        disabled=not group_available,
-                    )
-                    st.checkbox(
-                        "Visa buffert i kartan",
-                        key=_wind_control_key("visual_buffer", group.id),
-                        disabled=not group_available,
-                    )
 
                 if not selected[group.id]:
                     if not group_available:
@@ -8605,6 +8749,21 @@ def _wind_group_controls(
                     else:
                         st.caption(ui_text("group_inactive", language))
         applied = st.form_submit_button(ui_text("apply_changes", language), type="primary", width="stretch")
+
+    reset = st.button(
+        "Nollställ filter",
+        key=f"{widget_prefix}_reset_filters",
+        icon=":material/filter_alt_off:",
+        width="stretch",
+    )
+    if reset:
+        _apply_wind_layer_selection_state({})
+        for group_id in WIND_GROUP_LAYER_DEFAULTS:
+            st.session_state[_wind_control_key("visual_source", group_id)] = False
+            st.session_state[_wind_control_key("visual_buffer", group_id)] = False
+        st.session_state[WIND_EMPTY_SELECTION_ACTIVE_KEY] = True
+        _invalidate_workspace_cache("wind filters reset")
+        st.rerun()
 
     normalized = normalize_group_layer_map(selected)
     st.session_state[WIND_LAYER_SELECTION_KEY] = normalized
@@ -8628,6 +8787,73 @@ def _wind_group_controls(
             )
         )
     return normalized, ui_params, bool(applied)
+
+
+def _render_wind_map_review_controls(
+    region: dict[str, Any],
+    layer_selection: dict[str, list[str]],
+) -> None:
+    """Render map-only controls outside the analysis form."""
+    selected = normalize_group_layer_map(layer_selection)
+    active_group_ids = [
+        group_id for group_id, layer_ids in selected.items() if layer_ids
+    ]
+    if not active_group_ids:
+        return
+
+    groups, _, _ = load_acceptance_registry()
+    region_id = str(region.get("region_id") or "")
+    expanded = any(
+        bool(st.session_state.get(_wind_control_key(kind, group_id), False))
+        for group_id in active_group_ids
+        for kind in ("visual_source", "visual_buffer")
+    )
+    with st.expander("Kartgranskning", expanded=expanded):
+        st.caption(
+            "Dessa val ändrar bara kartan. De påverkar inte analysen eller "
+            "resultattabellen."
+        )
+        for group_id in active_group_ids:
+            group = groups.get(group_id)
+            label = (
+                group_label(
+                    group,
+                    WIND_CONTROL_LANGUAGE,
+                    group.label,
+                )
+                if group is not None
+                else str(group_id)
+            )
+            selected_layer_ids = selected.get(group_id, [])
+            st.markdown(f"**{label}**")
+            st.toggle(
+                "Visa källa i kartan",
+                key=_wind_control_key("visual_source", group_id),
+                on_change=_invalidate_workspace_cache,
+                args=("wind source preview changed",),
+            )
+            buffer_supported = _vector_preview_supported(
+                region_id,
+                selected_layer_ids,
+            )
+            if not buffer_supported:
+                st.session_state[_wind_control_key(
+                    "visual_buffer", group_id
+                )] = False
+            st.toggle(
+                "Visa buffert i kartan",
+                key=_wind_control_key("visual_buffer", group_id),
+                disabled=not buffer_supported,
+                on_change=_invalidate_workspace_cache,
+                args=("wind buffer preview changed",),
+                help=(
+                    "Bufferten byggs direkt från de manifestdeklarerade "
+                    "vektorkällorna i regionens meterbaserade CRS."
+                    if buffer_supported
+                    else "Buffertvisning aktiveras när gruppens "
+                    "vektorkontrakt har migrerats."
+                ),
+            )
 
 
 def _wind_runtime_overlay_control() -> bool:
@@ -9429,9 +9655,42 @@ def _acceptance_series_for_group(
     return acceptance
 
 
+@st.cache_data(show_spinner=False, max_entries=12)
+def _cached_wind_analysis_domain_cell_areas_km2(
+    region_id: str,
+    resolution: int,
+) -> dict[str, float]:
+    return wind_analysis_domain_cell_areas_km2(
+        str(region_id),
+        int(resolution),
+    )
+
+
+def _wind_analysis_domain_cell_area_km2_series(
+    frame: pd.DataFrame,
+    region_id: str,
+    resolution: int,
+) -> pd.Series:
+    if "hex_id" not in frame.columns:
+        raise ValueError("An analysis-domain area lookup requires hex_id")
+    area_lookup = _cached_wind_analysis_domain_cell_areas_km2(
+        str(region_id),
+        int(resolution),
+    )
+    areas = frame["hex_id"].astype(str).map(area_lookup)
+    if areas.isna().any():
+        missing = frame.loc[areas.isna(), "hex_id"].astype(str).head(5).tolist()
+        raise ValueError(
+            "Analysis-domain cell area is missing for: " + ", ".join(missing)
+        )
+    return pd.to_numeric(areas, errors="raise").astype(float)
+
+
 def _finalize_fast_wind_share_frame(
     frame: pd.DataFrame,
     display_geometry_path: str,
+    region_id: str,
+    target_resolution: int,
     compute_core: bool = True,
 ) -> pd.DataFrame:
     work = frame.copy()
@@ -9439,8 +9698,16 @@ def _finalize_fast_wind_share_frame(
         lower=0.0,
         upper=100.0,
     )
+    work["display_area_km2"] = _wind_analysis_domain_cell_area_km2_series(
+        work,
+        region_id,
+        int(target_resolution),
+    )
     if "potential_area_km2" not in work.columns:
-        work["potential_area_km2"] = work["potential_area_share_pct"].div(100.0) * float(h3_hex_area_km2(WIND_RUNTIME_BASE_RESOLUTION))
+        work["potential_area_km2"] = (
+            work["potential_area_share_pct"].div(100.0)
+            * work["display_area_km2"]
+        )
     work["potential_area_km2"] = pd.to_numeric(work["potential_area_km2"], errors="coerce").fillna(0.0).clip(lower=0.0)
     work["potential_area_share"] = work["potential_area_share_pct"].div(100.0).round(4)
     class_specs = [_wind_share_class_spec(float(value)) for value in work["potential_area_share_pct"]]
@@ -9599,16 +9866,33 @@ def _wind_fast_distance_runtime_result(
         }
     if not active_groups:
         return None
-    hex_area = float(h3_hex_area_km2(int(target_resolution)))
-    frame["potential_area_km2"] = frame["potential_area_share_pct"].div(100.0) * hex_area
-    frame = _finalize_fast_wind_share_frame(frame, display_geometry_path, compute_core=False)
+    frame = _finalize_fast_wind_share_frame(
+        frame,
+        display_geometry_path,
+        region_id,
+        int(target_resolution),
+        compute_core=False,
+    )
+    total_model_area_km2 = float(frame["display_area_km2"].sum())
+    potential_model_area_km2 = float(frame["potential_area_km2"].sum())
     return {
         "cache_key": (
             f"{region_id}_{distance_conflict_semantics}_"
             f"fast_distance_r{int(target_resolution)}"
         ),
         "groups": group_meta,
-        "combined": {"land_share_pct": float(frame["potential_area_share_pct"].mean())},
+        "combined": {
+            "land_share_pct": float(frame["potential_area_share_pct"].mean()),
+            "area_weighted_land_share_pct": (
+                potential_model_area_km2
+                / max(total_model_area_km2, 1e-9)
+                * 100.0
+            ),
+            "model_area_km2": total_model_area_km2,
+            "potential_model_area_km2": potential_model_area_km2,
+            "area_basis": "display_area_m2",
+            "h3_resolution": int(target_resolution),
+        },
         "fast_distance_frame": frame,
         "fast_distance": True,
         "canonical_layer_ids": sorted(set(canonical_layer_ids)),
@@ -9713,6 +9997,7 @@ def _rollup_energy_area_proposal_frame(
     selected: pd.DataFrame,
     target_resolution: int,
     source_resolution: int,
+    target_cell_areas_km2: Mapping[str, float] | None = None,
 ) -> pd.DataFrame:
     if selected.empty or int(target_resolution) >= int(source_resolution):
         return selected.copy()
@@ -9777,10 +10062,30 @@ def _rollup_energy_area_proposal_frame(
         .reset_index(drop=True)
     )
     hex_area = h3_hex_area_km2(int(target_resolution))
+    target_area_capacity = _establishment_cell_area_km2_series(
+        rolled,
+        target_cell_areas_km2,
+        hex_area,
+        f"wind allocation R{target_resolution}",
+    )
+    if target_cell_areas_km2 is not None:
+        rolled["display_area_km2"] = target_area_capacity.astype(float)
+        rolled["potential_area_km2"] = pd.concat(
+            [rolled["potential_area_km2"].clip(lower=0.0), target_area_capacity],
+            axis=1,
+        ).min(axis=1)
+        rolled["allocated_area_km2"] = pd.concat(
+            [rolled["allocated_area_km2"].clip(lower=0.0), target_area_capacity],
+            axis=1,
+        ).min(axis=1)
     rolled["outside_et"] = rolled["outside_area_km2"].gt(rolled["inside_area_km2"])
     rolled["allocation_phase"] = rolled["outside_et"].map(lambda value: "Utanför LP" if value else "Inom LP")
-    rolled["potential_area_share_pct"] = (rolled["potential_area_km2"] / max(hex_area, 1e-9) * 100.0).clip(lower=0.0, upper=100.0)
-    rolled["allocated_hex_share_pct"] = (rolled["allocated_area_km2"] / max(hex_area, 1e-9) * 100.0).clip(lower=0.0, upper=100.0)
+    rolled["potential_area_share_pct"] = (
+        rolled["potential_area_km2"] / target_area_capacity * 100.0
+    ).clip(lower=0.0, upper=100.0)
+    rolled["allocated_hex_share_pct"] = (
+        rolled["allocated_area_km2"] / target_area_capacity * 100.0
+    ).clip(lower=0.0, upper=100.0)
     rolled["remaining_area_after_km2"] = 0.0
     rolled["allocated_gwh"] = rolled["allocated_twh"] * 1000.0
     return rolled
@@ -9799,6 +10104,7 @@ def _establishment_source_frame(
     technology: str,
     target_resolution: int,
     source_resolution: int,
+    wind_target_cell_areas_km2: Mapping[str, float] | None = None,
 ) -> pd.DataFrame:
     columns = [
         "hex_id",
@@ -9826,7 +10132,12 @@ def _establishment_source_frame(
         return pd.DataFrame(columns=columns)
 
     if technology == "wind":
-        rolled = _rollup_energy_area_proposal_frame(selected, int(target_resolution), int(source_resolution))
+        rolled = _rollup_energy_area_proposal_frame(
+            selected,
+            int(target_resolution),
+            int(source_resolution),
+            target_cell_areas_km2=wind_target_cell_areas_km2,
+        )
         score_column = "potential_area_share_pct"
     else:
         rolled = _rollup_solar_establishment_frame(selected, int(target_resolution), int(source_resolution))
@@ -9886,12 +10197,48 @@ def _establishment_source_frame(
     return work.reindex(columns=columns)
 
 
+def _establishment_cell_area_km2_series(
+    frame: pd.DataFrame,
+    cell_areas_km2: Mapping[str, float] | None,
+    fallback_area_km2: float,
+    contract_label: str,
+) -> pd.Series:
+    if cell_areas_km2 is None:
+        fallback = float(fallback_area_km2)
+        if not math.isfinite(fallback) or fallback <= 0.0:
+            raise ValueError(f"{contract_label} fallback cell area must be positive")
+        return pd.Series(fallback, index=frame.index, dtype="float64")
+    if "hex_id" not in frame.columns:
+        raise ValueError(f"{contract_label} cell-area lookup requires hex_id")
+    values = pd.to_numeric(
+        frame["hex_id"].astype(str).map(cell_areas_km2),
+        errors="coerce",
+    )
+    valid = values.notna() & values.map(
+        lambda value: math.isfinite(float(value)) and float(value) > 0.0
+    )
+    if not bool(valid.all()):
+        missing = (
+            frame.loc[~valid, "hex_id"]
+            .astype(str)
+            .head(5)
+            .tolist()
+        )
+        raise ValueError(
+            f"{contract_label} has no positive finite cell area for: "
+            + ", ".join(missing)
+        )
+    return values.astype(float)
+
+
 def _potential_establishment_source_frame(
     source: pd.DataFrame,
     technology: str,
     target_resolution: int,
     source_resolution: int,
     coarse_filter_intersection_blocks: bool = False,
+    source_cell_areas_km2: Mapping[str, float] | None = None,
+    target_cell_areas_km2: Mapping[str, float] | None = None,
 ) -> pd.DataFrame:
     columns = [
         "hex_id",
@@ -9899,6 +10246,8 @@ def _potential_establishment_source_frame(
         f"{technology}_potential_score",
         f"{technology}_potential_area_km2",
     ]
+    if technology == "wind":
+        columns.append("wind_model_area_km2")
     if source.empty or "hex_id" not in source.columns:
         return pd.DataFrame(columns=columns)
 
@@ -9906,18 +10255,39 @@ def _potential_establishment_source_frame(
     work["hex_id"] = work["hex_id"].astype(str)
     source_hex_area = float(h3_hex_area_km2(int(source_resolution)))
     target_hex_area = float(h3_hex_area_km2(int(target_resolution)))
+    source_area_capacity = _establishment_cell_area_km2_series(
+        work,
+        source_cell_areas_km2 if technology == "wind" else None,
+        source_hex_area,
+        f"{technology} R{source_resolution}",
+    )
 
     if technology == "wind":
         score_col = "potential_area_share_pct" if "potential_area_share_pct" in work.columns else "wind_score"
         if "potential_area_km2" in work.columns:
-            work["potential_area_km2"] = pd.to_numeric(work["potential_area_km2"], errors="coerce").fillna(0.0).clip(lower=0.0)
+            potential_area = pd.to_numeric(
+                work["potential_area_km2"],
+                errors="coerce",
+            ).fillna(0.0).clip(lower=0.0)
+            work["potential_area_km2"] = pd.concat(
+                [potential_area, source_area_capacity],
+                axis=1,
+            ).min(axis=1)
             if score_col in work.columns:
                 work["potential_score"] = pd.to_numeric(work[score_col], errors="coerce").fillna(0.0).clip(lower=0.0, upper=100.0)
             else:
-                work["potential_score"] = (work["potential_area_km2"] / max(source_hex_area, 1e-9) * 100.0).clip(lower=0.0, upper=100.0)
+                work["potential_score"] = (
+                    work["potential_area_km2"]
+                    / source_area_capacity
+                    * 100.0
+                ).clip(lower=0.0, upper=100.0)
         else:
             work["potential_score"] = pd.to_numeric(work.get(score_col), errors="coerce").fillna(0.0).clip(lower=0.0, upper=100.0)
-            work["potential_area_km2"] = work["potential_score"] / 100.0 * source_hex_area
+            work["potential_area_km2"] = (
+                work["potential_score"]
+                / 100.0
+                * source_area_capacity
+            )
         if "wind_hard_exclusion_intersects" not in work.columns:
             work["wind_hard_exclusion_intersects"] = False
         work["wind_hard_exclusion_intersects"] = work["wind_hard_exclusion_intersects"].fillna(False).astype(bool)
@@ -9966,11 +10336,37 @@ def _potential_establishment_source_frame(
             .sort_values("hex_id")
             .reset_index(drop=True)
         )
-        work["potential_area_km2"] = work["potential_area_km2"].clip(lower=0.0, upper=target_hex_area)
-        work["potential_score"] = (work["potential_area_km2"] / max(target_hex_area, 1e-9) * 100.0).clip(lower=0.0, upper=100.0)
+        target_area_capacity = _establishment_cell_area_km2_series(
+            work,
+            target_cell_areas_km2 if technology == "wind" else None,
+            target_hex_area,
+            f"{technology} R{target_resolution}",
+        )
+        work["potential_area_km2"] = pd.concat(
+            [work["potential_area_km2"].clip(lower=0.0), target_area_capacity],
+            axis=1,
+        ).min(axis=1)
+        work["potential_score"] = (
+            work["potential_area_km2"]
+            / target_area_capacity
+            * 100.0
+        ).clip(lower=0.0, upper=100.0)
     else:
-        work["potential_area_km2"] = work["potential_area_km2"].clip(lower=0.0, upper=target_hex_area)
-        work["potential_score"] = (work["potential_area_km2"] / max(target_hex_area, 1e-9) * 100.0).clip(lower=0.0, upper=100.0)
+        target_area_capacity = _establishment_cell_area_km2_series(
+            work,
+            target_cell_areas_km2 if technology == "wind" else None,
+            target_hex_area,
+            f"{technology} R{target_resolution}",
+        )
+        work["potential_area_km2"] = pd.concat(
+            [work["potential_area_km2"].clip(lower=0.0), target_area_capacity],
+            axis=1,
+        ).min(axis=1)
+        work["potential_score"] = (
+            work["potential_area_km2"]
+            / target_area_capacity
+            * 100.0
+        ).clip(lower=0.0, upper=100.0)
 
     out = work[["hex_id", "potential_score", "potential_area_km2"]].copy()
     suitable = out["potential_area_km2"].gt(1e-9)
@@ -9988,6 +10384,8 @@ def _potential_establishment_source_frame(
     out[f"{technology}_suitable"] = suitable
     out[f"{technology}_potential_score"] = out["potential_score"].round(1)
     out[f"{technology}_potential_area_km2"] = out["potential_area_km2"].clip(lower=0.0)
+    if technology == "wind":
+        out["wind_model_area_km2"] = target_area_capacity.astype(float)
     return out.reindex(columns=columns)
 
 
@@ -10043,7 +10441,19 @@ def _combined_establishment_frame(
     if base.empty:
         return base
 
-    wind = _establishment_source_frame(wind_selected, "wind", int(target_resolution), int(source_resolution))
+    wind_target_cell_areas: Mapping[str, float] | None = None
+    if not wind_selected.empty:
+        wind_target_cell_areas = _cached_wind_analysis_domain_cell_areas_km2(
+            str(region.get("region_id") or ""),
+            int(target_resolution),
+        )
+    wind = _establishment_source_frame(
+        wind_selected,
+        "wind",
+        int(target_resolution),
+        int(source_resolution),
+        wind_target_cell_areas_km2=wind_target_cell_areas,
+    )
     solar = _establishment_source_frame(solar_selected, "solar", int(target_resolution), int(source_resolution))
     if not wind.empty:
         base = base.merge(wind, on="hex_id", how="left")
@@ -10110,11 +10520,12 @@ def _combined_establishment_frame(
     return base
 
 
-def _trondelag_rollup_potential_establishment_frame(
+def _rollup_potential_establishment_frame(
     region: dict[str, Any],
     source_frame: pd.DataFrame,
     target_resolution: int,
     source_resolution: int,
+    wind_target_cell_areas_km2: Mapping[str, float],
 ) -> pd.DataFrame:
     display_geometry_path = _h3_display_geometry_path(region, int(target_resolution))
     if not display_geometry_path:
@@ -10136,11 +10547,29 @@ def _trondelag_rollup_potential_establishment_frame(
         return _apply_establishment_style_columns(base)
 
     work = source_frame.copy()
+    if "wind_model_area_km2" not in work.columns:
+        raise ValueError("Wind establishment rollup requires source model areas")
+    child_model_area_km2 = pd.to_numeric(
+        work["wind_model_area_km2"],
+        errors="coerce",
+    )
+    child_model_area_valid = child_model_area_km2.notna() & child_model_area_km2.map(
+        lambda value: math.isfinite(float(value)) and float(value) > 0.0
+    )
+    if not bool(child_model_area_valid.all()):
+        raise ValueError(
+            "Wind establishment rollup source model areas must be positive and finite"
+        )
     work["hex_id"] = work["hex_id"].astype(str).map(lambda value: str(h3.cell_to_parent(str(value), int(target_resolution))))
-    child_hex_area_km2 = float(h3_hex_area_km2(int(source_resolution)))
     target_hex_area_km2 = float(h3_hex_area_km2(int(target_resolution)))
     for class_id in ["wind_and_solar", "wind_only", "solar_only", "not_suitable"]:
-        work[f"rollup_area_{class_id}"] = work.get("establishment_class", "").astype(str).eq(class_id).astype(float) * child_hex_area_km2
+        work[f"rollup_area_{class_id}"] = (
+            work.get("establishment_class", "")
+            .astype(str)
+            .eq(class_id)
+            .astype(float)
+            * child_model_area_km2
+        )
 
     agg_spec: dict[str, Any] = {
         "rollup_area_wind_and_solar": ("rollup_area_wind_and_solar", "sum"),
@@ -10191,8 +10620,27 @@ def _trondelag_rollup_potential_establishment_frame(
         area_col = f"{technology}_potential_area_km2"
         if area_col not in base.columns:
             base[area_col] = 0.0
-        base[area_col] = pd.to_numeric(base[area_col], errors="coerce").fillna(0.0).clip(lower=0.0, upper=target_hex_area_km2)
-        base[f"{technology}_potential_score"] = (base[area_col] / max(target_hex_area_km2, 1e-9) * 100.0).clip(lower=0.0, upper=100.0).round(1)
+        potential_area = pd.to_numeric(
+            base[area_col],
+            errors="coerce",
+        ).fillna(0.0).clip(lower=0.0)
+        target_area_capacity = _establishment_cell_area_km2_series(
+            base,
+            wind_target_cell_areas_km2 if technology == "wind" else None,
+            target_hex_area_km2,
+            f"{technology} R{target_resolution}",
+        )
+        base[area_col] = pd.concat(
+            [potential_area, target_area_capacity],
+            axis=1,
+        ).min(axis=1)
+        if technology == "wind":
+            base["wind_model_area_km2"] = target_area_capacity.astype(float)
+        base[f"{technology}_potential_score"] = (
+            base[area_col]
+            / target_area_capacity
+            * 100.0
+        ).clip(lower=0.0, upper=100.0).round(1)
         for column in [
             f"{technology}_rank",
             f"{technology}_allocated_area_km2",
@@ -10242,10 +10690,19 @@ def _combined_potential_establishment_frame(
     base = pd.DataFrame({"hex_id": sorted(str(hex_id) for hex_id in display_geometries)})
     if base.empty:
         return base
-    if (
-        str(region.get("region_id", "") or "").lower() == "trondelag"
-        and int(target_resolution) < int(source_resolution)
-    ):
+    region_id = str(region.get("region_id") or "")
+    wind_source_cell_areas: Mapping[str, float] | None = None
+    wind_target_cell_areas: Mapping[str, float] | None = None
+    if not wind_potential.empty:
+        wind_source_cell_areas = _cached_wind_analysis_domain_cell_areas_km2(
+            region_id,
+            int(source_resolution),
+        )
+        wind_target_cell_areas = _cached_wind_analysis_domain_cell_areas_km2(
+            region_id,
+            int(target_resolution),
+        )
+    if not wind_potential.empty and int(target_resolution) < int(source_resolution):
         source_frame = _combined_potential_establishment_frame(
             region,
             wind_potential,
@@ -10255,14 +10712,24 @@ def _combined_potential_establishment_frame(
             int(source_resolution),
             int(source_resolution),
         )
-        return _trondelag_rollup_potential_establishment_frame(
+        if wind_target_cell_areas is None:
+            raise ValueError("Wind rollup requires manifest-declared target areas")
+        return _rollup_potential_establishment_frame(
             region,
             source_frame,
             int(target_resolution),
             int(source_resolution),
+            wind_target_cell_areas,
         )
 
-    wind = _potential_establishment_source_frame(wind_potential, "wind", int(target_resolution), int(source_resolution))
+    wind = _potential_establishment_source_frame(
+        wind_potential,
+        "wind",
+        int(target_resolution),
+        int(source_resolution),
+        source_cell_areas_km2=wind_source_cell_areas,
+        target_cell_areas_km2=wind_target_cell_areas,
+    )
     solar_filter_intersection_blocks = (
         str(region.get("region_id", "") or "").lower() == "trondelag"
         and int(target_resolution) <= 7
@@ -11255,6 +11722,7 @@ def _expand_wind_area_outside_et(
     display_geometry_path: str | None,
     hex_area_km2: float,
     avoid_hex_ids: set[str] | None = None,
+    cell_area_column: str | None = None,
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     if source_frame.empty or not display_geometry_path or hex_area_km2 <= 0:
         return selected_frame, proposal_stats
@@ -11274,6 +11742,29 @@ def _expand_wind_area_outside_et(
 
     work = source_frame.copy()
     work["hex_id"] = work["hex_id"].astype(str)
+    if cell_area_column is not None:
+        if cell_area_column not in work.columns:
+            raise ValueError(
+                f"Wind expansion requires cell-area column: {cell_area_column}"
+            )
+        expansion_cell_areas = pd.to_numeric(
+            work[cell_area_column],
+            errors="coerce",
+        )
+        expansion_areas_valid = (
+            expansion_cell_areas.notna()
+            & expansion_cell_areas.map(
+                lambda value: math.isfinite(float(value)) and float(value) > 0.0
+            )
+        )
+        if not bool(expansion_areas_valid.all()):
+            raise ValueError(
+                f"Wind expansion cell areas in {cell_area_column} must be "
+                "positive and finite"
+            )
+        work["allocation_cell_area_km2"] = expansion_cell_areas.astype(float)
+    else:
+        work["allocation_cell_area_km2"] = float(hex_area_km2)
     work["potential_area_share_pct"] = pd.to_numeric(work.get("potential_area_share_pct"), errors="coerce").fillna(0.0)
     work["core_score"] = pd.to_numeric(work.get("core_score"), errors="coerce").fillna(0.0)
     work["zone_size"] = pd.to_numeric(work.get("zone_size"), errors="coerce").fillna(0).astype(int)
@@ -11319,7 +11810,8 @@ def _expand_wind_area_outside_et(
     start_rank = int(len(selected_frame)) + 1
     outside_rows: list[dict[str, Any]] = []
     for offset, row in enumerate(outside.itertuples(index=False), start=0):
-        allocated_area = min(float(hex_area_km2), max(0.0, remaining_area))
+        cell_area_km2 = float(getattr(row, "allocation_cell_area_km2"))
+        allocated_area = min(cell_area_km2, max(0.0, remaining_area))
         if allocated_area <= 0:
             break
         record = row._asdict()
@@ -11329,7 +11821,9 @@ def _expand_wind_area_outside_et(
         record["allocation_phase"] = "Utanför LP"
         record["potential_area_km2"] = 0.0
         record["allocated_area_km2"] = allocated_area
-        record["allocated_hex_share_pct"] = (allocated_area / max(float(hex_area_km2), 1e-9)) * 100.0
+        record["allocated_hex_share_pct"] = (
+            allocated_area / cell_area_km2 * 100.0
+        )
         remaining_area = max(0.0, remaining_area - allocated_area)
         record["remaining_area_after_km2"] = remaining_area
         outside_rows.append(record)
@@ -11353,7 +11847,9 @@ def _expand_wind_area_outside_et(
             "outside_selected_area_km2": outside_area,
             "outside_hex_count": int(len(outside_frame)),
             "outside_candidate_hex": int(len(outside)),
-            "outside_candidate_area_km2": float(len(outside) * float(hex_area_km2)),
+            "outside_candidate_area_km2": float(
+                outside["allocation_cell_area_km2"].sum()
+            ),
             "max_expansion_ring": int(outside_frame["expansion_ring"].max()),
             "outside_reserved_candidate_hex": int(outside["reserved_by_other_technology"].sum()),
             "outside_selected_reserved_hex": int(outside_frame["reserved_by_other_technology"].sum()),
@@ -11392,6 +11888,7 @@ def _wind_polygon_preview_state(
     visual_options: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     runtime_error: str | None = None
+    preview_errors: list[str] = []
     selected = normalize_group_layer_map(layer_selection)
     normalized_visual_options = _normalize_wind_visual_options(visual_options)
     source_group_ids = normalized_visual_options["source_group_ids"]
@@ -11445,7 +11942,8 @@ def _wind_polygon_preview_state(
             include_group_ids=source_group_ids,
         ):
             _append_unique_layer(layers, _layer_visible_by_default(source_layer))
-    if bool(runtime_result.get("fast_distance")):
+    canonical_buffer_group_ids: set[str] = set()
+    if buffer_group_ids:
         groups, _, _ = load_acceptance_registry()
         for group_id in _wind_active_group_ids(ui_params, layer_selection=selected):
             if group_id not in buffer_group_ids:
@@ -11455,16 +11953,34 @@ def _wind_polygon_preview_state(
             group = groups.get(group_id)
             if group is None:
                 continue
+            selected_layer_ids = selected.get(group_id, [])
+            if not _vector_preview_supported(
+                str(region.get("region_id", "")),
+                selected_layer_ids,
+            ):
+                continue
             threshold_key = GROUP_PARAM_MAP.get(group_id)
             threshold_m = float(ui_params.get(threshold_key, group.analysis_default_m)) if threshold_key else float(group.analysis_default_m)
+            try:
+                buffer_layer = _wind_filter_buffer_layer(
+                    str(region.get("region_id", "")),
+                    group_id,
+                    threshold_m,
+                    selected_layer_ids,
+                )
+            except Exception as exc:
+                preview_errors.append(
+                    f"Buffertvisning för {group_id} kunde inte byggas "
+                    f"({_safe_preview_error_code(exc)}). Kontrollera "
+                    "regionens manifest och datakälla."
+                )
+                continue
+            if buffer_layer is not None:
+                canonical_buffer_group_ids.add(str(group_id))
             _append_unique_layer(
                 layers,
                 _layer_visible_by_default(
-                    _wind_filter_buffer_layer(
-                        group_id,
-                        threshold_m,
-                        selected.get(group_id, []),
-                    )
+                    buffer_layer
                 ),
             )
     if (
@@ -11491,12 +12007,17 @@ def _wind_polygon_preview_state(
         if population_buffer_layer is not None:
             _append_unique_layer(layers, _layer_visible_by_default(population_buffer_layer))
     if not runtime_error and buffer_group_ids:
-        for buffer_layer in _wind_polygon_group_layers(runtime_result, include_group_ids=buffer_group_ids):
+        legacy_buffer_group_ids = set(buffer_group_ids) - canonical_buffer_group_ids
+        for buffer_layer in _wind_polygon_group_layers(
+            runtime_result,
+            include_group_ids=legacy_buffer_group_ids,
+        ):
             _append_unique_layer(layers, _layer_visible_by_default(buffer_layer))
 
     return {
         "layers": layers,
         "runtime_error": runtime_error,
+        "preview_errors": preview_errors,
         "runtime_result": runtime_result,
         "active_source_count": sum(len(layer_ids) for layer_ids in selected.values()),
         "active_group_count": len(runtime_result.get("groups") or {}) or sum(1 for layer_ids in selected.values() if layer_ids),
@@ -11533,10 +12054,14 @@ def _unfiltered_wind_summary_frame(
     if frame.empty:
         return pd.DataFrame()
 
-    hex_area = float(h3_hex_area_km2(int(target_resolution)))
     frame["potential_area_share_pct"] = 100.0
     frame["potential_area_share"] = 1.0
-    frame["potential_area_km2"] = hex_area
+    frame["display_area_km2"] = _wind_analysis_domain_cell_area_km2_series(
+        frame,
+        str(region.get("region_id") or ""),
+        int(target_resolution),
+    )
+    frame["potential_area_km2"] = frame["display_area_km2"]
     class_spec = _wind_share_class_spec(100.0)
     frame["share_class_id"] = str(class_spec["id"])
     frame["share_class_label"] = str(class_spec["label"])
@@ -11599,14 +12124,31 @@ def _wind_polygon_summary_frame(
             ]
         )
 
+    frame["display_area_km2"] = _wind_analysis_domain_cell_area_km2_series(
+        frame,
+        str(region.get("region_id") or ""),
+        int(target_resolution),
+    )
     if "potential_area_km2" not in frame.columns:
-        hex_area = float(h3_hex_area_km2(int(target_resolution)))
-        frame["potential_area_km2"] = pd.to_numeric(frame["potential_area_share_pct"], errors="coerce").fillna(0.0).clip(
-            lower=0.0,
-            upper=100.0,
-        ).div(100.0) * hex_area
+        frame["potential_area_km2"] = (
+            pd.to_numeric(
+                frame["potential_area_share_pct"],
+                errors="coerce",
+            )
+            .fillna(0.0)
+            .clip(lower=0.0, upper=100.0)
+            .div(100.0)
+            * frame["display_area_km2"]
+        )
     else:
-        frame["potential_area_km2"] = pd.to_numeric(frame["potential_area_km2"], errors="coerce").fillna(0.0).clip(lower=0.0)
+        potential_area = pd.to_numeric(
+            frame["potential_area_km2"],
+            errors="coerce",
+        ).fillna(0.0).clip(lower=0.0)
+        frame["potential_area_km2"] = pd.concat(
+            [potential_area, frame["display_area_km2"]],
+            axis=1,
+        ).min(axis=1)
     frame["wind_score"] = frame["potential_area_share_pct"].astype(float)
     frame["wind_class"] = frame["share_class_id"].astype(str)
     frame["wind_class_label"] = frame["share_class_label"].astype(str)
@@ -12027,6 +12569,16 @@ def _render_establishment_focus(energy_model_state: dict[str, Any], geography_re
     _render_establishment_heading()
     st.caption(
         "Tabellen visar hur mycket teknikspecifik yta scenariot kräver, hur mycket möjlig teknikpotential som finns efter filter, och om något behöver lösas utanför potentialen."
+    )
+    model_resolution = energy_model_state.get(
+        "analysis_h3_resolution",
+        h3_resolution,
+    )
+    st.caption(
+        f"Vindytan är H3-baserad modellarea på R{model_resolution} och "
+        "vägs med analysdomänens deklarerade cellarea. Solytan följer ännu "
+        "V2:s modellarea. Värdena är därför inte geodetiskt exakt "
+        "polygonmätt tillgänglig landarea."
     )
     _render_impact_change_table(impact_rows)
 
@@ -12991,6 +13543,14 @@ def _unified_workspace_tab(
     solar_large_protected_layer_ids = list(applied_solar_config.get("large_protected_layer_ids", []))
     solar_large_protected_active = bool(solar_large_protected_layer_ids)
     solar_large_filter_configs = _solar_active_filter_configs(applied_solar_config)
+    active_solar_filter_count = int(solar_large_population_active) + len(
+        solar_large_filter_configs
+    )
+    public_solar_filter_group_ids = set(
+        transitional_public_legacy_group_ids(
+            str(region.get("region_id") or "")
+        )
+    )
     show_user_wind = _wind_potential_is_active(_selected_wind_layers())
     lablab_landscape_manifest = _pdf_landscape_manifest(landscape_manifest)
     pdf_landscape_available = lablab_landscape_manifest is not None
@@ -13058,7 +13618,14 @@ def _unified_workspace_tab(
 
             with st.expander("Avancerade inställningar", expanded=False):
                 h3_resolution, zoom_family_enabled, opacity, preserve_map_view, map_reset_token = _map_panel_controls(region, "combined", st)
-            analysis_h3_resolution = _analysis_h3_resolution(region)
+            analysis_h3_resolution = _workspace_analysis_h3_resolution(region)
+            wind_analysis_h3_resolution = _wind_analysis_h3_resolution(region)
+            if wind_analysis_h3_resolution != analysis_h3_resolution:
+                raise ValueError(
+                    "The wind analysis domain and the transitional combined "
+                    "workspace must use the same H3 resolution until solar "
+                    "has its own canonical analysis contract"
+                )
             analysis_hex_area_km2 = float(h3_hex_area_km2(analysis_h3_resolution))
 
             with st.expander(_t(WIND_LANDSCAPE_POTENTIAL_LABEL), expanded=False):
@@ -13066,9 +13633,14 @@ def _unified_workspace_tab(
                 show_user_wind = _wind_potential_is_active(wind_selected_layers)
                 if _wind_empty_selection_is_active(wind_selected_layers):
                     st.caption("Inga vindfilter är valda: ofiltrerad vindpotential används som startläge.")
+                _render_wind_map_review_controls(region, wind_selected_layers)
 
             with st.expander(_t(SOLAR_LANDSCAPE_POTENTIAL_LABEL), expanded=active_solar_count > 0):
-                st.caption(f"Aktiva solgrupper: {active_solar_count}")
+                st.caption(
+                    "Inga aktiva filter – hela analysdomänen visas."
+                    if active_solar_filter_count == 0
+                    else f"{active_solar_filter_count} aktiva solfilter."
+                )
                 with st.form("solar_landscape_potential_controls_unified", clear_on_submit=False):
                     st.caption(
                         f"{SOLAR_LANDSCAPE_POTENTIAL_LABEL} är en samlad solmodell med grupper. "
@@ -13105,17 +13677,7 @@ def _unified_workspace_tab(
                             key="solar_draft_area_m2_per_person",
                             help=_solar_v1_formula_text(region, float(st.session_state.get("solar_draft_area_m2_per_person", 10.0) or 10.0)),
                         )
-                        with st.expander("Avancerade inställningar", expanded=False):
-                            st.caption("Kartvisning: befolkningsunderlaget används i analysen även när källa och buffert är dolda på kartan.")
-                            st.checkbox(
-                                "Visa källa i kartan",
-                                key=_solar_visual_control_key("source", SOLAR_SMALL_POPULATION_VISUAL_GROUP_ID),
-                            )
-                            st.checkbox(
-                                "Visa buffert i kartan",
-                                key=_solar_visual_control_key("buffer", SOLAR_SMALL_POPULATION_VISUAL_GROUP_ID),
-                            )
-                        st.caption("Kartlager: schablonhexar och gemensam potentiell etableringsyta. Källa och buffert kan visas via avancerade inställningar.")
+                        st.caption("Kartlager: schablonhexar och gemensam potentiell etableringsyta.")
                     with st.expander(_t(SOLAR_LARGE_SCALE_LABEL), expanded=False):
                         with st.expander(_t("Befolkning"), expanded=False):
                             draft_large_population_active = st.checkbox(
@@ -13131,16 +13693,6 @@ def _unified_workspace_tab(
                                 help="Totalt avstånd från valt befolkningsunderlag. För Trøndelag är källan 250 m befolkningsrutor från centroider.",
                             )
                             st.caption("Avståndet är totalt från befolkningsunderlaget. Trøndelag använder 250 m befolkningsrutor från centroider som proxy.")
-                            with st.expander("Avancerade inställningar", expanded=False):
-                                st.caption("Kartvisning: befolkningsunderlaget används i analysen även när källa och buffert är dolda på kartan.")
-                                st.checkbox(
-                                    "Visa källa i kartan",
-                                    key=_solar_visual_control_key("source", SOLAR_LARGE_POPULATION_VISUAL_GROUP_ID),
-                                )
-                                st.checkbox(
-                                    "Visa buffert i kartan",
-                                    key=_solar_visual_control_key("buffer", SOLAR_LARGE_POPULATION_VISUAL_GROUP_ID),
-                                )
                         for solar_filter_group_id in (
                             SOLAR_PROTECTED_GROUP_ID,
                             SOLAR_LAND_USE_GROUP_ID,
@@ -13151,13 +13703,26 @@ def _unified_workspace_tab(
                             SOLAR_COASTAL_GROUP_ID,
                         ):
                             if (
-                                solar_filter_group_id != SOLAR_REINDEER_GROUP_ID
-                                or _solar_filter_layer_options(solar_filter_group_id)
+                                solar_filter_group_id
+                                in public_solar_filter_group_ids
+                                and _solar_filter_layer_options(
+                                    solar_filter_group_id
+                                )
                             ):
                                 _render_solar_filter_control(solar_filter_group_id)
                         st.caption("Storskalig sol använder hela landskapsunderlaget som kandidatbas. Valda skydds-/avståndsfilter drar bort yta, medan nära nät begränsar ytan till platser inom valt maxavstånd.")
                         st.caption("Ingen bonitets- eller jordklassvariabel finns i nuvarande solunderlag; jordart/prekvartär beskriver geologi, inte jordbruksmarkens kvalitet.")
                     apply_solar = st.form_submit_button(_t("Använd ändringar"), type="primary", width="stretch")
+                reset_solar = st.button(
+                    "Nollställ solfilter",
+                    key="solar_landscape_potential_reset_filters",
+                    icon=":material/filter_alt_off:",
+                    width="stretch",
+                )
+                if reset_solar:
+                    _reset_solar_filter_state()
+                    _invalidate_workspace_cache("solar filters reset")
+                    st.rerun()
                 if apply_solar:
                     region_id = str(region.get("region_id", "region"))
                     scenario_manifest = scenario_state.get("manifest") or {}
@@ -13177,6 +13742,7 @@ def _unified_workspace_tab(
                     st.session_state[SOLAR_APPLIED_CONFIG_KEY] = _solar_draft_config_from_session()
                     solar_controls_applied = True
                     st.rerun()
+                _render_solar_map_review_controls(region, applied_solar_config)
 
         with left_panel.expander(_t("Energimodellering"), expanded=False):
             st.caption(_t("Levereras av EML"))
@@ -13306,7 +13872,6 @@ def _unified_workspace_tab(
         solar_large_filter_configs,
         wind_selected_layers,
         wind_ui_params,
-        wind_visual_options,
         energy_model_state,
     )
     if _ui_only_rerun_requested():
@@ -13437,7 +14002,22 @@ def _unified_workspace_tab(
                 for source_layer in _solar_filter_source_layers(group_id, layer_ids):
                     _append_unique_layer(layers, _layer_visible_by_default(source_layer))
             if _solar_visual_enabled(applied_solar_config, "buffer", group_id):
-                _append_unique_layer(layers, _layer_visible_by_default(_solar_filter_buffer_layer(group_id, buffer_m, layer_ids)))
+                try:
+                    solar_buffer_layer = _solar_filter_buffer_layer(
+                        group_id,
+                        buffer_m,
+                        layer_ids,
+                    )
+                except Exception as exc:
+                    unified_notes.append(
+                        f"Buffertvisning för {group_id} kunde inte byggas "
+                        f"({_safe_preview_error_code(exc)})."
+                    )
+                    solar_buffer_layer = None
+                _append_unique_layer(
+                    layers,
+                    _layer_visible_by_default(solar_buffer_layer),
+                )
         if solar_unfiltered_land_active:
             unified_notes.append(
                 f"Startläge: {SOLAR_LARGE_SCALE_LABEL} är ofiltrerad över kartans landskapsunderlag för att visa gemensam sol- och vindpotential."
@@ -13629,6 +14209,10 @@ def _unified_workspace_tab(
             list(custom_wind_preview_state["layers"]),
         )
         layers.extend(wind_preview_layers)
+        unified_notes.extend(
+            str(message)
+            for message in custom_wind_preview_state.get("preview_errors", [])
+        )
         if custom_wind_preview_state["runtime_error"]:
             unified_notes.append(f"Vindruntime kunde inte köras: {custom_wind_preview_state['runtime_error']}")
         else:
@@ -13714,6 +14298,7 @@ def _unified_workspace_tab(
                     analysis_hex_area_km2,
                     float(energy_model_state.get("auto_min_potential_share_pct", 65.0) or 65.0),
                     avoid_hex_ids=solar_reserved_hex_ids,
+                    cell_area_column="display_area_km2",
                 )
                 proposal_frame, proposal_stats = _expand_wind_area_outside_et(
                     wind_allocation_frame,
@@ -13722,6 +14307,7 @@ def _unified_workspace_tab(
                     analysis_display_geometry_path,
                     analysis_hex_area_km2,
                     avoid_hex_ids=solar_reserved_hex_ids,
+                    cell_area_column="display_area_km2",
                 )
                 if not proposal_frame.empty:
                     if wind_factor > 0 and math.isfinite(wind_factor):
@@ -14205,7 +14791,10 @@ def _unified_workspace_tab(
                 left_metric.metric("Vind: aktiva källager", int(custom_wind_preview_state["active_source_count"]))
                 right_metric.metric("Vind: buffertgrupper", int(custom_wind_preview_state["active_group_count"]))
                 combined_share = custom_wind_preview_state["combined_land_share_pct"]
-                st.metric("Vind: potentiell landandel", "-" if combined_share is None else f"{float(combined_share):.1f}%")
+                st.metric(
+                    "Vind: genomsnittlig potential per analyscell",
+                    "-" if combined_share is None else f"{float(combined_share):.1f}%",
+                )
                 if wind_controls_applied:
                     st.caption(ui_text("controls_applied", WIND_CONTROL_LANGUAGE))
             for note in unified_notes:

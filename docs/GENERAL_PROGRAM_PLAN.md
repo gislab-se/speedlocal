@@ -32,6 +32,21 @@ Two deployments make progress visible:
 V2 Final is not a new application shell. Extracted modules must replace code in
 the active monolith and be called by its existing user flow.
 
+Normal development and integration happen on `v2-final-dev`. `main` is the
+published branch connected to the external V2 Final deployment. Each workday
+ends with one coherent validated development checkpoint on `v2-final-dev`.
+Local promotion and publication are separate states:
+
+- **Locally promoted:** the relevant automated gates and localhost visual
+  review pass, and the replaced path inside the promotion boundary is removed.
+  The next planned work may begin from this state.
+- **Published:** the exact reviewed checkpoint is on `main`, the external app
+  has been verified, and the result is recorded.
+
+Friday is the normal publication window; Tuesday is optional when a coherent
+locally promoted increment is ready. An emergency publication outside those
+windows requires a recorded reason and the full publication gate.
+
 The frozen reference is
 `gislab-se/landskapsanalys@75ba14871100c208cbf8eedb794d56c165340811`,
 secured as branch `frozen-v2-reference-2026-07-30` and tag
@@ -73,8 +88,9 @@ For each slice:
 6. compare the new result with the active region's accepted reference;
 7. connect the generic result directly to the existing V2 Final UI;
 8. remove the replaced hardcoded path after parity is proven;
-9. inspect localhost, publish the checkpoint, and compare the affected
-   reference and V2 Final deployments.
+9. inspect localhost and mark the checkpoint locally promoted when its gate
+   passes; publish the exact reviewed checkpoint in a publication window and
+   then compare the affected reference and V2 Final deployments.
 
 We do not mechanically clean all 14,000 lines function by function. We inspect
 functions within a complete behavior slice so that obsolete features can be
@@ -191,8 +207,18 @@ Current slice:
   the manifest-declared display domain;
 - the shared road slider reads its 300/100/2000/25 contract from the canonical
   manifest;
+- V2 Final starts from the wind manifest's empty request; source and buffer
+  visibility are map-review state and do not alter the numeric request;
+- the five-group public whitelist is manifest-declared, while non-roads layer
+  options still come from the region-manifest-declared legacy registry. This
+  is a transitional adapter, not canonical manifest layer availability and not
+  a solar analysis contract;
+- wind potential, establishment rollups, and scenario allocation use validated
+  per-cell `display_area_m2`; Frozen V2's unweighted cell mean remains the
+  parity oracle, and exact polygon-clipped land area remains later work;
 - the automated R7/R6/R5 `roads_large` checkpoint passes; localhost visual
-  approval and publication remain before it is called promoted;
+  approval remains before it is locally promoted, and publication remains a
+  separate pending state;
 - `roads_medium` still uses the characterized legacy calculation path;
 - remaining roads work: approve the R6/R5 checkpoint visually, migrate
   `roads_medium`, validate combined-road behavior, then remove only the legacy
@@ -211,8 +237,12 @@ Current slice:
   regions fail closed visibly.
 - Obsolete code is removed after parity.
 - Localhost visual review passes in V2 Final.
-- The checkpoint is pushed and the external V2 Final deployment is verified.
+- The coherent checkpoint is committed and pushed to `v2-final-dev`.
 - Documentation and the daily log describe what changed.
+
+Publication is tracked separately from slice completion. A locally promoted
+slice is published only after its exact checkpoint is moved to `main` during a
+publication window and the external V2 Final deployment is verified.
 
 ## Delivery plan and daily control
 

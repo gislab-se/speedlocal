@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 from streamlit.testing.v1 import AppTest
@@ -11,19 +12,37 @@ ROOT = Path(__file__).resolve().parents[1]
 PORT_APPS = ROOT / "apps" / "v2_port" / "apps"
 APP_PATH = ROOT / "apps" / "v2_port" / "potential_app.py"
 V2_SOURCE_ROOT_ENV = "SPEEDLOCAL_V2_SOURCE_ROOT"
-ACTIVE_REGION_IDS = ("trondelag",)
-ROAD_TEST_DISTANCE_M = {
-    "trondelag": 1000,
-}
-EXPECTED_WIND_SHARE_PCT = {
-    "trondelag": (6.7, 6.2),
-}
+TRONDELAG_REGION_ID = "trondelag"
+STANDARD_CANONICAL_GROUP_IDS = (
+    "roads",
+    "population",
+    "nature",
+    "culture",
+    "grid_infrastructure",
+)
+WIND_SELECTION_STATE_KEY = "wind_builder_selected_layers"
+WIND_PARAMS_STATE_KEY = "wind_builder_params"
+WIND_EMPTY_SELECTION_STATE_KEY = "wind_empty_selection_active"
+WIND_ANALYSIS_KEY_PREFIX = "wind_control__analysis__"
+WIND_GROUP_KEY_PREFIX = "wind_control__group__"
+WIND_LAYER_KEY_PREFIX = "wind_control__layer__"
+WIND_VISUAL_SOURCE_KEY_PREFIX = "wind_control__visual_source__"
+WIND_VISUAL_BUFFER_KEY_PREFIX = "wind_control__visual_buffer__"
 
 for import_root in (ROOT, PORT_APPS):
     if str(import_root) not in sys.path:
         sys.path.insert(0, str(import_root))
 
+from acceptance_model.layers import (  # noqa: E402
+    layer_status_table,
+    load_registry,
+)
 from potential_model.manifests import load_region, v2_source_root  # noqa: E402
+from potential_model.speedlocal_bridge import (  # noqa: E402
+    default_wind_layer_selection,
+    transitional_public_legacy_group_ids,
+)
+from speedlocal.catalogs import load_analysis  # noqa: E402
 
 
 class Report:
@@ -70,10 +89,10 @@ def _wind_share_pct(app: AppTest) -> float:
     value = next(
         item.value
         for item in app.metric
-        if item.label == "Vind: potentiell landandel"
+        if item.label == "Vind: genomsnittlig potential per analyscell"
     )
     if value == "-":
-        raise AssertionError("Wind land share was not calculated")
+        raise AssertionError("Wind mean cell potential was not calculated")
     return float(str(value).rstrip("%").replace(",", "."))
 
 
@@ -116,6 +135,217 @@ def _rendered_text(app: AppTest) -> str:
     return "\n".join(values)
 
 
+def _app_failures(app: AppTest) -> tuple[list[str], list[str]]:
+    return (
+        [str(item.value) for item in app.exception],
+        [str(item.value) for item in app.error],
+    )
+
+
+def _element_ids(elements, prefix: str) -> set[str]:
+    return {
+        str(item.key)[len(prefix):]
+        for item in elements
+        if str(item.key or "").startswith(prefix)
+    }
+
+
+def _ready_public_ui_contract(
+    region_id: str,
+) -> tuple[set[str], set[str], set[str], set[str]]:
+    registry_groups, registry_layers, registry_meta = load_registry(region_id)
+    public_group_ids = set(
+        transitional_public_legacy_group_ids(region_id)
+    )
+    status_frame = layer_status_table(registry_meta)
+    status_by_layer = {
+        str(row["layer_id"]): row.to_dict()
+        for _, row in status_frame.iterrows()
+    }
+
+    def is_ready(layer_id: str) -> bool:
+        status = status_by_layer.get(str(layer_id), {})
+        return (
+            bool(status.get("geojson_ready"))
+            and bool(status.get("distance_ready"))
+            and bool(status.get("source_exists"))
+            and int(status.get("feature_count", 0) or 0) > 0
+            and str(status.get("status", "")) == "ok"
+        )
+
+    ready_layer_ids = {
+        str(layer_id)
+        for layer_id, layer in registry_layers.items()
+        if str(layer.group_id) in public_group_ids and is_ready(str(layer_id))
+    }
+    ready_group_ids = {
+        str(registry_layers[layer_id].group_id)
+        for layer_id in ready_layer_ids
+    }
+    public_layer_ids = {
+        str(layer_id)
+        for layer_id, layer in registry_layers.items()
+        if str(layer.group_id) in public_group_ids
+    }
+    extra_group_ids = set(registry_groups) - public_group_ids
+    return (
+        ready_group_ids,
+        ready_layer_ids,
+        public_layer_ids,
+        extra_group_ids,
+    )
+
+
+def _check_manifest_empty_start_and_public_controls(
+    report: Report,
+) -> None:
+    region_id = TRONDELAG_REGION_ID
+    try:
+        analysis = load_analysis(region_id, "wind")
+        manifest_selection = default_wind_layer_selection(region_id)
+        (
+            ready_group_ids,
+            ready_layer_ids,
+            public_layer_ids,
+            extra_group_ids,
+        ) = _ready_public_ui_contract(region_id)
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            f"{region_id}: manifest-driven UI contract could not load: {exc}",
+        )
+        return
+
+    report.check(
+        tuple(analysis.groups) == STANDARD_CANONICAL_GROUP_IDS
+        and analysis.default_request is not None
+        and analysis.default_request.selected_layer_ids == ()
+        and not any(manifest_selection.values()),
+        f"{region_id}: wind manifest declares the five standard groups and "
+        "an empty startup request.",
+        f"{region_id}: invalid startup contract: groups={analysis.groups}, "
+        f"default_request={analysis.default_request}, "
+        f"selection={manifest_selection}.",
+    )
+
+    app = AppTest.from_file(str(APP_PATH), default_timeout=120)
+    app.query_params["region"] = region_id
+    app.run(timeout=120)
+    exceptions, errors = _app_failures(app)
+    report.check(
+        not exceptions and not errors,
+        f"{region_id}: empty manifest-driven start renders without app errors.",
+        f"{region_id}: empty start failed: exceptions={exceptions}, "
+        f"errors={errors}.",
+    )
+    if exceptions or errors:
+        return
+
+    selected = _session_state_value(app, WIND_SELECTION_STATE_KEY)
+    empty_selection_active = _session_state_value(
+        app,
+        WIND_EMPTY_SELECTION_STATE_KEY,
+    )
+    wind_share, share_error = _safe_wind_share_pct(app)
+    layer_controls = [
+        item
+        for item in app.checkbox
+        if str(item.key or "").startswith(WIND_LAYER_KEY_PREFIX)
+    ]
+    group_controls = [
+        item
+        for item in app.checkbox
+        if str(item.key or "").startswith(WIND_GROUP_KEY_PREFIX)
+    ]
+    report.check(
+        isinstance(selected, dict)
+        and not any(selected.values())
+        and all(not bool(item.value) for item in layer_controls)
+        and all(not bool(item.value) for item in group_controls)
+        and empty_selection_active is True
+        and wind_share is not None
+        and abs(wind_share - 100.0) <= 0.05
+        and "Inga aktiva filter" in _rendered_text(app),
+        f"{region_id}: product starts with no filters and 100.0% unfiltered "
+        "wind potential.",
+        f"{region_id}: startup state drifted: selection={selected}, "
+        f"empty_active={empty_selection_active}, share={wind_share}, "
+        f"share_error={share_error}.",
+    )
+
+    rendered_group_ids = _element_ids(app.slider, WIND_ANALYSIS_KEY_PREFIX)
+    rendered_layer_ids = _element_ids(app.checkbox, WIND_LAYER_KEY_PREFIX)
+    enabled_layer_ids = {
+        str(item.key)[len(WIND_LAYER_KEY_PREFIX):]
+        for item in layer_controls
+        if not item.disabled
+    }
+    rendered_group_toggle_ids = _element_ids(
+        app.checkbox,
+        WIND_GROUP_KEY_PREFIX,
+    )
+    extra_layer_ids = {
+        str(layer_id)
+        for layer_id, layer in load_registry(region_id)[1].items()
+        if str(layer.group_id) in extra_group_ids
+    }
+    report.check(
+        rendered_group_ids == ready_group_ids
+        and enabled_layer_ids == ready_layer_ids
+        and rendered_layer_ids <= public_layer_ids
+        and not (rendered_group_toggle_ids & extra_group_ids)
+        and not (rendered_layer_ids & extra_layer_ids),
+        f"{region_id}: UI exposes only ready controls from the five public "
+        "groups.",
+        f"{region_id}: public/ready UI drifted: rendered_groups="
+        f"{sorted(rendered_group_ids)}, expected_groups="
+        f"{sorted(ready_group_ids)}, enabled_layers="
+        f"{sorted(enabled_layer_ids)}, expected_layers="
+        f"{sorted(ready_layer_ids)}, extra_group_controls="
+        f"{sorted(rendered_group_toggle_ids & extra_group_ids)}, "
+        f"extra_layers={sorted(rendered_layer_ids & extra_layer_ids)}.",
+    )
+
+    try:
+        road_slider = _by_key(
+            app.slider,
+            f"{WIND_ANALYSIS_KEY_PREFIX}transport",
+        )
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            f"{region_id}: manifest-backed road slider is unavailable: {exc}",
+        )
+    else:
+        report.check(
+            not road_slider.disabled
+            and int(road_slider.value) == 300
+            and int(road_slider.min) == 100
+            and int(road_slider.max) == 2000
+            and int(road_slider.step) == 25,
+            f"{region_id}: empty selection keeps the manifest-backed "
+            "100/2000/25 road parameter contract available.",
+            f"{region_id}: road parameter contract drifted: "
+            f"disabled={road_slider.disabled}, value={road_slider.value}, "
+            f"min={road_slider.min}, max={road_slider.max}, "
+            f"step={road_slider.step}.",
+        )
+
+    visual_ids = (
+        _element_ids(app.toggle, WIND_VISUAL_SOURCE_KEY_PREFIX)
+        | _element_ids(app.toggle, WIND_VISUAL_BUFFER_KEY_PREFIX)
+    )
+    report.check(
+        not visual_ids,
+        f"{region_id}: map-review toggles stay hidden while no analysis "
+        "layers are selected.",
+        f"{region_id}: map-review toggles rendered for an empty selection: "
+        f"{sorted(visual_ids)}.",
+    )
+
+
 def _select_roads_large_only(app: AppTest) -> None:
     for checkbox in app.checkbox:
         key = str(checkbox.key or "")
@@ -127,12 +357,109 @@ def _select_roads_large_only(app: AppTest) -> None:
             checkbox.set_value(False)
 
 
+def _check_wind_map_review_toggles(
+    report: Report,
+    app: AppTest,
+    expected_share: float,
+) -> bool:
+    baseline_selection = deepcopy(
+        _session_state_value(app, WIND_SELECTION_STATE_KEY)
+    )
+    baseline_params = deepcopy(
+        _session_state_value(app, WIND_PARAMS_STATE_KEY)
+    )
+    baseline_share, baseline_share_error = _safe_wind_share_pct(app)
+    source_key = f"{WIND_VISUAL_SOURCE_KEY_PREFIX}transport"
+    buffer_key = f"{WIND_VISUAL_BUFFER_KEY_PREFIX}transport"
+    try:
+        source_toggle = _by_key(app.toggle, source_key)
+        buffer_toggle = _by_key(app.toggle, buffer_key)
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            "trondelag: external road map-review toggles are unavailable: "
+            f"{exc}",
+        )
+        return False
+
+    report.check(
+        not source_toggle.disabled and not buffer_toggle.disabled,
+        "trondelag: roads source and manifest-backed buffer toggles render "
+        "outside the analysis form.",
+        "trondelag: source or buffer map-review toggle is disabled.",
+    )
+    if source_toggle.disabled or buffer_toggle.disabled:
+        return False
+
+    source_toggle.set_value(True).run(timeout=120)
+    source_exceptions, source_errors = _app_failures(app)
+    source_selection = _session_state_value(app, WIND_SELECTION_STATE_KEY)
+    source_params = _session_state_value(app, WIND_PARAMS_STATE_KEY)
+    source_share, source_share_error = _safe_wind_share_pct(app)
+    report.check(
+        not source_exceptions
+        and not source_errors
+        and _session_state_value(app, source_key) is True
+        and source_selection == baseline_selection
+        and source_params == baseline_params
+        and baseline_share is not None
+        and source_share is not None
+        and abs(baseline_share - expected_share) <= 0.05
+        and abs(source_share - baseline_share) <= 0.001,
+        "trondelag: source-map toggle changes only map-review state; "
+        "analysis selection, parameters, and metric stay unchanged.",
+        "trondelag: source-map toggle changed analysis state: "
+        f"exceptions={source_exceptions}, errors={source_errors}, "
+        f"selection={source_selection}, params_equal="
+        f"{source_params == baseline_params}, baseline_share="
+        f"{baseline_share}, source_share={source_share}, "
+        f"share_errors={[baseline_share_error, source_share_error]}.",
+    )
+    if source_exceptions or source_errors:
+        return False
+
+    try:
+        buffer_toggle = _by_key(app.toggle, buffer_key)
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            f"trondelag: buffer map-review toggle disappeared: {exc}",
+        )
+        return False
+    buffer_toggle.set_value(True).run(timeout=120)
+    buffer_exceptions, buffer_errors = _app_failures(app)
+    buffer_selection = _session_state_value(app, WIND_SELECTION_STATE_KEY)
+    buffer_params = _session_state_value(app, WIND_PARAMS_STATE_KEY)
+    buffer_share, buffer_share_error = _safe_wind_share_pct(app)
+    report.check(
+        not buffer_exceptions
+        and not buffer_errors
+        and _session_state_value(app, source_key) is True
+        and _session_state_value(app, buffer_key) is True
+        and buffer_selection == baseline_selection
+        and buffer_params == baseline_params
+        and baseline_share is not None
+        and buffer_share is not None
+        and abs(buffer_share - baseline_share) <= 0.001,
+        "trondelag: buffer-map toggle changes only map-review state; "
+        "analysis selection, parameters, and metric stay unchanged.",
+        "trondelag: buffer-map toggle changed analysis state: "
+        f"exceptions={buffer_exceptions}, errors={buffer_errors}, "
+        f"selection={buffer_selection}, params_equal="
+        f"{buffer_params == baseline_params}, baseline_share="
+        f"{baseline_share}, buffer_share={buffer_share}, "
+        f"share_error={buffer_share_error}.",
+    )
+    return not buffer_exceptions and not buffer_errors
+
+
 def _check_roads_large_slice(report: Report) -> None:
     app = AppTest.from_file(str(APP_PATH), default_timeout=120)
     app.query_params["region"] = "trondelag"
     app.run(timeout=120)
-    initial_exceptions = [str(item.value) for item in app.exception]
-    initial_errors = [str(item.value) for item in app.error]
+    initial_exceptions, initial_errors = _app_failures(app)
     if initial_exceptions or initial_errors:
         report.check(
             False,
@@ -142,15 +469,22 @@ def _check_roads_large_slice(report: Report) -> None:
         )
         return
 
-    _select_roads_large_only(app)
-    road_slider = _by_key(
-        app.slider,
-        "wind_control__analysis__transport",
-    )
+    try:
+        _select_roads_large_only(app)
+        road_slider = _by_key(
+            app.slider,
+            "wind_control__analysis__transport",
+        )
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            f"trondelag: roads_large controls are unavailable: {exc}",
+        )
+        return
     road_slider.set_value(300)
     _wind_apply_button(app).click().run(timeout=120)
-    first_exceptions = [str(item.value) for item in app.exception]
-    first_errors = [str(item.value) for item in app.error]
+    first_exceptions, first_errors = _app_failures(app)
     if first_exceptions or first_errors:
         report.check(
             False,
@@ -160,21 +494,28 @@ def _check_roads_large_slice(report: Report) -> None:
         )
         return
 
-    selected = app.session_state["wind_builder_selected_layers"]
-    first_share = _wind_share_pct(app)
+    selected = _session_state_value(app, WIND_SELECTION_STATE_KEY)
+    first_share, first_share_error = _safe_wind_share_pct(app)
     report.check(
-        selected.get("transport") == ["roads_large"]
+        isinstance(selected, dict)
+        and selected.get("transport") == ["roads_large"]
         and not any(
             layer_ids
             for group_id, layer_ids in selected.items()
             if group_id != "transport"
         )
+        and first_share is not None
         and abs(first_share - 96.9) <= 0.05,
         "trondelag: roads_large-only R7 renders the canonical 300 m "
         "result (96.9%).",
         "trondelag: roads_large-only 300 m state/result drifted: "
-        f"selection={selected}, share={first_share:.3f}%.",
+        f"selection={selected}, share={first_share}, "
+        f"share_error={first_share_error}.",
     )
+    if first_share is None:
+        return
+
+    _check_wind_map_review_toggles(report, app, expected_share=96.9)
 
     road_slider = _by_key(
         app.slider,
@@ -182,8 +523,7 @@ def _check_roads_large_slice(report: Report) -> None:
     )
     road_slider.set_value(1000)
     _wind_apply_button(app).click().run(timeout=120)
-    second_exceptions = [str(item.value) for item in app.exception]
-    second_errors = [str(item.value) for item in app.error]
+    second_exceptions, second_errors = _app_failures(app)
     if second_exceptions or second_errors:
         report.check(
             False,
@@ -192,14 +532,17 @@ def _check_roads_large_slice(report: Report) -> None:
             f"exceptions={second_exceptions}, errors={second_errors}",
         )
         return
-    second_share = _wind_share_pct(app)
+    second_share, second_share_error = _safe_wind_share_pct(app)
     report.check(
-        abs(second_share - 95.5) <= 0.05,
+        second_share is not None and abs(second_share - 95.5) <= 0.05,
         "trondelag: roads_large-only R7 visibly reacts at 1000 m "
         "(95.5%).",
         "trondelag: roads_large-only 1000 m result drifted: "
-        f"expected 95.5%, got {second_share:.3f}%.",
+        f"expected 95.5%, got {second_share}, "
+        f"share_error={second_share_error}.",
     )
+    if second_share is None:
+        return
 
     display_mode = _by_key(app.radio, "combined_h3_display_mode")
     display_mode.set_value("selected").run(timeout=120)
@@ -320,7 +663,11 @@ def main() -> int:
     _check_missing_source_root(report)
     source_root = v2_source_root()
     report.note(f"{V2_SOURCE_ROOT_ENV}: {os.environ.get(V2_SOURCE_ROOT_ENV, '<not set>')}")
-    report.check(APP_PATH.is_file(), "Quarantine app entrypoint exists.", f"Missing app: {APP_PATH}")
+    report.check(
+        APP_PATH.is_file(),
+        "V2 Final app entrypoint exists.",
+        f"Missing app: {APP_PATH}",
+    )
     report.check(
         bool(source_root and source_root.is_dir()),
         "V2 source root exists.",
@@ -329,131 +676,13 @@ def main() -> int:
     if not APP_PATH.is_file() or source_root is None or not source_root.is_dir():
         return report.emit()
 
-    for region_id in ACTIVE_REGION_IDS:
-        test_road_distance = ROAD_TEST_DISTANCE_M[region_id]
-        expected_before, expected_after = EXPECTED_WIND_SHARE_PCT[region_id]
-        region = load_region(region_id)
-        report.check(
-            region.get("_v2_source_available") is True,
-            f"{region_id}: detailed V2 source manifest is available.",
-            f"{region_id}: detailed V2 source manifest is unavailable.",
-        )
-        app = AppTest.from_file(str(APP_PATH), default_timeout=120)
-        app.query_params["region"] = region_id
-        app.run(timeout=120)
-        exceptions = [str(item.value) for item in app.exception]
-        errors = [str(item.value) for item in app.error]
-        report.check(
-            not exceptions,
-            f"{region_id}: app executes without uncaught exceptions.",
-            f"{region_id}: uncaught exceptions: {exceptions}",
-        )
-        report.check(
-            not errors,
-            f"{region_id}: app renders without st.error output.",
-            f"{region_id}: st.error output: {errors}",
-        )
-        report.check(
-            len(app.button) > 0 and len(app.metric) > 0,
-            f"{region_id}: interactive workspace elements render.",
-            f"{region_id}: expected buttons and metrics did not render.",
-        )
-        if exceptions or errors:
-            report.note(f"{region_id}: road interaction skipped because initial render failed.")
-            continue
-
-        try:
-            road_slider = _by_key(app.slider, "wind_control__analysis__transport")
-            medium_roads = _by_key(app.checkbox, "wind_control__layer__roads_medium")
-            large_roads = _by_key(app.checkbox, "wind_control__layer__roads_large")
-            apply_button = _wind_apply_button(app)
-            before_share = _wind_share_pct(app)
-        except Exception as exc:
-            report.check(False, "", f"{region_id}: road controls/result are unavailable: {exc}")
-            continue
-
-        report.check(
-            not road_slider.disabled
-            and not medium_roads.disabled
-            and not large_roads.disabled,
-            f"{region_id}: medium/large road controls are enabled.",
-            f"{region_id}: one or more road controls are disabled.",
-        )
-        report.check(
-            int(road_slider.value) == 300
-            and bool(medium_roads.value)
-            and bool(large_roads.value),
-            f"{region_id}: frozen-V2 road defaults render (300 m, medium + large).",
-            f"{region_id}: unexpected road defaults: slider={road_slider.value}, "
-            f"medium={medium_roads.value}, large={large_roads.value}.",
-        )
-        report.check(
-            int(road_slider.min) == 100
-            and int(road_slider.max) == 2000
-            and int(road_slider.step) == 25,
-            f"{region_id}: road slider reads its canonical 100/2000/25 "
-            "contract.",
-            f"{region_id}: unexpected road slider contract: "
-            f"min={road_slider.min}, max={road_slider.max}, "
-            f"step={road_slider.step}.",
-        )
-        report.check(
-            abs(before_share - expected_before) <= 0.05,
-            f"{region_id}: default wind share matches the accepted reviewed "
-            "V2 Final baseline "
-            f"({expected_before:.1f}%).",
-            f"{region_id}: default wind share drifted from the accepted reviewed "
-            f"V2 Final baseline: expected {expected_before:.1f}%, "
-            f"got {before_share:.3f}%.",
-        )
-
-        road_slider.set_value(test_road_distance)
-        apply_button.click().run(timeout=120)
-        interaction_exceptions = [str(item.value) for item in app.exception]
-        interaction_errors = [str(item.value) for item in app.error]
-        report.check(
-            not interaction_exceptions and not interaction_errors,
-            f"{region_id}: applying a changed road buffer completes without app errors.",
-            f"{region_id}: road interaction failed: "
-            f"exceptions={interaction_exceptions}, errors={interaction_errors}",
-        )
-        if interaction_exceptions or interaction_errors:
-            continue
-
-        try:
-            after_share = _wind_share_pct(app)
-            applied_slider = _by_key(
-                app.slider,
-                "wind_control__analysis__transport",
-            )
-            applied_params = app.session_state["wind_builder_params"]
-            applied_road_distance = float(applied_params["road_distance_m"])
-        except Exception as exc:
-            report.check(False, "", f"{region_id}: applied road result cannot be read: {exc}")
-            continue
-
-        report.check(
-            int(applied_slider.value) == test_road_distance
-            and applied_road_distance == float(test_road_distance),
-            f"{region_id}: submitted {test_road_distance} m road buffer reaches applied state.",
-            f"{region_id}: submitted road buffer was not applied: "
-            f"slider={applied_slider.value}, state={applied_road_distance}.",
-        )
-        report.check(
-            abs(after_share - expected_after) <= 0.05,
-            f"{region_id}: changed-road result matches the accepted reviewed "
-            "V2 Final baseline "
-            f"({expected_after:.1f}%).",
-            f"{region_id}: changed-road result drifted from the accepted reviewed "
-            f"V2 Final baseline: expected {expected_after:.1f}%, "
-            f"got {after_share:.3f}%.",
-        )
-        report.note(
-            f"{region_id}: road buffer 300 -> {test_road_distance} m changed wind land share "
-            f"{before_share:.3f}% -> {after_share:.3f}%."
-        )
-        report.note(f"{region_id}: {len(app.warning)} domain warning(s) rendered.")
-
+    region = load_region(TRONDELAG_REGION_ID)
+    report.check(
+        region.get("_v2_source_available") is True,
+        "trondelag: detailed V2 source manifest is available.",
+        "trondelag: detailed V2 source manifest is unavailable.",
+    )
+    _check_manifest_empty_start_and_public_controls(report)
     _check_disabled_bornholm_route(report)
     _check_roads_large_slice(report)
     return report.emit()
@@ -488,7 +717,7 @@ def _check_disabled_bornholm_route(report: Report) -> None:
         return
     workspace_metrics = [
         item for item in app.metric
-        if item.label == "Vind: potentiell landandel"
+        if item.label == "Vind: genomsnittlig potential per analyscell"
     ]
     report.check(
         not bornholm_exceptions
@@ -504,15 +733,25 @@ def _check_disabled_bornholm_route(report: Report) -> None:
 
     app.query_params["region"] = "trondelag"
     app.run(timeout=120)
-    trondelag_exceptions = [str(item.value) for item in app.exception]
-    trondelag_errors = [str(item.value) for item in app.error]
+    trondelag_exceptions, trondelag_errors = _app_failures(app)
+    trondelag_share, share_error = _safe_wind_share_pct(app)
+    trondelag_selection = _session_state_value(
+        app,
+        WIND_SELECTION_STATE_KEY,
+    )
     report.check(
         not trondelag_exceptions
         and not trondelag_errors
-        and abs(_wind_share_pct(app) - 6.7) <= 0.05,
-        "Trondelag remains directly routable after the disabled Bornholm probe.",
+        and isinstance(trondelag_selection, dict)
+        and not any(trondelag_selection.values())
+        and trondelag_share is not None
+        and abs(trondelag_share - 100.0) <= 0.05,
+        "Trondelag remains directly routable with its empty 100.0% startup "
+        "after the disabled Bornholm probe.",
         "Trondelag did not render after the disabled Bornholm probe: "
-        f"exceptions={trondelag_exceptions}, errors={trondelag_errors}.",
+        f"exceptions={trondelag_exceptions}, errors={trondelag_errors}, "
+        f"selection={trondelag_selection}, share={trondelag_share}, "
+        f"share_error={share_error}.",
     )
 
 

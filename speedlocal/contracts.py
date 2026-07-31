@@ -25,6 +25,8 @@ class AnalysisDomainRollupContract:
     provider: str
     path: str
     id_field: str
+    area_field: str
+    area_unit: str
     resolution: int
     expected_cell_count: int
 
@@ -34,6 +36,8 @@ class AnalysisDomainContract:
     provider: str
     path: str
     id_field: str
+    area_field: str
+    area_unit: str
     cell_kind: str
     resolution: int
     expected_cell_count: int
@@ -110,11 +114,17 @@ class LayerContract:
 
 
 @dataclass(frozen=True)
+class DefaultRequestContract:
+    selected_layer_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class AnalysisContract:
     id: str
     region_id: str
     groups: tuple[str, ...]
     layers: dict[str, LayerContract]
+    default_request: DefaultRequestContract | None = None
     analysis_domain: AnalysisDomainContract | None = None
 
 
@@ -150,6 +160,8 @@ def analysis_domain_contract(
             provider=str(item["provider"]),
             path=str(item["path"]),
             id_field=str(item["id_field"]),
+            area_field=str(item.get("area_field") or ""),
+            area_unit=str(item.get("area_unit") or ""),
             resolution=resolution,
             expected_cell_count=int(item["expected_cell_count"]),
         )
@@ -157,6 +169,8 @@ def analysis_domain_contract(
         provider=str(raw["provider"]),
         path=str(raw["path"]),
         id_field=str(raw["id_field"]),
+        area_field=str(raw.get("area_field") or ""),
+        area_unit=str(raw.get("area_unit") or ""),
         cell_kind=str(raw["cell_kind"]),
         resolution=int(raw["resolution"]),
         expected_cell_count=int(raw["expected_cell_count"]),
@@ -173,6 +187,27 @@ def parameter_contract(parameter_id: str, raw: dict[str, Any]) -> ParameterContr
         minimum=float(raw["minimum"]) if raw.get("minimum") is not None else None,
         maximum=float(raw["maximum"]) if raw.get("maximum") is not None else None,
         step=float(raw["step"]) if raw.get("step") is not None else None,
+    )
+
+
+def default_request_contract(
+    raw: dict[str, Any] | None,
+) -> DefaultRequestContract | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("Analysis default_request must be an object")
+    if "selected_layer_ids" not in raw:
+        raise ValueError(
+            "Analysis default_request must declare selected_layer_ids"
+        )
+    selected_layer_ids = raw["selected_layer_ids"]
+    if not isinstance(selected_layer_ids, list):
+        raise ValueError(
+            "Analysis default_request selected_layer_ids must be a list"
+        )
+    return DefaultRequestContract(
+        selected_layer_ids=tuple(str(item) for item in selected_layer_ids),
     )
 
 
@@ -196,5 +231,6 @@ def analysis_contract(raw: dict[str, Any]) -> AnalysisContract:
         region_id=str(raw["region_id"]),
         groups=tuple(str(item) for item in raw.get("groups") or []),
         layers=layers,
+        default_request=default_request_contract(raw.get("default_request")),
         analysis_domain=analysis_domain_contract(raw.get("analysis_domain")),
     )

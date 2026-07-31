@@ -44,6 +44,7 @@ REQUIRED_PATHS = [
     "scripts/validate_v2_final_baseline_parity.py",
     "scripts/validate_bornholm_v2_diagnostics.py",
     "scripts/validate_generic_engine.py",
+    "scripts/validate_vector_buffer_preview.py",
     "scripts/validate_frozen_v2_reference.py",
     "scripts/validate_runtime_bundle.py",
     "scripts/build_v2_runtime_bundle.py",
@@ -53,6 +54,7 @@ REQUIRED_PATHS = [
     "docs/GENERAL_PROGRAM_PLAN.md",
     "docs/DELIVERY_PLAN.md",
     "docs/DAILY_WORKFLOW.md",
+    "docs/DEPLOYMENT.md",
     "docs/daily/2026-07-29.md",
     "docs/daily/2026-07-30.md",
     "docs/daily/2026-07-31.md",
@@ -119,6 +121,40 @@ def main() -> int:
 
     for path in REQUIRED_PATHS:
         report.check((ROOT / path).exists(), f"Required path exists: {path}", f"Missing required path: {path}")
+
+    publication_policy_paths = [
+        "AGENTS.md",
+        "docs/DAILY_WORKFLOW.md",
+        "docs/GENERAL_PROGRAM_PLAN.md",
+        "docs/DELIVERY_PLAN.md",
+        "docs/DEPLOYMENT.md",
+    ]
+    for path in publication_policy_paths:
+        policy = (ROOT / path).read_text(encoding="utf-8")
+        report.check(
+            all(
+                marker in policy
+                for marker in (
+                    "`v2-final-dev`",
+                    "`main`",
+                    "Friday",
+                    "Tuesday",
+                    "emergency",
+                )
+            ),
+            f"Publication cadence is explicit in {path}.",
+            f"Publication cadence is incomplete in {path}.",
+        )
+
+    daily_workflow = (ROOT / "docs" / "DAILY_WORKFLOW.md").read_text(encoding="utf-8")
+    report.check(
+        "## Local promotion" in daily_workflow
+        and "## Publication" in daily_workflow
+        and "**Locally promoted**" in daily_workflow
+        and "**Published**" in daily_workflow,
+        "Daily workflow separates local promotion from publication.",
+        "Daily workflow does not separate local promotion from publication.",
+    )
 
     tracked_result = subprocess.run(
         ["git", "ls-files", "-z"],

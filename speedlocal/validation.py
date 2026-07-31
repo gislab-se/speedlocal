@@ -43,6 +43,20 @@ def select_processing_adapter(
 
 
 def validate_contract(contract: AnalysisContract) -> None:
+    if contract.default_request is None:
+        raise ValueError("Analysis default_request is required")
+    selected_layer_ids = contract.default_request.selected_layer_ids
+    if len(selected_layer_ids) != len(set(selected_layer_ids)):
+        raise ValueError(
+            "Analysis default_request selected_layer_ids must not contain duplicates"
+        )
+    unknown_default_layers = set(selected_layer_ids) - set(contract.layers)
+    if unknown_default_layers:
+        raise ValueError(
+            "Analysis default_request selects undeclared layers: "
+            f"{sorted(unknown_default_layers)}"
+        )
+
     domain = contract.analysis_domain
     if domain is not None:
         if (
@@ -61,6 +75,12 @@ def validate_contract(contract: AnalysisContract) -> None:
             )
         if domain.expected_cell_count <= 0:
             raise ValueError("Analysis domain expected cell count must be positive")
+        if not domain.area_field.strip():
+            raise ValueError("Analysis domain area field is required")
+        if domain.area_unit not in {"m2", "km2"}:
+            raise ValueError(
+                f"Unsupported analysis-domain area unit: {domain.area_unit}"
+            )
         for resolution, rollup in domain.rollups.items():
             if resolution != rollup.resolution:
                 raise ValueError(
@@ -89,6 +109,15 @@ def validate_contract(contract: AnalysisContract) -> None:
                 raise ValueError(
                     f"Analysis-domain R{resolution} expected cell count "
                     "must be positive"
+                )
+            if not rollup.area_field.strip():
+                raise ValueError(
+                    f"Analysis-domain R{resolution} area field is required"
+                )
+            if rollup.area_unit not in {"m2", "km2"}:
+                raise ValueError(
+                    "Unsupported analysis-domain "
+                    f"R{resolution} area unit: {rollup.area_unit}"
                 )
     unknown_groups = set(contract.groups) - set(STANDARD_GROUP_IDS)
     if unknown_groups:

@@ -41,8 +41,24 @@ The delivery is complete when:
 | 27 Aug | Acceptance review | Full regression, delivery docs, known limitations, release candidate |
 
 The schedule moved one business day on 2026-07-31 because the complete roads
-slice had not yet reached its promoted gate. Population does not begin until
-canonical `roads_medium`, combined-road behavior, and legacy-path removal pass.
+slice had not yet reached its locally promoted gate. Population does not begin
+until canonical `roads_medium`, combined-road behavior, and legacy-path removal
+pass.
+
+## Branch and publication cadence
+
+- `v2-final-dev` is the daily development and integration branch. Every
+  workday ends with one coherent validated checkpoint committed and pushed
+  there.
+- `main` is the published branch used by the external V2 Final deployment.
+- Friday is the normal publication window. Tuesday is optional when a coherent
+  locally promoted increment is ready.
+- External publication happens only in one of those windows. An emergency
+  outside Tuesday or Friday requires a reason in the daily log and the full
+  publication validation.
+- Local promotion is the delivery gate that permits the next planned work.
+  Published status is recorded separately and requires the exact reviewed
+  checkpoint on `main` plus verified external behavior.
 
 Current milestone status:
 
@@ -64,14 +80,20 @@ Current milestone status:
   approval, public-package cold start, and external deployment review complete.
 - `roads_large` R6/R5 canonical integration: automated engine, accepted-
   reference, and real-app gates complete at 300/1000 m; localhost visual
-  approval and publication remain.
-- `roads_large` full promotion: pending that visual and publication gate.
-- Complete roads promotion: canonical `roads_medium`, combined-roads behavior,
-  and removal of the temporary road-group adapter remain.
+  approval remains, so it is neither locally promoted nor published.
+- V2 Final verification cleanup: empty manifest startup, map-only road source
+  and buffer review, and manifest-cell-area propagation through wind
+  establishment/allocation are automated; localhost approval and a
+  `v2-final-dev` checkpoint remain. Non-roads controls still use the declared
+  legacy-registry adapter until their slices migrate.
+- `roads_large` full local promotion: pending that visual gate. Publication
+  remains a separate pending state.
+- Complete roads local promotion: canonical `roads_medium`, combined-roads
+  behavior, and removal of the temporary road-group adapter remain.
 
 ## Slice gates
 
-Each slice has six explicit gates:
+Each slice has seven explicit gates:
 
 1. **Characterized:** V2 inputs, outputs, and UI behavior are recorded.
 2. **Generic:** analysis runs without region-name branches.
@@ -82,12 +104,15 @@ Each slice has six explicit gates:
    the stated tolerance. Currently this is frozen V2 for Trøndelag only.
 5. **Continuous behavior:** the full declared control domain executes; a small
    set of frozen fixtures is evidence but does not complete this gate.
-6. **Promoted:** UI uses the generic path, localhost visual review passes, and
-   the replaced path is removed.
+6. **Locally promoted:** UI uses the generic path, localhost visual review
+   passes, and the replaced path inside the promotion boundary is removed.
+7. **Published:** the exact locally promoted checkpoint is present on `main`
+   and its external V2 Final behavior is verified and recorded.
 
 Do not begin the next thematic slice before the current one reaches the
-promoted gate. Each slice must be integrated into V2 Final and its replaced
-hardcoded path removed before work starts on the next thematic slice.
+locally promoted gate. Publication may wait for the next Tuesday or Friday
+window. Each slice must be integrated into V2 Final and its replaced hardcoded
+path removed before work starts on the next thematic slice.
 
 ## Critical risks
 

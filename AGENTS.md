@@ -30,15 +30,29 @@
 
 - `docs/DELIVERY_PLAN.md` is the dated route to delivery.
 - `docs/DAILY_WORKFLOW.md` defines the mandatory daily routine.
+- `v2-final-dev` is the daily development and integration branch. `main` is
+  the published branch watched by the external V2 Final deployment. Normal
+  development must not happen directly on `main`.
 - At the start of every workday, create or update
   `docs/daily/YYYY-MM-DD.md` with one testable outcome and three to five tasks.
 - At the end of every workday, record completed work, validation, blockers,
   code classification, exact next starting point, and the work-checkpoint
   commit hash.
-- After local validation and localhost review, commit and push the session.
-  Verify the GitHub commit and external V2 Final deployment before marking the
-  session published. Record that verification in a small publication-record
-  commit and push it. Verify GitHub Pages too when `site/**` changed.
+- End each workday with one coherent validated checkpoint committed and pushed
+  to `v2-final-dev`. This is a development checkpoint, not an external
+  publication.
+- A slice or increment is **locally promoted** after its required automated
+  gates and localhost visual review pass and any replaced path in that
+  promotion boundary is removed. Local promotion allows the next planned work
+  to begin; it does not mean that colleagues can see the change externally.
+- `main` is updated only in a publication window: Friday is the normal
+  window, with Tuesday available when a coherent locally promoted increment is
+  ready. Publish the exact reviewed development checkpoint, verify GitHub and
+  the external V2 Final deployment, and record that evidence in a small
+  publication-record commit. Verify GitHub Pages too when `site/**` changed.
+- An emergency publication outside Tuesday or Friday requires an explicit
+  reason in the current daily log and the same validation and external
+  verification as a normal publication.
 - Update the delivery plan when dates, order, assumptions, or milestone status
   change. Do not silently drift from the plan.
 
@@ -61,7 +75,14 @@
 
 - Keep Streamlit UI separate from `speedlocal/` business logic.
 - Public regions come only from `regions/index.json`.
-- Analysis and layer availability come from region manifests.
+- Canonical analysis and migrated-layer availability come from region
+  manifests.
+- During the roads slice only, unmigrated standard groups may still read
+  options and readiness from the external acceptance registry declared by the
+  region manifest. The wind manifest's five-group list is a transitional
+  public-product whitelist for the current wind and solar panels, not a solar
+  analysis contract and not canonical layer availability. Do not add new
+  registry-only product behavior; replace this adapter slice by slice.
 - All source paths go through the shared provider resolver.
 - Keep large runtime data outside Git. Use `SPEEDLOCAL_V2_SOURCE_ROOT` for the
   complete read-only local V2 archive. With that variable unset, V2 Final may
@@ -93,9 +114,13 @@ changes:
 $env:SPEEDLOCAL_V2_SOURCE_ROOT = "C:\gislab\data\landskapsanalys-v2-multiregion"
 & ".\.venv\Scripts\python.exe" -B scripts\validate_generic_engine.py
 & ".\.venv\Scripts\python.exe" -B scripts\validate_v2_final_baseline_parity.py
+& ".\.venv\Scripts\python.exe" -B scripts\validate_vector_buffer_preview.py
 & ".\.venv\Scripts\python.exe" -B scripts\validate_v2_port_app.py
 & ".\.venv\Scripts\python.exe" -B scripts\validate_runtime_bundle.py
 ```
+
+The vector-buffer validator is required when provider paths, vector geometry,
+native CRS, buffer contracts, or map-review integration change.
 
 Also run the existing delivery and V2 guardrail validators for changes that
 touch their scope.

@@ -4,7 +4,9 @@ import os
 import sys
 import csv
 import json
+import math
 import tempfile
+from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -16,9 +18,18 @@ if str(ROOT) not in sys.path:
 
 from speedlocal import run_analysis
 from speedlocal.catalogs import load_analysis
+from speedlocal.contracts import (
+    AnalysisDomainContract,
+    AnalysisDomainRollupContract,
+    DefaultRequestContract,
+)
 from speedlocal.engine import _distance_rows, _rollup_distance_rows
 from speedlocal.validation import select_processing_adapter, validate_contract, validate_layer
-from speedlocal.sources import resolve_analysis_domain_cell_ids, resolve_layer_assets
+from speedlocal.sources import (
+    resolve_analysis_domain_cell_areas_km2,
+    resolve_analysis_domain_cell_ids,
+    resolve_layer_assets,
+)
 
 
 DEFAULT_V2_ROOT = Path(r"C:\gislab\data\landskapsanalys-v2-multiregion")
@@ -37,6 +48,7 @@ TRONDELAG_DISPLAY_PATHS = {
     ),
 }
 TRONDELAG_DISPLAY_COUNTS = {7: 13_735, 6: 2_163, 5: 365}
+TRONDELAG_ANALYSIS_DOMAIN_AREA_KM2 = 45_213.18864360976
 ROAD_LARGE_EXPECTATIONS = {
     7: {
         300.0: {
@@ -219,6 +231,266 @@ def _assert_invalid_distance_rows_fail_closed() -> int:
     return checks
 
 
+def _assert_invalid_default_requests_fail_closed(contract) -> int:
+    fixtures = (
+        (
+            replace(contract, default_request=None),
+            "default_request is required",
+        ),
+        (
+            replace(
+                contract,
+                default_request=DefaultRequestContract(
+                    selected_layer_ids=("roads_large", "roads_large"),
+                ),
+            ),
+            "must not contain duplicates",
+        ),
+        (
+            replace(
+                contract,
+                default_request=DefaultRequestContract(
+                    selected_layer_ids=("undeclared_layer",),
+                ),
+            ),
+            "selects undeclared layers",
+        ),
+    )
+    for invalid_contract, expected_message in fixtures:
+        try:
+            validate_contract(invalid_contract)
+        except ValueError as exc:
+            assert expected_message in str(exc)
+        else:
+            raise AssertionError(
+                "Invalid analysis default_request did not fail closed: "
+                f"{expected_message}"
+            )
+    return len(fixtures)
+
+
+def _analysis_area_feature_collection(
+    rows: list[dict[str, object]],
+) -> dict[str, object]:
+    return {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "properties": row,
+                "geometry": None,
+            }
+            for row in rows
+        ],
+    }
+
+
+def _assert_analysis_domain_areas_fail_closed(contract) -> int:
+    parent_a = "86083312fffffff"
+    parent_b = sorted(h3.grid_ring(parent_a, 1))[0]
+    source_ids = [
+        *sorted(h3.cell_to_children(parent_a, 7))[:2],
+        *sorted(h3.cell_to_children(parent_b, 7))[:2],
+    ]
+    source_rows = [
+        {"hex_id": cell_id, "display_area_m2": float(index)}
+        for index, cell_id in enumerate(source_ids, start=1)
+    ]
+    rollup_rows = [
+        {"hex_id": parent_a, "display_area_m2": 3.0},
+        {"hex_id": parent_b, "display_area_m2": 7.0},
+    ]
+    rollup = AnalysisDomainRollupContract(
+        provider="v2_archive",
+        path="rollup.geojson",
+        id_field="hex_id",
+        area_field="display_area_m2",
+        area_unit="m2",
+        resolution=6,
+        expected_cell_count=2,
+    )
+    domain = AnalysisDomainContract(
+        provider="v2_archive",
+        path="source.geojson",
+        id_field="hex_id",
+        area_field="display_area_m2",
+        area_unit="m2",
+        cell_kind="h3",
+        resolution=7,
+        expected_cell_count=4,
+        rollups={6: rollup},
+    )
+    fixture_contract = replace(contract, analysis_domain=domain)
+    checks = 0
+    previous_source_root = os.environ.get("SPEEDLOCAL_V2_SOURCE_ROOT")
+    try:
+        with tempfile.TemporaryDirectory(
+            prefix="speedlocal-analysis-area-fixtures-"
+        ) as temp:
+            root = Path(temp)
+            source_path = root / "source.geojson"
+            rollup_path = root / "rollup.geojson"
+            os.environ["SPEEDLOCAL_V2_SOURCE_ROOT"] = str(root)
+
+            def write_source(rows: list[dict[str, object]]) -> None:
+                source_path.write_text(
+                    json.dumps(_analysis_area_feature_collection(rows)),
+                    encoding="utf-8",
+                )
+
+            def write_rollup(rows: list[dict[str, object]]) -> None:
+                rollup_path.write_text(
+                    json.dumps(_analysis_area_feature_collection(rows)),
+                    encoding="utf-8",
+                )
+
+            write_source(source_rows)
+            write_rollup(rollup_rows)
+            source_areas = resolve_analysis_domain_cell_areas_km2(
+                fixture_contract
+            )
+            rollup_areas = resolve_analysis_domain_cell_areas_km2(
+                fixture_contract,
+                6,
+            )
+            assert math.isclose(
+                math.fsum(source_areas.values()),
+                10.0 / 1_000_000.0,
+                rel_tol=0.0,
+                abs_tol=1e-15,
+            )
+            assert math.isclose(
+                math.fsum(rollup_areas.values()),
+                math.fsum(source_areas.values()),
+                rel_tol=0.0,
+                abs_tol=1e-15,
+            )
+            checks += 2
+
+            invalid_contracts = (
+                (
+                    replace(
+                        fixture_contract,
+                        analysis_domain=replace(domain, area_field=""),
+                    ),
+                    "area field is required",
+                ),
+                (
+                    replace(
+                        fixture_contract,
+                        analysis_domain=replace(
+                            domain,
+                            rollups={
+                                6: replace(rollup, area_unit="hectare")
+                            },
+                        ),
+                    ),
+                    "Unsupported analysis-domain R6 area unit",
+                ),
+            )
+            for invalid_contract, expected_message in invalid_contracts:
+                try:
+                    validate_contract(invalid_contract)
+                except ValueError as exc:
+                    assert expected_message in str(exc)
+                else:
+                    raise AssertionError(
+                        "Invalid analysis-area contract did not fail closed: "
+                        f"{expected_message}"
+                    )
+                checks += 1
+
+            malformed_sources: list[
+                tuple[str, list[dict[str, object]], str]
+            ] = []
+            missing_area = [dict(row) for row in source_rows]
+            missing_area[0].pop("display_area_m2")
+            malformed_sources.append(
+                ("missing area", missing_area, "has no display_area_m2")
+            )
+            zero_area = [dict(row) for row in source_rows]
+            zero_area[0]["display_area_m2"] = 0.0
+            malformed_sources.append(
+                ("zero area", zero_area, "non-positive or non-finite")
+            )
+            non_finite_area = [dict(row) for row in source_rows]
+            non_finite_area[0]["display_area_m2"] = "nan"
+            malformed_sources.append(
+                (
+                    "non-finite area",
+                    non_finite_area,
+                    "non-positive or non-finite",
+                )
+            )
+            wrong_resolution = [dict(row) for row in source_rows]
+            wrong_resolution[0]["hex_id"] = parent_a
+            malformed_sources.append(
+                ("wrong resolution", wrong_resolution, "expected R7")
+            )
+            malformed_sources.append(
+                (
+                    "wrong count",
+                    [dict(row) for row in source_rows[:-1]],
+                    "has 3 cells; expected 4",
+                )
+            )
+            duplicate_ids = [dict(row) for row in source_rows]
+            duplicate_ids[-1]["hex_id"] = duplicate_ids[0]["hex_id"]
+            malformed_sources.append(
+                ("duplicate ids", duplicate_ids, "duplicate cell ids")
+            )
+            for name, rows, expected_message in malformed_sources:
+                write_source(rows)
+                try:
+                    resolve_analysis_domain_cell_areas_km2(fixture_contract)
+                except ValueError as exc:
+                    assert expected_message in str(exc)
+                else:
+                    raise AssertionError(
+                        f"Malformed analysis-area fixture did not fail: {name}"
+                    )
+                checks += 1
+
+            write_source(source_rows)
+            rollup_area_failures = (
+                (
+                    [
+                        {"hex_id": parent_a, "display_area_m2": 3.0},
+                        {"hex_id": parent_b, "display_area_m2": 8.0},
+                    ],
+                    "rollup area total",
+                ),
+                (
+                    [
+                        {"hex_id": parent_a, "display_area_m2": 4.0},
+                        {"hex_id": parent_b, "display_area_m2": 6.0},
+                    ],
+                    "does not match its R7 children",
+                ),
+            )
+            for rows, expected_message in rollup_area_failures:
+                write_rollup(rows)
+                try:
+                    resolve_analysis_domain_cell_areas_km2(
+                        fixture_contract,
+                        6,
+                    )
+                except ValueError as exc:
+                    assert expected_message in str(exc)
+                else:
+                    raise AssertionError(
+                        "Invalid analysis-area rollup did not fail closed: "
+                        f"{expected_message}"
+                    )
+                checks += 1
+    finally:
+        if previous_source_root is None:
+            os.environ.pop("SPEEDLOCAL_V2_SOURCE_ROOT", None)
+        else:
+            os.environ["SPEEDLOCAL_V2_SOURCE_ROOT"] = previous_source_root
+    return checks
+
+
 def main() -> int:
     os.environ.setdefault("SPEEDLOCAL_V2_SOURCE_ROOT", str(DEFAULT_V2_ROOT))
     source_root = Path(os.environ["SPEEDLOCAL_V2_SOURCE_ROOT"]).resolve()
@@ -230,6 +502,7 @@ def main() -> int:
     for region_id in ("bornholm", "trondelag"):
         contract = load_analysis(region_id, "wind")
         validate_contract(contract)
+        assert contract.default_request is not None
         checks += 1
         for layer_id in ("roads_medium", "roads_large"):
             roads = validate_layer(contract.layers[layer_id])
@@ -265,7 +538,23 @@ def main() -> int:
             f"distance-engine contract behavior validated"
         )
 
+    bornholm = load_analysis("bornholm", "wind")
+    assert bornholm.analysis_domain is None
+    try:
+        resolve_analysis_domain_cell_areas_km2(bornholm)
+    except ValueError as exc:
+        assert "has no analysis-domain contract" in str(exc)
+    else:
+        raise AssertionError(
+            "Bornholm area resolution did not fail without a declared domain"
+        )
+    checks += 2
+
     trondelag = load_analysis("trondelag", "wind")
+    assert trondelag.default_request is not None
+    assert trondelag.default_request.selected_layer_ids == ()
+    checks += 2
+    checks += _assert_invalid_default_requests_fail_closed(trondelag)
     for layer_id in ("roads_medium", "roads_large"):
         buffer_contract = trondelag.layers[layer_id].parameters["buffer_m"]
         assert (
@@ -288,22 +577,62 @@ def main() -> int:
         trondelag.analysis_domain.cell_kind,
         trondelag.analysis_domain.resolution,
         trondelag.analysis_domain.expected_cell_count,
-    ) == ("h3", 7, 13_735)
+        trondelag.analysis_domain.area_field,
+        trondelag.analysis_domain.area_unit,
+    ) == ("h3", 7, 13_735, "display_area_m2", "m2")
     assert set(trondelag.analysis_domain.rollups) == {6, 5}
+    assert all(
+        (rollup.area_field, rollup.area_unit)
+        == ("display_area_m2", "m2")
+        for rollup in trondelag.analysis_domain.rollups.values()
+    )
     checks += 2
 
+    area_by_resolution: dict[int, dict[str, float]] = {}
     for resolution, target_cell_ids in display_cell_ids_by_resolution.items():
+        cell_areas = resolve_analysis_domain_cell_areas_km2(
+            trondelag,
+            resolution,
+        )
+        area_by_resolution[resolution] = cell_areas
         assert (
             resolve_analysis_domain_cell_ids(trondelag, resolution)
             == target_cell_ids
         )
+        assert tuple(cell_areas) == target_cell_ids
         assert len(target_cell_ids) == TRONDELAG_DISPLAY_COUNTS[resolution]
+        assert all(
+            math.isfinite(area_km2) and area_km2 > 0.0
+            for area_km2 in cell_areas.values()
+        )
+        assert math.isclose(
+            math.fsum(cell_areas.values()),
+            TRONDELAG_ANALYSIS_DOMAIN_AREA_KM2,
+            rel_tol=1e-12,
+            abs_tol=1e-9,
+        )
         if resolution < 7:
             assert {
                 str(h3.cell_to_parent(cell_id, resolution))
                 for cell_id in display_cell_ids
             } == set(target_cell_ids)
-        checks += 3
+            expected_parent_areas: dict[str, float] = {}
+            for cell_id, area_km2 in area_by_resolution[7].items():
+                parent_id = str(h3.cell_to_parent(cell_id, resolution))
+                expected_parent_areas[parent_id] = (
+                    expected_parent_areas.get(parent_id, 0.0) + area_km2
+                )
+            assert cell_areas.keys() == expected_parent_areas.keys()
+            assert all(
+                math.isclose(
+                    cell_areas[parent_id],
+                    expected_area,
+                    rel_tol=1e-12,
+                    abs_tol=1e-9,
+                )
+                for parent_id, expected_area in expected_parent_areas.items()
+            )
+        checks += 7
 
         for threshold, expected in ROAD_LARGE_EXPECTATIONS[resolution].items():
             parameters = {"roads_large": {"buffer_m": threshold}}
@@ -381,6 +710,10 @@ def main() -> int:
                 f"{display_group.blocked_cell_count} blocked, "
                 f"{display_group.mean_acceptance:.15f} mean acceptance"
             )
+
+    assert len({round(value, 12) for value in area_by_resolution[7].values()}) > 1
+    checks += 1
+    checks += _assert_analysis_domain_areas_fail_closed(trondelag)
 
     r6_anchor = run_analysis(
         "trondelag",

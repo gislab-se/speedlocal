@@ -3,6 +3,9 @@
   "analysis_id": "wind",
   "region_id": "bornholm",
   "groups": ["roads", "population", "nature", "culture", "grid_infrastructure"],
+  "default_request": {
+    "selected_layer_ids": []
+  },
   "layers": [
     {
       "id": "roads_medium",

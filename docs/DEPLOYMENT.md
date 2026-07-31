@@ -18,7 +18,7 @@ private Pages.
 
 ## Interactive apps
 
-V2 Final development deployment:
+V2 Final published deployment:
 
 `https://speedlocal-landskapspotential.streamlit.app/`
 
@@ -66,6 +66,10 @@ authentication even though its source metadata can be read publicly.
 
 The active `main` branch in this repository is V2 Final and continues from the
 same working monolith, which is reduced and generalized slice by slice.
+
+`main` is the published branch connected to the external V2 Final deployment.
+`v2-final-dev` is the daily development and integration branch. Pushing a
+validated development checkpoint to `v2-final-dev` does not publish it.
 
 The current product and migration sequence is defined in
 `GENERAL_PROGRAM_PLAN.md`. PostGIS is deferred until the file-backed V2 Final
@@ -164,14 +168,25 @@ external publication gate is therefore complete. Colleagues must still be
 granted access in Streamlit Cloud if they are expected to review the private
 deployment.
 
-## End-of-session publication
+## Development checkpoints and publication windows
 
-1. Run focused slice tests and the full required regression set.
-2. Visually inspect V2 Final on localhost.
-3. Update the daily log and slice report.
-4. Commit one coherent, validated work checkpoint.
-5. Push `main` to `origin`.
-6. Confirm that exact checkpoint exists on GitHub.
+End each workday by committing and pushing one coherent validated checkpoint
+to `v2-final-dev`. Record whether it is only a development checkpoint or has
+also passed the localhost gate and is locally promoted.
+
+Friday is the normal publication window. Tuesday is an optional window when a
+coherent locally promoted increment is ready. Do not update `main` or trigger
+an external publication outside those windows unless the current daily log
+records an emergency reason.
+
+For a publication:
+
+1. Select and record the exact locally promoted `v2-final-dev` checkpoint.
+2. Run focused slice tests and the full required regression set against it.
+3. Visually inspect V2 Final on localhost.
+4. Update the daily log and slice report except for post-deployment evidence.
+5. Update `main` to the selected checkpoint and push `main` to `origin`.
+6. Confirm that exact published checkpoint exists on GitHub.
 7. If runtime transport changed, confirm the exact Release tag, all three
    assets, archive checksum, and a clean cold download.
 8. Confirm the external V2 Final deployment serves that checkpoint and complete
@@ -179,11 +194,17 @@ deployment.
 9. If `site/**` changed, confirm the GitHub Pages workflow and landing page.
 10. Record the checkpoint hash, URLs, runtime release, and results in the daily
     log.
-11. Commit and push that publication record, then confirm a clean worktree.
+11. Commit and push that publication record on `main`, bring it back into
+    `v2-final-dev`, and then confirm a clean worktree.
 
 GitHub Pages deploys automatically only for pushes to `main` that modify
 `site/**` or its workflow. The interactive Streamlit deployment is a separate
-service and must be checked independently after every push.
+service and must be checked independently after every push to `main`.
+
+A **locally promoted** increment has passed its automated and localhost gates
+and may be followed by the next planned development work. A **published**
+increment is additionally present on `main` and verified in the external app.
+Keep both states explicit in the daily log.
 
 Do not report a work session as published merely because `git push` succeeded.
 If the external Streamlit settings or runtime provider are unavailable, mark

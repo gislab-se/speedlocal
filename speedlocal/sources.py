@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import operator
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,9 +28,41 @@ class LayerAssets:
     feature_count: int
 
 
-def _resolve_domain_level_cell_ids(
+def _domain_level_area_to_km2(
+    raw_value: Any,
     level: AnalysisDomainContract | AnalysisDomainRollupContract,
-) -> tuple[str, ...]:
+    feature_index: int,
+    path: Path,
+) -> float:
+    if not level.area_field.strip():
+        raise ValueError("Analysis-domain area field is required")
+    if level.area_unit not in {"m2", "km2"}:
+        raise ValueError(
+            f"Unsupported analysis-domain area unit: {level.area_unit}"
+        )
+    if isinstance(raw_value, bool):
+        raise ValueError(
+            f"Analysis-domain feature {feature_index} has invalid "
+            f"{level.area_field}: {raw_value!r} ({path})"
+        )
+    try:
+        area = float(raw_value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(
+            f"Analysis-domain feature {feature_index} has invalid "
+            f"{level.area_field}: {raw_value!r} ({path})"
+        ) from exc
+    if not math.isfinite(area) or area <= 0.0:
+        raise ValueError(
+            f"Analysis-domain feature {feature_index} has non-positive or "
+            f"non-finite {level.area_field}: {raw_value!r} ({path})"
+        )
+    return area / 1_000_000.0 if level.area_unit == "m2" else area
+
+
+def _resolve_domain_level_cell_areas_km2(
+    level: AnalysisDomainContract | AnalysisDomainRollupContract,
+) -> dict[str, float]:
     path = resolve_source_path(level.provider, level.path)
     if not path.is_file():
         raise FileNotFoundError(f"Analysis-domain source is missing: {path}")
@@ -38,7 +71,7 @@ def _resolve_domain_level_cell_ids(
     if payload.get("type") != "FeatureCollection":
         raise ValueError(f"Analysis-domain source must be a FeatureCollection: {path}")
 
-    cell_ids: list[str] = []
+    cell_areas: dict[str, float] = {}
     for index, feature in enumerate(payload.get("features") or []):
         properties = feature.get("properties")
         if not isinstance(properties, dict):
@@ -61,22 +94,34 @@ def _resolve_domain_level_cell_ids(
                 f"Analysis-domain cell {cell_id} is R{resolution}; "
                 f"expected R{level.resolution}"
             )
-        cell_ids.append(cell_id)
+        if cell_id in cell_areas:
+            raise ValueError(
+                f"Analysis-domain source contains duplicate cell ids: {path}"
+            )
+        if level.area_field not in properties:
+            raise ValueError(
+                f"Analysis-domain feature {index} has no {level.area_field}: "
+                f"{path}"
+            )
+        cell_areas[cell_id] = _domain_level_area_to_km2(
+            properties[level.area_field],
+            level,
+            index,
+            path,
+        )
 
-    if len(cell_ids) != len(set(cell_ids)):
-        raise ValueError(f"Analysis-domain source contains duplicate cell ids: {path}")
-    if len(cell_ids) != level.expected_cell_count:
+    if len(cell_areas) != level.expected_cell_count:
         raise ValueError(
-            f"Analysis-domain source has {len(cell_ids)} cells; "
+            f"Analysis-domain source has {len(cell_areas)} cells; "
             f"expected {level.expected_cell_count}"
         )
-    return tuple(cell_ids)
+    return cell_areas
 
 
-def resolve_analysis_domain_cell_ids(
+def resolve_analysis_domain_cell_areas_km2(
     contract: AnalysisContract,
     resolution: int | None = None,
-) -> tuple[str, ...]:
+) -> dict[str, float]:
     domain = contract.analysis_domain
     if domain is None:
         raise ValueError(
@@ -92,6 +137,12 @@ def resolve_analysis_domain_cell_ids(
         )
     if domain.expected_cell_count <= 0:
         raise ValueError("Analysis domain expected cell count must be positive")
+    if not domain.area_field.strip():
+        raise ValueError("Analysis domain area field is required")
+    if domain.area_unit not in {"m2", "km2"}:
+        raise ValueError(
+            f"Unsupported analysis-domain area unit: {domain.area_unit}"
+        )
 
     if resolution is None:
         requested_resolution = domain.resolution
@@ -103,7 +154,7 @@ def resolve_analysis_domain_cell_ids(
         except TypeError as exc:
             raise TypeError("resolution must be an integer") from exc
     if requested_resolution == domain.resolution:
-        return _resolve_domain_level_cell_ids(domain)
+        return _resolve_domain_level_cell_areas_km2(domain)
 
     rollup = domain.rollups.get(requested_resolution)
     if rollup is None:
@@ -111,13 +162,16 @@ def resolve_analysis_domain_cell_ids(
             f"{contract.region_id}/{contract.id} has no R{requested_resolution} "
             "analysis-domain rollup"
         )
-    target_ids = _resolve_domain_level_cell_ids(rollup)
-    source_ids = _resolve_domain_level_cell_ids(domain)
-    expected_parent_ids = {
-        str(h3.cell_to_parent(cell_id, requested_resolution))
-        for cell_id in source_ids
-    }
-    target_set = set(target_ids)
+    target_areas = _resolve_domain_level_cell_areas_km2(rollup)
+    source_areas = _resolve_domain_level_cell_areas_km2(domain)
+    expected_parent_areas: dict[str, float] = {}
+    for cell_id, area_km2 in source_areas.items():
+        parent_id = str(h3.cell_to_parent(cell_id, requested_resolution))
+        expected_parent_areas[parent_id] = (
+            expected_parent_areas.get(parent_id, 0.0) + area_km2
+        )
+    expected_parent_ids = set(expected_parent_areas)
+    target_set = set(target_areas)
     if target_set != expected_parent_ids:
         raise ValueError(
             f"Analysis-domain R{requested_resolution} rollup does not match "
@@ -125,7 +179,42 @@ def resolve_analysis_domain_cell_ids(
             f"missing={len(expected_parent_ids - target_set)}, "
             f"unexpected={len(target_set - expected_parent_ids)}"
         )
-    return target_ids
+    source_total = math.fsum(source_areas.values())
+    target_total = math.fsum(target_areas.values())
+    if not math.isclose(
+        target_total,
+        source_total,
+        rel_tol=1e-12,
+        abs_tol=1e-9,
+    ):
+        raise ValueError(
+            f"Analysis-domain R{requested_resolution} rollup area total "
+            f"{target_total:.12f} km2 does not match R{domain.resolution} "
+            f"total {source_total:.12f} km2"
+        )
+    for parent_id, expected_area in expected_parent_areas.items():
+        actual_area = target_areas[parent_id]
+        if not math.isclose(
+            actual_area,
+            expected_area,
+            rel_tol=1e-12,
+            abs_tol=1e-9,
+        ):
+            raise ValueError(
+                f"Analysis-domain R{requested_resolution} parent "
+                f"{parent_id} area {actual_area:.12f} km2 does not match "
+                f"its R{domain.resolution} children {expected_area:.12f} km2"
+            )
+    return target_areas
+
+
+def resolve_analysis_domain_cell_ids(
+    contract: AnalysisContract,
+    resolution: int | None = None,
+) -> tuple[str, ...]:
+    return tuple(
+        resolve_analysis_domain_cell_areas_km2(contract, resolution)
+    )
 
 
 def _clean_relative(value: Any, field: str) -> str:

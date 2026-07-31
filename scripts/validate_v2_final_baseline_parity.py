@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 import h3
+import pandas as pd
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,6 +40,37 @@ ROADS_LARGE_EXPECTATIONS = {
         1000.0: (80.8993698630137, 66),
     },
 }
+ROADS_LARGE_R7_AREA_EXPECTATIONS = {
+    300.0: (43_798.14161191527, 96.87027817735104),
+    1000.0: (43_191.99545890840, 95.52963804293191),
+}
+ROADS_LARGE_DOWNSTREAM_EXPECTATIONS = {
+    7: {
+        300.0: (43_798.14161191527, 96.8838733163451),
+        1000.0: (43_191.99545890840, 95.54743356388788),
+    },
+    6: {
+        300.0: (41_463.27456688615, 92.23300970873787),
+        1000.0: (40_880.86125903301, 91.01937124364309),
+    },
+    5: {
+        300.0: (35_946.74693295628, 81.91780821917808),
+        1000.0: (35_350.10859539235, 80.89917808219177),
+    },
+}
+ROADS_LARGE_APP_ROLLUP_EXPECTATIONS = {
+    300.0: {
+        7: (96.8838733163451, 13_307, 428),
+        6: (97.04147018030514, 2_126, 37),
+        5: (97.03287671232877, 364, 1),
+    },
+    1000.0: {
+        7: (95.54743356388788, 13_301, 434),
+        6: (95.74826629680999, 2_123, 40),
+        5: (95.80219178082193, 364, 1),
+    },
+}
+TRONDELAG_MODEL_DOMAIN_AREA_KM2 = 45_213.18864360976
 DISPLAY_COUNTS = {7: 13_735, 6: 2_163, 5: 365}
 
 for import_root in (ROOT, PORT_ROOT, PORT_APPS):
@@ -193,11 +225,11 @@ def main() -> int:
                 f"expected {expected_share:.12f}%, got {actual_share:.12f}%, "
                 f"canonical={((result or {}).get('canonical_layer_ids') or [])}.",
             )
-
     roads_large_only = {
         group_id: []
         for group_id in app.WIND_GROUP_LAYER_DEFAULTS
     }
+    roads_large_r7_frames: dict[float, pd.DataFrame] = {}
     roads_large_only["transport"] = ["roads_large"]
     for resolution, expectations in ROADS_LARGE_EXPECTATIONS.items():
         display_geometry_path = app._h3_display_geometry_path(
@@ -279,6 +311,188 @@ def main() -> int:
                 f"max_cell_error={max_cell_error}, "
                 f"canonical={((result or {}).get('canonical_layer_ids') or [])}.",
             )
+            if frame is not None:
+                if resolution == 7:
+                    roads_large_r7_frames[road_distance] = frame.copy()
+                model_areas = app.wind_analysis_domain_cell_areas_km2(
+                    "trondelag",
+                    resolution,
+                )
+                downstream = app._potential_establishment_source_frame(
+                    frame,
+                    "wind",
+                    resolution,
+                    resolution,
+                    source_cell_areas_km2=model_areas,
+                    target_cell_areas_km2=model_areas,
+                )
+                expected_downstream_area, expected_downstream_score = (
+                    ROADS_LARGE_DOWNSTREAM_EXPECTATIONS[resolution][road_distance]
+                )
+                downstream_area = float(
+                    downstream["wind_potential_area_km2"].sum()
+                )
+                downstream_score = float(
+                    downstream["wind_potential_score"].mean()
+                )
+                report.check(
+                    len(downstream) == DISPLAY_COUNTS[resolution]
+                    and abs(
+                        downstream_area - expected_downstream_area
+                    ) <= 1e-9
+                    and abs(
+                        downstream_score - expected_downstream_score
+                    ) <= 1e-12,
+                    f"Trøndelag roads_large R{resolution} at "
+                    f"{road_distance:.0f} m preserves manifest model area "
+                    "in downstream establishment scoring.",
+                    f"Trøndelag roads_large R{resolution} downstream drifted "
+                    f"at {road_distance:.0f} m: area={downstream_area:.12f}, "
+                    f"score={downstream_score:.12f}.",
+                )
+            if resolution == 7 and frame is not None:
+                expected_area, expected_weighted_share = (
+                    ROADS_LARGE_R7_AREA_EXPECTATIONS[road_distance]
+                )
+                actual_area = float(frame["potential_area_km2"].sum())
+                actual_domain_area = float(frame["display_area_km2"].sum())
+                actual_weighted_share = float(
+                    ((result or {}).get("combined") or {}).get(
+                        "area_weighted_land_share_pct",
+                        -1.0,
+                    )
+                )
+                report.check(
+                    abs(actual_domain_area - TRONDELAG_MODEL_DOMAIN_AREA_KM2)
+                    <= 1e-9
+                    and abs(actual_area - expected_area) <= 1e-9
+                    and abs(actual_weighted_share - expected_weighted_share)
+                    <= 1e-12,
+                    f"Trøndelag roads_large R7 at {road_distance:.0f} m "
+                    "uses manifest-weighted model area.",
+                    f"Trøndelag roads_large R7 area drifted at "
+                    f"{road_distance:.0f} m: domain={actual_domain_area:.12f}, "
+                    f"potential={actual_area:.12f}, "
+                    f"weighted={actual_weighted_share:.12f}.",
+                )
+
+    for road_distance, source_frame in roads_large_r7_frames.items():
+        expected_area = ROADS_LARGE_R7_AREA_EXPECTATIONS[road_distance][0]
+        for resolution, (
+            expected_score,
+            expected_wind_only,
+            expected_not_suitable,
+        ) in ROADS_LARGE_APP_ROLLUP_EXPECTATIONS[road_distance].items():
+            downstream = app._combined_potential_establishment_frame(
+                trondelag_region,
+                source_frame,
+                pd.DataFrame(),
+                pd.DataFrame(),
+                pd.DataFrame(),
+                resolution,
+                7,
+            )
+            score = float(downstream["wind_potential_score"].mean())
+            area = float(downstream["wind_potential_area_km2"].sum())
+            domain_area = float(downstream["wind_model_area_km2"].sum())
+            classes = downstream["establishment_class"].value_counts()
+            report.check(
+                len(downstream) == DISPLAY_COUNTS[resolution]
+                and abs(area - expected_area) <= 1e-9
+                and abs(domain_area - TRONDELAG_MODEL_DOMAIN_AREA_KM2) <= 1e-9
+                and abs(score - expected_score) <= 1e-12
+                and int(classes.get("wind_only", 0)) == expected_wind_only
+                and int(classes.get("not_suitable", 0))
+                == expected_not_suitable,
+                f"Trøndelag roads_large R7 at {road_distance:.0f} m "
+                f"rolls to R{resolution} with manifest-area scoring and "
+                "area-weighted class dominance.",
+                f"Trøndelag roads_large R7→R{resolution} establishment "
+                f"drifted at {road_distance:.0f} m: area={area:.12f}, "
+                f"domain={domain_area:.12f}, score={score:.12f}, "
+                f"classes={classes.to_dict()}.",
+            )
+
+    r7_model_areas = app.wind_analysis_domain_cell_areas_km2(
+        "trondelag",
+        7,
+    )
+    unfiltered_wind = pd.DataFrame(
+        {
+            "hex_id": list(r7_model_areas),
+            "potential_area_share_pct": 100.0,
+            "potential_area_km2": list(r7_model_areas.values()),
+            "wind_hard_exclusion_intersects": False,
+        }
+    )
+    unfiltered_rollups_valid = True
+    unfiltered_rollup_details: list[str] = []
+    for resolution in DISPLAY_COUNTS:
+        downstream = app._combined_potential_establishment_frame(
+            trondelag_region,
+            unfiltered_wind,
+            pd.DataFrame(),
+            pd.DataFrame(),
+            pd.DataFrame(),
+            resolution,
+            7,
+        )
+        area = float(downstream["wind_potential_area_km2"].sum())
+        scores = pd.to_numeric(
+            downstream["wind_potential_score"],
+            errors="coerce",
+        )
+        suitable = downstream["wind_suitable"].fillna(False).astype(bool)
+        valid = (
+            len(downstream) == DISPLAY_COUNTS[resolution]
+            and abs(area - TRONDELAG_MODEL_DOMAIN_AREA_KM2) <= 1e-9
+            and bool(scores.eq(100.0).all())
+            and bool(suitable.all())
+        )
+        unfiltered_rollups_valid = unfiltered_rollups_valid and valid
+        unfiltered_rollup_details.append(
+            f"R{resolution}: cells={len(downstream)}, area={area:.12f}, "
+            f"score_min={float(scores.min()):.1f}, "
+            f"score_max={float(scores.max()):.1f}"
+        )
+    report.check(
+        unfiltered_rollups_valid,
+        "Unfiltered R7 wind remains 100% through the actual R7/R6/R5 "
+        "establishment rollup path.",
+        "Unfiltered downstream wind lost manifest-area semantics: "
+        + "; ".join(unfiltered_rollup_details),
+    )
+
+    allocation_source = pd.DataFrame(
+        {
+            "hex_id": ["cell-small", "cell-large"],
+            "potential_area_share_pct": [100.0, 100.0],
+            "potential_area_km2": [1.0, 3.0],
+            "display_area_km2": [1.0, 3.0],
+            "core_score": [1.0, 0.9],
+            "zone_size": [2, 2],
+        }
+    )
+    allocated, allocation_stats = app.allocate_wind_area_from_core_hexes(
+        allocation_source,
+        4.0,
+        999.0,
+        cell_area_column="display_area_km2",
+    )
+    report.check(
+        len(allocated) == 2
+        and bool(allocated["allocated_hex_share_pct"].eq(100.0).all())
+        and abs(float(allocated["allocated_area_km2"].sum()) - 4.0) <= 1e-12
+        and abs(
+            float(allocation_stats["selected_hex_footprint_km2"]) - 4.0
+        ) <= 1e-12
+        and int(allocation_stats["needed_hex"]) == 2,
+        "Wind allocation uses each manifest model-cell area for percentage, "
+        "footprint, and cell-count statistics.",
+        "Wind allocation fell back to the supplied global H3 sentinel: "
+        f"shares={allocated.get('allocated_hex_share_pct', pd.Series()).tolist()}, "
+        f"stats={allocation_stats}.",
+    )
 
     return report.emit()
 

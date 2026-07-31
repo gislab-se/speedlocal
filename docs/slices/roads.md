@@ -1,6 +1,6 @@
 # Roads slice characterization
 
-Status: Trøndelag `roads_large` canonical R7/R6/R5 checkpoint implemented; R7 approved and published, R6/R5 automated gates pass and visual approval is pending
+Status: Trøndelag `roads_large` canonical R7/R6/R5 checkpoint implemented; R7 approved and published, R6/R5 automated gates pass but localhost visual approval is pending, so R6/R5 are not locally promoted or published
 Behavior reference: frozen V2 for Trøndelag; Bornholm V1 acceptance baseline pending
 Integration target: V2 Final
 
@@ -197,7 +197,8 @@ distances also fail closed. Undeclared, non-integral, or upward H3 resolutions
 fail closed.
 
 The complete frozen default selection still renders 6.7% at 300 m and 6.2%
-at 1000 m in V2 Final.
+at 1000 m in the explicit regression fixture. It is not the product startup
+selection; V2 Final now starts from the manifest's empty request.
 
 The same full-flow values and isolated `roads_large` values pass when V2 Final
 is started from the reviewed 45-file cloud runtime package. That deployment
@@ -205,8 +206,55 @@ artifact is transport evidence only; frozen V2 remains the behavior oracle.
 
 This is an automated R7/R6/R5 checkpoint, not full roads promotion:
 
-1. visually approve and publish the R6/R5 `roads_large` views;
-2. migrate `roads_medium` at R7/R6/R5;
-3. validate combined roads behavior;
-4. remove the temporary `transport`-to-`roads` UI adapter only when the whole
+1. visually approve the R6/R5 `roads_large` views and record the checkpoint as
+   locally promoted;
+2. publish that exact reviewed checkpoint in the next Tuesday or Friday
+   publication window; publication does not block the remaining work inside
+   the roads slice after local promotion;
+3. migrate `roads_medium` at R7/R6/R5;
+4. validate combined roads behavior;
+5. remove the temporary `transport`-to-`roads` UI adapter only when the whole
    roads group is canonical.
+
+## Manifest-start, map review, and model-area checkpoint
+
+Implemented on `v2-final-dev` on 2026-07-31 without promoting or publishing
+the complete roads slice:
+
+- both wind manifests declare `default_request.selected_layer_ids`; the
+  Trøndelag product starts with an empty request and 100% unfiltered wind
+  potential;
+- the wind manifest's five-group list is a transitional public-product
+  whitelist for both current panels. Canonical roads come from the analysis
+  manifest; unmigrated population, nature, culture, and grid options still
+  come from the region-manifest-declared acceptance registry. Legacy military,
+  aviation, bird, coast, land-use, and reindeer sections are not rendered;
+- source and buffer visibility are map-review toggles outside the analysis
+  form. Changing either toggle leaves the selected layers, parameters, and
+  numeric result unchanged;
+- the road buffer preview resolves the selected canonical road sources through
+  the shared provider resolver, dissolves and buffers them in EPSG:25832, and
+  returns an EPSG:4326 map layer. `roads_large`, `roads_medium`, and their
+  combined preview have explicit validator coverage;
+- the wind analysis manifest declares `display_area_m2` as the area contract
+  for R7/R6/R5. The generic resolver validates positive finite values, exact
+  cell counts, H3 resolution, total area, and every rollup parent sum;
+- Trøndelag's analysis-domain model area is 45,213.18864360976 km² at all
+  three declared resolutions. With only `roads_large`, R7 model potential is
+  43,798.14161191527 km² at 300 m and 43,191.99545890840 km² at 1000 m;
+- the corresponding area-weighted shares are 96.87027817735104% and
+  95.52963804293191%. Frozen V2's unweighted cell-parity values remain
+  96.8838733163451% and 95.54751146705496%;
+- the same per-cell model-area contract now continues through wind
+  establishment scoring, R7-to-R6/R5 map rollups, class dominance, scenario
+  allocation percentages, and selected-cell footprint statistics. Solar keeps
+  its legacy area semantics until a separate solar contract exists.
+
+This is a correction from global average-H3 area to manifest-declared model
+area. It is not claimed as exact polygon-clipped available land: the current
+soft-distance acceptance remains the frozen V2 cell proxy. Exact geometric
+intersection belongs to a later, separately validated behavior change.
+
+The generic road-buffer preview is currently a wind contract. It is not reused
+for solar until solar declares its own technology applicability, effect
+semantics, and parameter bounds.
