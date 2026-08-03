@@ -48,6 +48,24 @@ numeric behavior for parity while labelling the proxy honestly. Raw R8 rows
 are aggregated to each requested parent before filtering to and completing the
 manifest-declared R7, R6, or R5 target domain.
 
+## Required R8-to-R7 correction before shared results
+
+The accepted frozen-V2 population evidence starts from R8 distance rows and
+aggregates them to the public R7 domain. This preserves the secured reference
+exactly, but it may be a problematic basis for the intended R7 analysis model:
+an R7 result can inherit a minimum-distance observation from R8 sampling
+rather than being calculated directly against the R7 analysis cell and the
+declared population source geometry.
+
+Before the combined restriction result is locally promoted, the canonical
+population path must calculate the source-to-cell relation directly against
+the manifest-declared R7 domain. R6
+and R5 must then be derived from that R7 result. The replacement must quantify
+and document any drift from frozen V2, secure new accepted-reference evidence,
+and pass the complete roads/population/nature/culture/grid regression suite.
+This is an explicit corrective requirement, not a change to the currently
+promoted frozen-V2 parity result.
+
 ## Percentage interpretation and deferred shared result
 
 The promoted population percentage is a frozen-V2 soft-distance acceptance

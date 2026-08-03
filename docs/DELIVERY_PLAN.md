@@ -130,7 +130,7 @@ Current milestone status:
   promoted but unpublished. The reviewed hover limitation and the distinction
   between binary cell parity and literal free-area percentage are deferred to
   the planned combined-result and wind/solar phases.
-- Culture complete-current-group candidate: `cultural_preservation` and
+- Culture complete current group: `cultural_preservation` and
   `valuable_cultural_environment` are manifest-declared under canonical
   `culture` and run through generic binary `hard_exclusion` at R7/R6/R5. The
   redundant group toggle, advanced-source registry adapter, and legacy
@@ -138,7 +138,17 @@ Current milestone status:
   dissolved RA geometry uses an explicit, generic, fail-closed-by-default
   manifest repair policy. Generic-engine, independent frozen-reference,
   vector-preview, real-Streamlit, runtime, guardrail, delivery, and frozen
-  archive gates pass; localhost visual review remains before local promotion.
+  archive gates pass. Clean-process localhost review was approved on
+  2026-08-03, so the complete current culture slice is locally promoted but
+  unpublished. Grid infrastructure is next.
+- Population R7 correction: the locally promoted frozen-V2 parity path starts
+  from R8 distance rows and rolls them up to R7/R6/R5. This is a known
+  potential modeling problem rather than the desired final R7 contract.
+  Before combined-result local promotion, calculate population directly
+  against the manifest-declared R7 domain, derive R6/R5 from R7, quantify and
+  explicitly accept any frozen-reference drift, and rerun the complete
+  regression gate. No population calculation changes in the culture
+  promotion checkpoint.
 - Shared potential-area semantics: decision recorded on 2026-08-03. The
   promoted roads/population soft-distance percentages remain frozen-V2 parity
   proxies until the planned combined-result and wind/solar phases replace

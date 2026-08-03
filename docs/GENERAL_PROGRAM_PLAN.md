@@ -216,8 +216,9 @@ Current slice status:
 - population and settlement: complete and locally promoted on 2026-08-03;
 - nature: complete current Trøndelag `protected_areas` behavior locally
   promoted on 2026-08-03 and unpublished;
-- culture: automated promotion gates pass for both complete current Trøndelag
-  sources; localhost visual review is pending;
+- culture: complete current Trøndelag behavior locally promoted on 2026-08-03
+  and unpublished;
+- grid infrastructure: next planned slice;
 - dynamic medium and large road layers: complete;
 - generic group result and distance-engine contract conformance: complete;
 - the temporary separate parity app has been removed;
@@ -307,7 +308,15 @@ Current slice status:
   frozen-reference, real-app, source/buffer preview, allocation-ranking,
   runtime, and repository gates pass. The redundant Trøndelag wind culture
   group toggle, advanced-source adapter, and legacy distance paths are
-  removed; localhost visual approval remains before local promotion.
+  removed. The user approved clean-process localhost review on 2026-08-03, so
+  the complete current culture slice is locally promoted but unpublished;
+- the population parity result currently starts from frozen-V2 R8 distance
+  rows and rolls them up to R7/R6/R5. This remains valid reference parity but
+  is a known potential modeling problem for the intended R7 contract. Before
+  the combined-result slice is locally promoted, population must be
+  recalculated directly against the manifest-declared R7 domain, with R6/R5
+  derived from R7, frozen-reference drift quantified and
+  explicitly accepted, and new accepted-reference evidence secured.
 
 ## Definition of done for a slice
 

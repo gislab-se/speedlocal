@@ -1,6 +1,6 @@
 # Culture slice characterization
 
-Status: automated promotion gates pass; localhost visual review pending
+Status: locally promoted on 2026-08-03; unpublished
 Behavior reference: frozen V2 for Trøndelag only
 Integration target: V2 Final wind restriction flow
 
@@ -115,3 +115,8 @@ they belong to a different, not-yet-migrated product behavior.
 The shared literal establishment-area percentage and reliable result hover
 remain scheduled for the combined-result and wind/solar phases. This slice
 preserves the accepted binary per-cell culture restriction.
+
+The user approved the clean-process localhost control, calculation, source,
+and buffer review on 2026-08-03. The complete current culture slice is
+therefore locally promoted. Publication remains separate, and `main` and the
+external deployment are unchanged.
