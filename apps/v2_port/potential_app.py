@@ -11886,6 +11886,17 @@ def _combined_establishment_feature_collection(
     display_geometries = load_h3_display_geometries(display_geometry_path)
     features: list[dict[str, Any]] = []
 
+    def _potential_percent(row: Any, technology: str) -> int:
+        try:
+            value = float(
+                getattr(row, f"{technology}_potential_score", 0.0) or 0.0
+            )
+        except (TypeError, ValueError):
+            value = 0.0
+        if not math.isfinite(value):
+            value = 0.0
+        return int(round(max(0.0, min(100.0, value))))
+
     def _tech_html(row: Any, technology: str, label: str, score_label: str) -> str:
         suitable = bool(getattr(row, f"{technology}_suitable", False))
         potential_score = float(getattr(row, f"{technology}_potential_score", 0.0) or 0.0)
@@ -11922,7 +11933,6 @@ def _combined_establishment_feature_collection(
         social_acceptance_weight = float(getattr(row, "social_acceptance_weight", 1.0) or 1.0)
         social_acceptance_source_hex_count = int(float(getattr(row, "social_acceptance_source_hex_count", 0.0) or 0.0))
         social_acceptance_popup = ""
-        social_acceptance_tooltip = ""
         if social_acceptance_impact > 0.0:
             social_acceptance_popup = (
                 "<br><strong>Social acceptans</strong><br>"
@@ -11931,7 +11941,6 @@ def _combined_establishment_feature_collection(
                 f"Färgvikt: {social_acceptance_weight:.3f}<br>"
                 f"Källhex: {social_acceptance_source_hex_count}"
             )
-            social_acceptance_tooltip = f" · acceptans {social_acceptance_value:.2f}"
         popup = (
             f"<strong>{COMBINED_ESTABLISHMENT_LAYER_LABEL}</strong><br>"
             "Klassning: potential efter aktiva filter<br>"
@@ -11966,7 +11975,8 @@ def _combined_establishment_feature_collection(
                     "social_acceptance_source_hex_count": social_acceptance_source_hex_count,
                     "tooltip_title": label,
                     "tooltip_body": (
-                        f"Vindpotential: {'ja' if bool(getattr(row, 'wind_suitable', False)) else 'nej'} · Solpotential: {'ja' if bool(getattr(row, 'solar_suitable', False)) else 'nej'}{social_acceptance_tooltip}"
+                        f"Vindpotential: {_potential_percent(row, 'wind')} % · "
+                        f"Solpotential: {_potential_percent(row, 'solar')} %"
                     ),
                     "popup": popup,
                 },

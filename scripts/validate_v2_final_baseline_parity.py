@@ -1322,6 +1322,58 @@ def main() -> int:
         + "; ".join(unfiltered_rollup_details),
     )
 
+    tooltip_hex_ids = list(r7_model_areas)[:3]
+    tooltip_frame = pd.DataFrame(
+        {
+            "hex_id": tooltip_hex_ids,
+            "establishment_class": [
+                "solar_only",
+                "wind_and_solar",
+                "wind_only",
+            ],
+            "establishment_label": [
+                "Endast sol",
+                "Vind och sol",
+                "Endast vind",
+            ],
+            "wind_suitable": [False, True, True],
+            "solar_suitable": [True, True, False],
+            "wind_potential_score": [0.0, 17.4, 100.0],
+            "solar_potential_score": [100.0, 82.6, 0.0],
+        }
+    )
+    tooltip_features = app._combined_establishment_feature_collection(
+        tooltip_frame,
+        app._h3_display_geometry_path(trondelag_region, 7),
+        7,
+    ).get("features", [])
+    tooltip_bodies = [
+        str((feature.get("properties") or {}).get("tooltip_body") or "")
+        for feature in tooltip_features
+    ]
+    tooltip_properties = [
+        feature.get("properties") or {}
+        for feature in tooltip_features
+    ]
+    report.check(
+        tooltip_bodies
+        == [
+            "Vindpotential: 0 % · Solpotential: 100 %",
+            "Vindpotential: 17 % · Solpotential: 83 %",
+            "Vindpotential: 100 % · Solpotential: 0 %",
+        ]
+        and all(
+            "wind_potential_score" not in properties
+            and "solar_potential_score" not in properties
+            for properties in tooltip_properties
+        ),
+        "Combined-potential hover reuses the client-side tooltip with compact "
+        "integer wind/solar percentages and no duplicate numeric properties.",
+        "Combined-potential hover or payload drifted: "
+        f"bodies={tooltip_bodies}, keys="
+        f"{[sorted(properties) for properties in tooltip_properties]}.",
+    )
+
     allocation_source = pd.DataFrame(
         {
             "hex_id": ["cell-small", "cell-large"],
