@@ -122,8 +122,12 @@ Current milestone status:
   `hard_exclusion` at R7/R6/R5. The old public wind `protected` alias and
   legacy distance-loader path are removed for Trøndelag. Generic-engine,
   independent frozen-reference, vector-preview, and focused real-Streamlit
-  gates and full repository checks pass; localhost visual review remains
-  before local promotion.
+  gates and full repository checks pass. Clean-process localhost review was
+  approved on 2026-08-03, so the complete current nature slice is locally
+  promoted but unpublished. The reviewed hover limitation and the distinction
+  between binary cell parity and literal free-area percentage are deferred to
+  the planned combined-result and wind/solar phases. Culture is the next
+  thematic slice.
 - Shared potential-area semantics: decision recorded on 2026-08-03. The
   promoted roads/population soft-distance percentages remain frozen-V2 parity
   proxies until the planned combined-result and wind/solar phases replace

@@ -60,14 +60,18 @@
 
 - Implement the five standard groups in this order: roads, population, nature,
   culture, grid infrastructure.
-- The complete public roads and population behaviors are locally promoted but
-  unpublished. Their canonical Trøndelag R7/R6/R5 controls, calculation,
-  source/buffer previews, and regression gates must remain unchanged.
-- Nature is active. The complete current Trøndelag `protected_areas` source is
-  manifest-declared under canonical `nature` and its generic binary
-  hard-exclusion automated gates pass at R7/R6/R5. The public wind
-  `protected` adapter is removed for Trøndelag. Localhost visual review is the
-  remaining local-promotion gate; do not begin culture before it is approved.
+- The complete public roads, population, and nature behaviors are locally
+  promoted but unpublished. Their canonical Trøndelag R7/R6/R5 controls,
+  calculations, source/buffer previews, and regression gates must remain
+  unchanged.
+- The complete current Trøndelag `protected_areas` source is manifest-declared
+  under canonical `nature`, and its generic binary hard-exclusion behavior is
+  locally promoted after approved localhost review on 2026-08-03. The public
+  wind `protected` adapter is removed for Trøndelag. A reliable result hover
+  and literal technology-specific establishment-area percentages remain
+  deferred to the combined-result and wind/solar phases.
+- The next planned slice is culture. Begin it only from a new dated daily plan
+  and preserve the promoted roads, population, and nature regression gates.
 - Bornholm source and engine contracts may validate in parallel as onboarding
   diagnostics, but they do not block Trøndelag slice promotion.
 - Do not implement regional exceptions yet.

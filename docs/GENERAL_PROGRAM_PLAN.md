@@ -214,8 +214,9 @@ Implemented foundation:
 Current slice status:
 
 - population and settlement: complete and locally promoted on 2026-08-03;
-- nature: automated promotion gates pass for the complete current Trøndelag
-  `protected_areas` source; localhost visual review is pending;
+- nature: complete current Trøndelag `protected_areas` behavior locally
+  promoted on 2026-08-03 and unpublished;
+- culture: next planned slice;
 - dynamic medium and large road layers: complete;
 - generic group result and distance-engine contract conformance: complete;
 - the temporary separate parity app has been removed;
@@ -289,8 +290,13 @@ Current slice status:
   highest-dimension policy for its dissolved geometry collection. Canonical
   R7/R6/R5 engine, frozen-reference, real-app, source/buffer preview,
   allocation-ranking, runtime, and repository gates pass. The public wind
-  `protected` alias and legacy Trøndelag loader path are removed; localhost
-  visual approval remains before local promotion.
+  `protected` alias and legacy Trøndelag loader path are removed. The user
+  approved the clean-process localhost review on 2026-08-03, so the complete
+  current nature slice is locally promoted but unpublished. The unreliable
+  result hover observed during review and the later literal wind/solar
+  establishment-area percentages are explicitly deferred to the shared
+  combined-result and wind/solar phases; the promoted nature result remains
+  the accepted binary per-cell parity contract.
 
 ## Definition of done for a slice
 

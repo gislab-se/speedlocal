@@ -1,6 +1,6 @@
 # Nature slice characterization
 
-Status: automated promotion gates pass; localhost visual review pending
+Status: locally promoted on 2026-08-03; unpublished
 Behavior reference: frozen V2 for Trøndelag only
 Integration target: V2 Final wind restriction flow
 
@@ -99,3 +99,19 @@ they belong to a different, not-yet-migrated product behavior.
 The shared literal establishment-area percentage remains scheduled for the
 combined-result and wind/solar phases. This slice preserves the accepted
 binary per-cell nature restriction and does not reinterpret that later result.
+
+## Localhost review and deferred result work
+
+The user approved the clean-process localhost review on 2026-08-03. The
+review also made two limitations explicit and accepted their deferral:
+
+- the potential-map hover is not reliable in the reviewed state;
+- the current protected-nature value is a binary H3-cell parity result, not a
+  literal percentage of polygon-clipped land that remains establishable.
+
+Neither limitation changes the secured behavior of this slice: a cell is
+accepted or blocked according to the frozen Trøndelag intersection/distance
+contract. A working hover and technology-specific wind and solar percentages
+must instead be derived from the shared remaining establishment area in the
+planned combined-result and wind/solar phases, so map class, summary, and
+hover consume the same result.
