@@ -1,26 +1,28 @@
 # Population and settlement slice characterization
 
-Status: active; primary increment locally approved, ranking increment awaiting
-localhost review, complete slice open
+Status: complete implementation and automated gate; final localhost control
+review pending before local promotion
 Behavior reference: frozen V2 for Trøndelag only
 Integration target: V2 Final wind restriction flow
 
 ## Scope
 
-The common group id is `population`. The first bounded increment migrates the
-primary Trøndelag `population_points` source. The id is historical: the
+The public and canonical group id is `population`. The historical
+`population_points` id names the primary source, whose
 validated source geometry is a dissolved polygon proxy representing occupied
 250 m population-grid cells.
 
-Two optional Trøndelag settlement proxies, `built_centre` and
-`built_low_selection`, remain on the explicit transitional registry adapter
-until later increments in this slice. Solar population behavior is a separate
-future slice and is not claimed here.
+Two optional Trøndelag sources are also canonical: `built_centre` is a
+polygon source for settlement centres and `built_low_selection` is a point
+source based on leisure-home centroids. Solar population behavior is a
+separate future slice and is not claimed here.
 
 ## Accepted Trøndelag behavior
 
-- Public legacy group: `settlement`.
-- Primary source id: `population_points`.
+- Public canonical group: `population`; the former public `settlement` alias
+  is removed from the wind flow.
+- Source ids: `population_points`, `built_centre`, and
+  `built_low_selection`.
 - Analysis kind: minimum-distance conflict with frozen V2 soft acceptance.
 - Slider: 100–3,000 m in 50 m steps.
 - V2 Final control default: 100 m; the frozen comparison checkpoint is 500 m.
@@ -61,11 +63,11 @@ uses the manifest-declared `display_area_m2` contract and is separate evidence.
 
 ## Generic contract
 
-The implemented layer contract declares:
+The implemented layer contracts declare:
 
 - canonical group `population`;
-- detected geometry family `polygon`;
-- data representation `grid`;
+- detected polygon/grid geometry for `population_points`, polygon/features
+  for `built_centre`, and point/features for `built_low_selection`;
 - operation `distance_exclusion`;
 - numeric distance-artifact resolution R8;
 - exact source/target coverage signatures and fail-closed zero acceptance when
@@ -91,12 +93,11 @@ No region id may select an adapter or analysis algorithm.
   generic selected-distance-group execution, and vector source/buffer preview.
 - **Configure:** group/layer ids, proxy representation, geometry, source paths,
   R8 artifact resolution, labels, colors, and slider bounds.
-- **Rewritten in this increment:** the primary population branch in the wind
-  control and fast-distance runtime now consumes the canonical result.
-- **Removed in this increment:** primary-layer fallthrough to the legacy
-  distance loader and the Trøndelag-specific wind population preview path.
-- **Still transitional:** optional settlement inputs and the public
-  `settlement` alias.
+- **Rewritten:** wind selection, controls, fast-distance runtime, previews,
+  and allocation ranking consume the three-layer canonical population result.
+- **Removed:** all population fallthrough to the legacy distance loader, the
+  public wind `settlement` alias, the redundant population group checkbox,
+  and the Trøndelag-specific wind population preview path.
 
 ## First-increment gates
 
@@ -116,47 +117,39 @@ No region id may select an adapter or analysis algorithm.
 - Localhost review must show monotonically decreasing potential at 100, 500,
   and 1,000 m and allow inspection at R7/R6/R5.
 
-The automated first-increment gates pass: generic engine 542/542, frozen-V2
-V2 Final parity 65/65, real Streamlit AppTest 48/48, and vector preview 16/16.
-The healthy app path and adversarial broken-contract cases both prove that the
-primary source cannot fall back to the legacy distance loader.
+The complete automated gates cover the generic engine, frozen-V2 V2 Final
+parity, real Streamlit AppTest, and vector previews. They prove that all three
+population sources stay on the canonical path at R7/R6/R5 and that promoted
+roads behavior is unchanged.
 
-The user approved the clean localhost checkpoint on 2026-07-31, so this
-bounded primary increment is locally promoted. The source and buffer
-comparison is currently defined for the canonical primary layer alone;
-selecting it together with an optional transitional proxy does not yet provide
-a mixed buffer preview.
-
-This increment is not the complete population slice. Completion also requires
-canonical optional settlement sources, removal of the public `settlement`
-alias, final regression, and localhost approval of that complete behavior.
+The user approved the primary and allocation-ranking behavior in the clean
+localhost process. The final simplified three-source control is hot-reloaded
+on port 8502 and awaits visual approval before the complete slice is marked
+locally promoted.
 
 ## Allocation-ranking increment
 
-The wind allocation-ranking consumer now obtains `population_points`
+The wind allocation-ranking consumer obtains all three population sources'
 distance/intersection observations from the canonical manifest engine at
-R7/R6/R5. It keeps the accepted ranking formula and continues to combine the
-primary source with optional transitional settlement proxies by minimum
-distance and any intersection. The legacy registry loader is permitted only
-for those still-transitional optional sources; attempting to load
-`population_points` there is an automated failure.
+R7/R6/R5. It keeps the accepted ranking formula and combines selected sources
+by minimum distance and any intersection. Any attempt to load a canonical
+population source through the legacy registry is an automated failure.
 
 The immutable canonical ranking frame is cached per region, selected canonical
 layer set, manifest default ranking threshold, and target resolution so normal
 Streamlit reruns do not repeatedly process the 89,312-row source artifact.
 Accepted-reference validation compares every R7/R6/R5 ranking score with the
-previous frozen-registry path and reports zero drift. The automated gate is
-ready for localhost review; this increment is not yet locally promoted.
+previous frozen-registry path and reports zero drift.
 
-## Optional-source decision
+## Optional-source completion
 
-`built_centre` and `built_low_selection` should be migrated, not removed. Both
+`built_centre` and `built_low_selection` were migrated rather than removed. Both
 are explicit accepted Trøndelag public options, are off by default, and are
 already present in the checksum-pinned runtime package. `built_centre` resolves
 to one `MultiPolygon`; `built_low_selection` resolves to 10,966 points. Each
 has a complete 89,312-row R8 distance artifact over the same signed source-cell
 universe as the primary layer, so the shared geometry-driven adapters and
 sparse R8-to-R7/R6/R5 contract are sufficient without a regional algorithm.
-The next bounded increment is to declare both in the analysis manifest, add
-individual and combined accepted-reference gates, and remove their remaining
+Both are now declared in the analysis manifest, have individual and combined
+accepted-reference and vector-preview gates, and have no remaining wind
 registry adapter path.

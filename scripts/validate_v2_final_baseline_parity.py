@@ -372,7 +372,7 @@ def main() -> int:
         group_id: []
         for group_id in app.public_wind_group_ids("trondelag")
     }
-    population_only[app.WIND_SETTLEMENT_GROUP_ID] = [
+    population_only[app.WIND_POPULATION_GROUP_ID] = [
         app.WIND_POPULATION_SOURCE_LAYER_ID
     ]
     for resolution, expectations in POPULATION_EXPECTATIONS.items():
@@ -786,7 +786,7 @@ def main() -> int:
             group_id: []
             for group_id in app.public_wind_group_ids("trondelag")
         }
-        invalid_selection[app.WIND_SETTLEMENT_GROUP_ID] = list(
+        invalid_selection[app.WIND_POPULATION_GROUP_ID] = list(
             invalid_layer_ids
         )
         try:
@@ -803,10 +803,22 @@ def main() -> int:
             invalid_population_selection_errors.append(
                 f"{invalid_layer_ids!r} did not fail closed"
             )
+    try:
+        app.normalize_group_layer_map(
+            {"settlement": [app.WIND_POPULATION_SOURCE_LAYER_ID]},
+            "trondelag",
+        )
+    except ValueError as exc:
+        if "Legacy settlement population selections" not in str(exc):
+            invalid_population_selection_errors.append(str(exc))
+    else:
+        invalid_population_selection_errors.append(
+            "the legacy settlement population alias did not fail closed"
+        )
     report.check(
         not invalid_population_selection_errors,
         "The V2 Final runtime rejects duplicate, blank, and undeclared raw "
-        "population selections.",
+        "population selections and the removed settlement alias.",
         "The V2 Final population-selection boundary validation drifted: "
         f"{invalid_population_selection_errors}",
     )
@@ -814,29 +826,26 @@ def main() -> int:
     original_population_distance_loader = app.distance_table_for_layer
     population_loader_calls: list[str] = []
     population_loader_results: list[dict[str, object] | None] = []
-    transitional_population_ids = [
-        str(layer.id)
-        for layer in app.ordered_layers("trondelag")
-        if str(layer.group_id) == app.WIND_SETTLEMENT_GROUP_ID
-        and str(layer.id) != app.WIND_POPULATION_SOURCE_LAYER_ID
-    ]
-    mixed_population_result: dict[str, object] | None = None
-    mixed_population_error = ""
-    mixed_population_oracle_error = float("inf")
+    canonical_population_ids = list(
+        app.canonical_population_layer_ids("trondelag")
+    )
+    combined_population_result: dict[str, object] | None = None
+    combined_population_error = ""
+    combined_population_oracle_error = float("inf")
     try:
-        def _reject_legacy_primary_population(registry_meta, layer_id):
+        def _reject_legacy_population(registry_meta, layer_id):
             normalized_layer_id = str(layer_id)
             population_loader_calls.append(normalized_layer_id)
-            if normalized_layer_id == app.WIND_POPULATION_SOURCE_LAYER_ID:
+            if normalized_layer_id in canonical_population_ids:
                 raise AssertionError(
-                    "population_points reached legacy distance loading"
+                    f"{normalized_layer_id} reached legacy distance loading"
                 )
             return original_population_distance_loader(
                 registry_meta,
                 normalized_layer_id,
             )
 
-        app.distance_table_for_layer = _reject_legacy_primary_population
+        app.distance_table_for_layer = _reject_legacy_population
         for resolution in (7, 6, 5):
             population_loader_results.append(
                 app._wind_fast_distance_runtime_result(
@@ -849,63 +858,59 @@ def main() -> int:
                     resolution,
                 )
             )
-        if transitional_population_ids:
-            transitional_id = transitional_population_ids[0]
-            mixed_selection = {
-                group_id: []
-                for group_id in app.public_wind_group_ids("trondelag")
+        combined_selection = {
+            group_id: []
+            for group_id in app.public_wind_group_ids("trondelag")
+        }
+        combined_selection[app.WIND_POPULATION_GROUP_ID] = list(
+            canonical_population_ids
+        )
+        combined_population_result = app._wind_fast_distance_runtime_result(
+            trondelag_region,
+            {
+                **app._reference_default_wind_params(),
+                "settlement_distance_m": 500.0,
+            },
+            combined_selection,
+            7,
+        )
+        combined_frame = (
+            combined_population_result.get("fast_distance_frame")
+            if isinstance(combined_population_result, dict)
+            else None
+        )
+        combined_target_ids = set(
+            app.load_h3_display_geometries(
+                app._h3_display_geometry_path(trondelag_region, 7)
+            )
+        )
+        combined_oracle = _population_acceptance_oracle(
+            trondelag_registry,
+            tuple(canonical_population_ids),
+            500.0,
+            7,
+            combined_target_ids,
+        )
+        combined_actual = (
+            {
+                str(row.hex_id): float(row.potential_area_share_pct) / 100.0
+                for row in combined_frame.itertuples(index=False)
             }
-            mixed_selection[app.WIND_SETTLEMENT_GROUP_ID] = [
-                app.WIND_POPULATION_SOURCE_LAYER_ID,
-                transitional_id,
-            ]
-            mixed_population_result = app._wind_fast_distance_runtime_result(
-                trondelag_region,
-                {
-                    **app._reference_default_wind_params(),
-                    "settlement_distance_m": 500.0,
-                },
-                mixed_selection,
-                7,
+            if isinstance(combined_frame, pd.DataFrame)
+            else {}
+        )
+        if combined_actual.keys() == combined_oracle.keys():
+            combined_population_oracle_error = max(
+                abs(combined_actual[cell_id] - combined_oracle[cell_id])
+                for cell_id in combined_actual
             )
-            mixed_frame = (
-                mixed_population_result.get("fast_distance_frame")
-                if isinstance(mixed_population_result, dict)
-                else None
-            )
-            mixed_target_ids = set(
-                app.load_h3_display_geometries(
-                    app._h3_display_geometry_path(trondelag_region, 7)
-                )
-            )
-            mixed_oracle = _population_acceptance_oracle(
-                trondelag_registry,
-                (app.WIND_POPULATION_SOURCE_LAYER_ID, transitional_id),
-                500.0,
-                7,
-                mixed_target_ids,
-            )
-            mixed_actual = (
-                {
-                    str(row.hex_id):
-                    float(row.potential_area_share_pct) / 100.0
-                    for row in mixed_frame.itertuples(index=False)
-                }
-                if isinstance(mixed_frame, pd.DataFrame)
-                else {}
-            )
-            if mixed_actual.keys() == mixed_oracle.keys():
-                mixed_population_oracle_error = max(
-                    abs(mixed_actual[cell_id] - mixed_oracle[cell_id])
-                    for cell_id in mixed_actual
-                )
     except Exception as exc:
-        mixed_population_error = str(exc)
+        combined_population_error = str(exc)
     finally:
         app.distance_table_for_layer = original_population_distance_loader
 
     report.check(
-        not mixed_population_error
+        not combined_population_error
         and len(population_loader_results) == 3
         and all(
             result is not None
@@ -918,20 +923,19 @@ def main() -> int:
         "The primary wind population filter never reaches the legacy "
         "distance loader at R7/R6/R5.",
         "The primary population filter still depends on legacy distance "
-        f"loading: {mixed_population_error or population_loader_calls}",
+        f"loading: {combined_population_error or population_loader_calls}",
     )
     report.check(
-        bool(transitional_population_ids)
-        and mixed_population_result is not None
-        and transitional_population_ids[0] in population_loader_calls
-        and app.WIND_POPULATION_SOURCE_LAYER_ID
-        not in population_loader_calls
-        and mixed_population_oracle_error <= 1e-12,
-        "A canonical primary population layer combines with a transitional "
-        "settlement proxy without losing frozen cell behavior.",
-        "Mixed canonical/transitional population behavior drifted: "
-        f"error={mixed_population_error}, "
-        f"max_cell_error={mixed_population_oracle_error}, "
+        canonical_population_ids
+        == ["population_points", "built_centre", "built_low_selection"]
+        and combined_population_result is not None
+        and not set(canonical_population_ids).intersection(population_loader_calls)
+        and combined_population_oracle_error <= 1e-12,
+        "All three manifest population sources combine canonically without "
+        "losing accepted cell behavior.",
+        "Combined canonical population behavior drifted: "
+        f"error={combined_population_error}, "
+        f"max_cell_error={combined_population_oracle_error}, "
         f"loader_calls={population_loader_calls}.",
     )
 
@@ -966,12 +970,12 @@ def main() -> int:
         legacy_spec["canonical_group_id"] = None
         legacy_spec["canonical_layer_ids"] = []
 
-        def _priority_primary_guard(registry_meta, layer_id):
+        def _priority_population_guard(registry_meta, layer_id):
             normalized_layer_id = str(layer_id)
             priority_loader_calls.append(normalized_layer_id)
-            if normalized_layer_id == app.WIND_POPULATION_SOURCE_LAYER_ID:
+            if normalized_layer_id in canonical_ids:
                 raise AssertionError(
-                    "population_points reached legacy allocation-ranking loading"
+                    f"{normalized_layer_id} reached legacy allocation-ranking loading"
                 )
             return original_priority_loader(registry_meta, normalized_layer_id)
 
@@ -1002,7 +1006,7 @@ def main() -> int:
             app._allocation_priority_layer_groups = (
                 lambda _region_id, _technology, spec=canonical_spec: [spec]
             )
-            app.distance_table_for_layer = _priority_primary_guard
+            app.distance_table_for_layer = _priority_population_guard
             canonical_priority = app._apply_landscape_priority_to_allocation_frame(
                 priority_source,
                 trondelag_region,
@@ -1037,13 +1041,17 @@ def main() -> int:
         not priority_errors
         and len(population_priority_specs) == 1
         and population_priority_specs[0].get("canonical_layer_ids")
-        == [app.WIND_POPULATION_SOURCE_LAYER_ID]
-        and app.WIND_POPULATION_SOURCE_LAYER_ID not in priority_loader_calls
+        == ["population_points", "built_centre", "built_low_selection"]
+        and not {
+            "population_points",
+            "built_centre",
+            "built_low_selection",
+        }.intersection(priority_loader_calls)
         and priority_max_errors.keys() == {7, 6, 5}
         and max(priority_max_errors.values(), default=float("inf")) <= 1e-12,
         "Wind allocation ranking uses canonical population distances at "
         "R7/R6/R5 without changing the accepted legacy ranking values.",
-        "Population allocation ranking still depends on the legacy primary "
+        "Population allocation ranking still depends on a legacy population "
         "loader or changed values: "
         f"errors={priority_errors}, loader_calls={priority_loader_calls}, "
         f"max_errors={priority_max_errors}.",

@@ -17,9 +17,7 @@ from speedlocal.validation import validate_contract, validate_layer
 
 CANONICAL_ROADS_GROUP_ID = "roads"
 CANONICAL_POPULATION_GROUP_ID = "population"
-TRANSITIONAL_POPULATION_GROUP_ID = "settlement"
 CANONICAL_TO_TRANSITIONAL_GROUP_ID = {
-    "population": "settlement",
     "nature": "protected",
     "culture": "culture",
     "grid_infrastructure": "electrical",
@@ -99,7 +97,10 @@ def public_wind_group_ids(region_id: str) -> tuple[str, ...]:
     analysis = _validated_wind_analysis(region_id)
     group_ids: list[str] = []
     for group_id in analysis.groups:
-        if group_id == CANONICAL_ROADS_GROUP_ID:
+        if group_id in {
+            CANONICAL_ROADS_GROUP_ID,
+            CANONICAL_POPULATION_GROUP_ID,
+        }:
             group_ids.append(group_id)
             continue
         transitional_id = CANONICAL_TO_TRANSITIONAL_GROUP_ID.get(group_id)
@@ -125,8 +126,9 @@ def default_wind_layer_selection(region_id: str) -> dict[str, list[str]]:
                 f"{layer_id}"
             )
         public_group_id = (
-            CANONICAL_ROADS_GROUP_ID
-            if layer.group_id == CANONICAL_ROADS_GROUP_ID
+            layer.group_id
+            if layer.group_id
+            in {CANONICAL_ROADS_GROUP_ID, CANONICAL_POPULATION_GROUP_ID}
             else CANONICAL_TO_TRANSITIONAL_GROUP_ID.get(layer.group_id)
         )
         if public_group_id is None:
@@ -291,11 +293,10 @@ def roads_control_contract(region_id: str) -> WindGroupControlContract:
 
 
 def population_control_contract(region_id: str) -> WindGroupControlContract:
-    """Expose canonical population through its temporary public alias."""
+    """Expose canonical manifest-driven population controls."""
     return wind_group_control_contract(
         region_id,
         CANONICAL_POPULATION_GROUP_ID,
-        public_group_id=TRANSITIONAL_POPULATION_GROUP_ID,
     )
 
 

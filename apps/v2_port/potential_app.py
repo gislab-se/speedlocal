@@ -238,8 +238,9 @@ SOLAR_POPULATION_BUFFER_LABEL = "Solbuffert: Befolkningsunderlag"
 PROTECTED_NATURE_LABEL = "Skyddad natur"
 SOLAR_PROTECTED_SOURCE_LABEL = f"Sol källa: {PROTECTED_NATURE_LABEL}"
 SOLAR_PROTECTED_BUFFER_LABEL = f"Solbuffert: {PROTECTED_NATURE_LABEL}"
-WIND_SETTLEMENT_GROUP_ID = "settlement"
-WIND_SETTLEMENT_GROUP_LABEL = "Befolkning och bebyggelse"
+WIND_POPULATION_GROUP_ID = CANONICAL_POPULATION_GROUP_ID
+WIND_POPULATION_GROUP_LABEL = "Befolkning och bebyggelse"
+SOLAR_POPULATION_GROUP_ID = "settlement"
 WIND_POPULATION_SOURCE_LAYER_ID = "population_points"
 WIND_ROADS_GROUP_ID = CANONICAL_ROADS_GROUP_ID
 WIND_ROADS_PARAM_KEY = "road_distance_m"
@@ -1051,7 +1052,7 @@ def _trondelag_tutorial_steps(region: dict[str, Any]) -> list[dict[str, Any]]:
             "body": _tutorial_text("wind_apply_body"),
             "closeAllExpanders": True,
             "sidebarScrollTop": True,
-            "openTexts": [geography_label, wind_label, WIND_SETTLEMENT_GROUP_LABEL],
+            "openTexts": [geography_label, wind_label, WIND_POPULATION_GROUP_LABEL],
             "scrollToText": wind_apply_label,
             "scrollAlign": 0.58,
             "highlightTexts": [wind_apply_label],
@@ -4147,9 +4148,9 @@ def _preview_labels(labels: list[str], limit: int = 3) -> str:
 
 
 def _wind_group_display_label(groups: dict[str, Any], group_id: str) -> str:
-    if str(group_id) == WIND_SETTLEMENT_GROUP_ID:
+    if str(group_id) == WIND_POPULATION_GROUP_ID:
         group = _wind_control_group(_wind_region_id(), group_id)
-        return str(group.label) if group is not None else WIND_SETTLEMENT_GROUP_LABEL
+        return str(group.label) if group is not None else WIND_POPULATION_GROUP_LABEL
     if str(group_id) == SOLAR_PROTECTED_GROUP_ID:
         return PROTECTED_NATURE_LABEL
     if str(group_id) == WIND_ROADS_GROUP_ID:
@@ -4309,8 +4310,8 @@ def _protected_group_label() -> str:
     return PROTECTED_NATURE_LABEL
 
 
-def _settlement_group_label() -> str:
-    return WIND_SETTLEMENT_GROUP_LABEL
+def _population_group_label() -> str:
+    return WIND_POPULATION_GROUP_LABEL
 
 
 def _apply_wind_layer_selection_state(layer_selection: dict[str, list[str]]) -> dict[str, list[str]]:
@@ -4322,9 +4323,6 @@ def _apply_wind_layer_selection_state(layer_selection: dict[str, list[str]]) -> 
             st.session_state[_wind_control_key("layer", layer.id)] = bool(
                 layer.id in selected.get(group.id, [])
             )
-    st.session_state[_wind_control_key("group", WIND_SETTLEMENT_GROUP_ID)] = bool(
-        selected.get(WIND_SETTLEMENT_GROUP_ID)
-    )
     st.session_state[_wind_control_key("group", WIND_CULTURE_GROUP_ID)] = bool(
         selected.get(WIND_CULTURE_GROUP_ID)
     )
@@ -6329,7 +6327,7 @@ def _wind_filter_buffer_layer(
     layer_ids: list[str] | tuple[str, ...] | None = None,
 ) -> dict[str, Any] | None:
     is_roads_group = str(group_id) == WIND_ROADS_GROUP_ID
-    is_population_group = str(group_id) == WIND_SETTLEMENT_GROUP_ID
+    is_population_group = str(group_id) == WIND_POPULATION_GROUP_ID
     is_manifest_group = is_roads_group or is_population_group
     if not is_manifest_group and str(group_id) not in SOLAR_FILTER_GROUP_SPECS:
         return None
@@ -7899,7 +7897,7 @@ def _reference_default_wind_layer_selection(
     normalized_region_id = _wind_region_id(region_id)
     return normalize_group_layer_map(
         {
-            "settlement": [WIND_POPULATION_SOURCE_LAYER_ID],
+            WIND_POPULATION_GROUP_ID: [WIND_POPULATION_SOURCE_LAYER_ID],
             WIND_ROADS_GROUP_ID: list(
                 canonical_road_layer_ids(normalized_region_id)
             ),
@@ -7942,7 +7940,6 @@ def _apply_reference_default_wind_to_controls() -> None:
                 layer_id.id in selected_ids
             )
     for group_id in (
-        WIND_SETTLEMENT_GROUP_ID,
         WIND_CULTURE_GROUP_ID,
         WIND_REINDEER_GROUP_ID,
         SOLAR_PROTECTED_GROUP_ID,
@@ -8561,6 +8558,12 @@ def normalize_group_layer_map(
             "Legacy transport road selections are no longer supported; "
             "use the canonical roads group"
         )
+    legacy_population = source.get("settlement", [])
+    if legacy_population:
+        raise ValueError(
+            "Legacy settlement population selections are no longer supported; "
+            "use the canonical population group"
+        )
 
     normalized_region_id = _wind_region_id(region_id)
     available_road_ids = canonical_road_layer_ids(normalized_region_id)
@@ -8585,17 +8588,7 @@ def normalize_group_layer_map(
     canonical_population_ids = canonical_population_layer_ids(
         normalized_region_id
     )
-    transitional_population_ids = tuple(
-        str(layer.id)
-        for layer in ordered_layers(normalized_region_id)
-        if str(layer.group_id) == WIND_SETTLEMENT_GROUP_ID
-        and str(layer.id) not in canonical_population_ids
-    )
-    available_population_ids = (
-        *canonical_population_ids,
-        *transitional_population_ids,
-    )
-    raw_population = source.get(WIND_SETTLEMENT_GROUP_ID, [])
+    raw_population = source.get(WIND_POPULATION_GROUP_ID, [])
     if raw_population is None:
         raw_population = []
     if isinstance(raw_population, (str, bytes)):
@@ -8614,7 +8607,7 @@ def normalize_group_layer_map(
             "A V2 Final population selection contains duplicate layer ids"
         )
     unknown_population = set(requested_population) - set(
-        available_population_ids
+        canonical_population_ids
     )
     if unknown_population:
         raise ValueError(
@@ -8632,10 +8625,10 @@ def normalize_group_layer_map(
                 for layer_id in available_road_ids
                 if layer_id in requested_road_set
             ]
-        elif group_id == WIND_SETTLEMENT_GROUP_ID:
+        elif group_id == WIND_POPULATION_GROUP_ID:
             normalized[group_id] = [
                 layer_id
-                for layer_id in available_population_ids
+                for layer_id in canonical_population_ids
                 if layer_id in requested_population_set
             ]
         else:
@@ -8644,6 +8637,8 @@ def normalize_group_layer_map(
     # until their own complete behavior slice is migrated. They are not
     # exposed by public_wind_group_ids() or the V2 Final controls.
     for group_id in WIND_GROUP_LAYER_DEFAULTS:
+        if group_id == "settlement":
+            continue
         normalized.setdefault(
             group_id,
             list(legacy_selection.get(group_id, [])),
@@ -8654,6 +8649,8 @@ def normalize_group_layer_map(
 def _wind_group_param_key(group_id: str) -> str | None:
     if str(group_id) == WIND_ROADS_GROUP_ID:
         return WIND_ROADS_PARAM_KEY
+    if str(group_id) == WIND_POPULATION_GROUP_ID:
+        return "settlement_distance_m"
     return GROUP_PARAM_MAP.get(str(group_id))
 
 
@@ -8665,7 +8662,7 @@ def _wind_control_groups(region_id: str) -> list[Any]:
     for group_id in public_wind_group_ids(region_id):
         if group_id == WIND_ROADS_GROUP_ID:
             group = roads_group
-        elif group_id == WIND_SETTLEMENT_GROUP_ID:
+        elif group_id == WIND_POPULATION_GROUP_ID:
             group = population_group
         else:
             group = legacy_groups.get(group_id)
@@ -8687,17 +8684,7 @@ def _wind_control_group(region_id: str, group_id: str) -> Any | None:
 
 def _wind_control_layers(region_id: str, group: Any) -> list[Any]:
     if isinstance(group, WindGroupControlContract):
-        manifest_layers = list(group.layers)
-        if group.canonical_id != CANONICAL_POPULATION_GROUP_ID:
-            return manifest_layers
-        manifest_ids = {str(layer.id) for layer in manifest_layers}
-        transitional_layers = [
-            layer
-            for layer in ordered_layers(region_id)
-            if str(layer.group_id) == WIND_SETTLEMENT_GROUP_ID
-            and str(layer.id) not in manifest_ids
-        ]
-        return [*manifest_layers, *transitional_layers]
+        return list(group.layers)
     return [
         layer
         for layer in ordered_layers(region_id)
@@ -8898,7 +8885,7 @@ def _wind_group_controls(
                 analysis_default_m,
             ) = _wind_group_control_contract(group, region_id)
             is_protected_group = group.id == SOLAR_PROTECTED_GROUP_ID
-            is_settlement_group = group.id == WIND_SETTLEMENT_GROUP_ID
+            is_population_group = group.id == WIND_POPULATION_GROUP_ID
             is_culture_group = group.id == WIND_CULTURE_GROUP_ID
             is_reindeer_group = group.id == WIND_REINDEER_GROUP_ID
             is_roads_group = group.id == WIND_ROADS_GROUP_ID
@@ -8911,15 +8898,13 @@ def _wind_group_controls(
                 display_group_label = _protected_group_label()
             elif is_manifest_group:
                 display_group_label = str(group.label)
-            elif is_settlement_group:
-                display_group_label = _settlement_group_label()
             else:
                 display_group_label = group_label(group, language, group.label)
             expander_label = display_group_label
             expanded_by_default = bool(
                 group.expanded_by_default
                 if is_manifest_group
-                else group.id in {"settlement", "electrical"}
+                else group.id == "electrical"
             )
             with st.expander(expander_label, expanded=expanded_by_default):
                 st.caption(
@@ -8941,7 +8926,7 @@ def _wind_group_controls(
                     disabled=not group_available,
                 )
                 group_enabled = True
-                if is_protected_group or is_settlement_group or is_culture_group or is_reindeer_group:
+                if is_protected_group or is_culture_group or is_reindeer_group:
                     group_layer_keys = [
                         _wind_control_key("layer", layer.id)
                         for layer in group_layers
@@ -8953,11 +8938,7 @@ def _wind_group_controls(
                     if not group_available:
                         st.session_state[_wind_control_key("group", group.id)] = False
                     group_help = (
-                        "250 m-rutproxyn är huvudkällan. Övriga "
-                        "bebyggelselager kan väljas under avancerade "
-                        "inställningar."
-                        if is_settlement_group
-                        else "Samlar valda kulturmiljölager till en gemensam restriktion i vindpotentialen."
+                        "Samlar valda kulturmiljölager till en gemensam restriktion i vindpotentialen."
                         if is_culture_group
                         else "Samlar valda reindriftslager till en gemensam restriktion i vindpotentialen."
                         if is_reindeer_group
@@ -8978,7 +8959,18 @@ def _wind_group_controls(
                     )
                 main_layers = group_layers
                 advanced_layers: list[Any] = []
-                if is_protected_group or is_settlement_group or is_culture_group or is_reindeer_group:
+                if is_population_group:
+                    main_layers = [
+                        layer
+                        for layer in group_layers
+                        if layer.id == WIND_POPULATION_SOURCE_LAYER_ID
+                    ]
+                    advanced_layers = [
+                        layer
+                        for layer in group_layers
+                        if layer.id != WIND_POPULATION_SOURCE_LAYER_ID
+                    ]
+                elif is_protected_group or is_culture_group or is_reindeer_group:
                     main_layers = []
                     advanced_layers = group_layers
 
@@ -9010,14 +9002,13 @@ def _wind_group_controls(
                 for layer in main_layers:
                     render_layer_checkbox(layer)
 
-                with st.expander("Avancerade inställningar", expanded=False):
-                    if is_settlement_group:
-                        st.caption(
-                            "Befolkning 250 m-rutor är den manifeststyrda "
-                            "huvudkällan. Övriga bebyggelseproxyer är "
-                            "tillfälligt registerkopplade."
-                        )
-                    elif is_culture_group:
+                with st.expander(
+                    "Fler datakällor"
+                    if is_population_group
+                    else "Avancerade inställningar",
+                    expanded=False,
+                ):
+                    if is_culture_group:
                         st.caption("Välj vilka kulturmiljölager som ska ingå i gruppen.")
                     elif is_reindeer_group:
                         st.caption("Välj vilka reindriftslager som ska ingå i gruppen.")
@@ -9033,8 +9024,10 @@ def _wind_group_controls(
                 if not selected[group.id]:
                     if not group_available:
                         st.caption("Gruppen är gråmarkerad och ej valbar tills data finns.")
-                    elif (is_protected_group or is_settlement_group or is_culture_group or is_reindeer_group) and not group_enabled:
+                    elif (is_protected_group or is_culture_group or is_reindeer_group) and not group_enabled:
                         st.caption("Gruppen är avstängd. Del-lager kan väljas, men används först när gruppen är aktiv.")
+                    elif is_population_group:
+                        pass
                     else:
                         st.caption(ui_text("group_inactive", language))
         applied = st.form_submit_button(ui_text("apply_changes", language), type="primary", width="stretch")
@@ -9244,7 +9237,7 @@ def _wind_polygon_source_layers(
                 )
             continue
         canonical_population_ids: set[str] = set()
-        if group_id == WIND_SETTLEMENT_GROUP_ID:
+        if group_id == WIND_POPULATION_GROUP_ID:
             population_group = population_control_contract(region_id)
             population_layers = {
                 layer.id: layer for layer in population_group.layers
@@ -9283,7 +9276,7 @@ def _wind_polygon_source_layers(
         translated_group_label = GROUP_LABELS.get(group_id, group_meta.label if group_meta is not None else group_id)
         if group_meta is not None:
             translated_group_label = group_label(group_meta, WIND_CONTROL_LANGUAGE, group_meta.label)
-        if group_id == WIND_SETTLEMENT_GROUP_ID:
+        if group_id == WIND_POPULATION_GROUP_ID:
             translated_group_label = str(population_group.label)
         if group_id == SOLAR_PROTECTED_GROUP_ID:
             translated_group_label = PROTECTED_NATURE_LABEL
@@ -9341,7 +9334,7 @@ def _wind_polygon_source_layers(
             geojson = source_geojson_for_layer(registry_meta, layer_id)
             if geojson is None:
                 continue
-            is_trondelag_population = group_id == WIND_SETTLEMENT_GROUP_ID and layer_id == WIND_POPULATION_SOURCE_LAYER_ID
+            is_trondelag_population = group_id == WIND_POPULATION_GROUP_ID and layer_id == WIND_POPULATION_SOURCE_LAYER_ID
             map_layers.append(
                 {
                     "name": f"Vind källa: {layer_label(layer_spec, WIND_CONTROL_LANGUAGE, layer_spec.label)} ({translated_group_label})",
@@ -9382,8 +9375,8 @@ def _wind_polygon_group_layers(
         selected_sources = str(runtime_group.get("selected_sources", "") or "")
         analysis_value = int(round(float(runtime_group.get("analysis_value_m", 0.0) or 0.0)))
         buffer_layer_id = (
-            f"wind:{WIND_SETTLEMENT_GROUP_ID}:buffer:{analysis_value}:{WIND_POPULATION_SOURCE_LAYER_ID}"
-            if group.id == WIND_SETTLEMENT_GROUP_ID and selected_sources.strip().lower() == "population points"
+            f"wind:{WIND_POPULATION_GROUP_ID}:buffer:{analysis_value}:{WIND_POPULATION_SOURCE_LAYER_ID}"
+            if group.id == WIND_POPULATION_GROUP_ID and selected_sources.strip().lower() == "population points"
             else f"wind:{group.id}:buffer:{analysis_value}"
         )
         map_layers.append(
@@ -9391,8 +9384,8 @@ def _wind_polygon_group_layers(
                 "name": (
                     f"Vindbuffert: {_protected_group_label()}"
                     if group.id == SOLAR_PROTECTED_GROUP_ID
-                    else f"Vindbuffert: {_settlement_group_label()}"
-                    if group.id == WIND_SETTLEMENT_GROUP_ID
+                    else f"Vindbuffert: {_population_group_label()}"
+                    if group.id == WIND_POPULATION_GROUP_ID
                     else f"Vindbuffert: {group_label(groups[group.id], WIND_CONTROL_LANGUAGE, groups[group.id].label)}"
                 ),
                 "buffer_layer_id": buffer_layer_id,
@@ -9679,7 +9672,7 @@ def _allocation_priority_layer_groups(
     canonical_population_ids: tuple[str, ...] = ()
     raw_groups: list[tuple[str, list[str]]] = []
     if str(technology) == "solar":
-        raw_groups.append((WIND_SETTLEMENT_GROUP_ID, [WIND_POPULATION_SOURCE_LAYER_ID]))
+        raw_groups.append((SOLAR_POPULATION_GROUP_ID, [WIND_POPULATION_SOURCE_LAYER_ID]))
         for group_id in SOLAR_FILTER_GROUP_IDS:
             raw_groups.append((group_id, list(_solar_filter_layer_ids(group_id))))
     else:
@@ -9697,7 +9690,12 @@ def _allocation_priority_layer_groups(
         canonical_population_ids = tuple(
             layer.id for layer in canonical_population_group.layers
         )
+        raw_groups.append(
+            (WIND_POPULATION_GROUP_ID, list(canonical_population_ids))
+        )
         for group_id, layer_ids in WIND_GROUP_LAYER_DEFAULTS.items():
+            if group_id == SOLAR_POPULATION_GROUP_ID:
+                continue
             raw_groups.append((group_id, list(layer_ids)))
 
     specs: list[dict[str, Any]] = []
@@ -9709,7 +9707,7 @@ def _allocation_priority_layer_groups(
         canonical_layer_ids: list[str] = []
         if (
             str(technology) == "wind"
-            and group_id == WIND_SETTLEMENT_GROUP_ID
+            and group_id == WIND_POPULATION_GROUP_ID
         ):
             if canonical_population_group is None or not canonical_population_ids:
                 raise ValueError(
@@ -10091,7 +10089,7 @@ def _wind_fast_distance_runtime_result(
     }
     canonical_groups = {
         WIND_ROADS_GROUP_ID: roads_group,
-        WIND_SETTLEMENT_GROUP_ID: population_group,
+        WIND_POPULATION_GROUP_ID: population_group,
     }
     if str(registry_meta.get("_runtime_strategy") or "") != "fast_distance":
         return None
@@ -10131,7 +10129,7 @@ def _wind_fast_distance_runtime_result(
                 frame["hex_id"].astype(str),
                 int(target_resolution),
             )
-        elif group_id == WIND_SETTLEMENT_GROUP_ID:
+        elif group_id == WIND_POPULATION_GROUP_ID:
             canonical_ids = [
                 layer_id
                 for layer_id in layer_ids
@@ -13632,8 +13630,8 @@ def _missing_wind_controls(status_rows: list[dict[str, Any]]) -> None:
     st.caption("Samma vindkontroller visas för alla regioner. De aktiveras när regionens vindregler och H3-/landskapsunderlag finns.")
     for group in ordered_groups():
         label = group_label(group, language, group.label)
-        if group.id == WIND_SETTLEMENT_GROUP_ID:
-            label = _t(WIND_SETTLEMENT_GROUP_LABEL)
+        if group.id == SOLAR_POPULATION_GROUP_ID:
+            label = _t(WIND_POPULATION_GROUP_LABEL)
         elif group.id == SOLAR_PROTECTED_GROUP_ID:
             label = _t(PROTECTED_NATURE_LABEL)
         with st.expander(label, expanded=group.id in {"settlement", "transport", "electrical"}):

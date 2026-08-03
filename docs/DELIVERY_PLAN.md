@@ -106,9 +106,13 @@ Current milestone status:
   Clean-process localhost review was approved on 2026-07-31, so the bounded
   primary increment is locally promoted. The wind allocation-ranking consumer
   now uses canonical population distances at R7/R6/R5 with zero accepted-value
-  drift and no legacy primary-layer load; localhost review is pending for that
-  checkpoint. Optional settlement proxies and the public `settlement` alias
-  remain transitional, so the complete population slice is not yet promoted.
+  drift. The optional polygon `built_centre` and point
+  `built_low_selection` sources are manifest-declared and canonical in
+  controls, calculation, previews, and ranking; no population source reaches
+  the legacy loader, and the public wind `settlement` alias is removed. The
+  simplified control and complete automated gate are ready on localhost; the
+  complete population slice awaits final visual approval before local
+  promotion.
 
 ## Slice gates
 
@@ -159,7 +163,9 @@ During this plan:
 ## Decision points
 
 - **31 Jul:** confirm that V2 Final can replace one complete road slice cleanly.
-- **5 Aug:** confirm that geometry-driven population adapters are sufficient.
+- **3 Aug (confirmed early):** geometry-driven population adapters are
+  sufficient for the Trøndelag polygon-grid, polygon-feature, and
+  point-feature sources without a region-name algorithm branch.
 - **17 Aug:** confirm that the common restriction result supports both wind and
   solar.
 - **21 Aug:** confirm that scenario and acceptance inputs are delivery-quality.

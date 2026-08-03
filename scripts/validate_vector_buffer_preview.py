@@ -94,6 +94,8 @@ def main() -> int:
     layer = contract.layers["roads_large"]
     medium_layer = contract.layers["roads_medium"]
     population_layer = contract.layers["population_points"]
+    built_centre_layer = contract.layers["built_centre"]
+    built_low_layer = contract.layers["built_low_selection"]
     native_crs = str(region["native_crs"])
 
     zero = build_vector_buffer_preview(
@@ -130,6 +132,21 @@ def main() -> int:
         [population_layer],
         native_crs=native_crs,
         buffer_m=1000,
+    )
+    built_centre_at_500 = build_vector_buffer_preview(
+        [built_centre_layer],
+        native_crs=native_crs,
+        buffer_m=500,
+    )
+    built_low_at_500 = build_vector_buffer_preview(
+        [built_low_layer],
+        native_crs=native_crs,
+        buffer_m=500,
+    )
+    all_population_at_500 = build_vector_buffer_preview(
+        [population_layer, built_centre_layer, built_low_layer],
+        native_crs=native_crs,
+        buffer_m=500,
     )
 
     report.check(
@@ -184,6 +201,36 @@ def main() -> int:
         and population_at_1000.area_m2 > population_at_100.area_m2,
         "The population preview grows monotonically from 100 m to 1000 m.",
         "The population preview did not grow from 100 m to 1000 m.",
+    )
+    report.check(
+        built_centre_at_500.layer_ids == ("built_centre",)
+        and built_centre_at_500.source_feature_count == 1
+        and built_centre_at_500.declared_feature_count == 1
+        and built_centre_at_500.geometry_type in {"Polygon", "MultiPolygon"}
+        and built_centre_at_500.area_m2 > 0,
+        "The optional built-centre preview uses its declared polygon source.",
+        "The optional built-centre preview drifted from its manifest source.",
+    )
+    report.check(
+        built_low_at_500.layer_ids == ("built_low_selection",)
+        and built_low_at_500.source_feature_count == 10_966
+        and built_low_at_500.declared_feature_count == 10_966
+        and built_low_at_500.geometry_type in {"Polygon", "MultiPolygon"}
+        and built_low_at_500.area_m2 > 0,
+        "The optional leisure-home preview buffers its declared point source.",
+        "The optional leisure-home point preview drifted from its manifest source.",
+    )
+    report.check(
+        all_population_at_500.layer_ids
+        == ("population_points", "built_centre", "built_low_selection")
+        and all_population_at_500.geometry_type in {"Polygon", "MultiPolygon"}
+        and all_population_at_500.area_m2
+        >= max(
+            built_centre_at_500.area_m2,
+            built_low_at_500.area_m2,
+        ),
+        "All three manifest population geometries dissolve into one preview.",
+        "The combined population preview did not preserve all three sources.",
     )
     report.check(
         at_300.geojson.get("type") == "FeatureCollection"

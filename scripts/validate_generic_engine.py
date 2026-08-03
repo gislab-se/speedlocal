@@ -100,6 +100,23 @@ POPULATION_EXPECTATIONS = {
         3000.0: (0.1283255305936073, 302, 309, 3_363.591524290177),
     },
 }
+OPTIONAL_POPULATION_EXPECTATIONS = {
+    ("built_centre",): {
+        7: (0.9545446698216236, 558, 43_176.566357676700),
+        6: (0.9218466657420250, 156, 42_016.643883458560),
+        5: (0.7930234630136988, 73, 35_483.860983314786),
+    },
+    ("built_low_selection",): {
+        7: (0.3971243303967965, 7_024, 17_997.612016472070),
+        6: (0.1507112732316228, 1_781, 6_084.743136532677),
+        5: (0.0637616383561644, 337, 790.380581158766),
+    },
+    ("population_points", "built_centre", "built_low_selection"): {
+        7: (0.3629949000364034, 7_711, 16_467.633804167090),
+        6: (0.1464671299121591, 1_794, 5_939.475401828971),
+        5: (0.0637616383561644, 337, 790.380581158766),
+    },
+}
 
 
 def _v2_roads_oracle(contract, threshold: float) -> tuple[int, int, float]:
@@ -631,6 +648,23 @@ def main() -> int:
         population_buffer.step,
     ) == (100.0, 100.0, 3000.0, 50.0)
     checks += 10
+
+    built_centre = validate_layer(trondelag.layers["built_centre"])
+    built_low = validate_layer(trondelag.layers["built_low_selection"])
+    assert built_centre.contract.group_id == "population"
+    assert built_centre.geometry_family == "polygon"
+    assert built_centre.processing_adapter == "population_polygons"
+    assert built_centre.assets.feature_count == 1
+    assert built_low.contract.group_id == "population"
+    assert built_low.geometry_family == "point"
+    assert built_low.processing_adapter == "population_points"
+    assert built_low.assets.feature_count == 10_966
+    assert all(
+        layer.contract.source.distance_h3_resolution == 8
+        and layer.contract.source.distance_coverage == population_coverage
+        for layer in (built_centre, built_low)
+    )
+    checks += 9
     for invalid_distance_resolution in (True, 6.5, -1, 16):
         try:
             replace(
@@ -1083,6 +1117,66 @@ def main() -> int:
                 f"PASS trondelag population_points R{resolution} "
                 f"{threshold:g} m: {group.cell_count} cells, "
                 f"{group.blocked_cell_count} blocked, "
+                f"{expected_zero_acceptance} zero-acceptance, "
+                f"{group.mean_acceptance:.15f} mean acceptance, "
+                f"{model_area_km2:.9f} km2 model area"
+            )
+
+    for layer_ids, expectations in OPTIONAL_POPULATION_EXPECTATIONS.items():
+        for resolution, (
+            expected_mean,
+            expected_zero_acceptance,
+            expected_area_km2,
+        ) in expectations.items():
+            target_cell_ids = display_cell_ids_by_resolution[resolution]
+            result = run_analysis(
+                "trondelag",
+                "wind",
+                list(layer_ids),
+                {
+                    layer_id: {"buffer_m": 500.0}
+                    for layer_id in layer_ids
+                },
+                target_resolution=resolution,
+            )
+            group = result.groups[0]
+            assert group.group_id == "population"
+            assert group.layer_ids == layer_ids
+            assert group.cell_count == TRONDELAG_DISPLAY_COUNTS[resolution]
+            assert abs(group.mean_acceptance - expected_mean) < 1e-12
+            assert sum(
+                cell.acceptance == 0.0 for cell in group.cells
+            ) == expected_zero_acceptance
+            oracle = _v2_distance_selection_rollup_oracle(
+                trondelag,
+                layer_ids,
+                500.0,
+                8,
+                resolution,
+                target_cell_ids,
+                "zero_acceptance",
+            )
+            actual = {cell.cell_id: cell for cell in group.cells}
+            assert actual.keys() == oracle.keys()
+            assert all(
+                abs(actual[cell_id].acceptance - values[3]) < 1e-12
+                for cell_id, values in oracle.items()
+            )
+            model_area_km2 = math.fsum(
+                cell.acceptance
+                * area_by_resolution[resolution][cell.cell_id]
+                for cell in group.cells
+            )
+            assert math.isclose(
+                model_area_km2,
+                expected_area_km2,
+                rel_tol=1e-12,
+                abs_tol=1e-8,
+            )
+            checks += 9
+            print(
+                f"PASS trondelag {'+'.join(layer_ids)} R{resolution} "
+                f"500 m: {group.cell_count} cells, "
                 f"{expected_zero_acceptance} zero-acceptance, "
                 f"{group.mean_acceptance:.15f} mean acceptance, "
                 f"{model_area_km2:.9f} km2 model area"

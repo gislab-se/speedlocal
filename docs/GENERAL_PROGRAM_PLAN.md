@@ -210,11 +210,11 @@ Current slice:
   manifest;
 - V2 Final starts from the wind manifest's empty request; source and buffer
   visibility are map-review state and do not alter the numeric request;
-- the five-group public whitelist is manifest-declared. The primary
-  population layer is now manifest-driven alongside roads; remaining
-  unmigrated non-road options still come from the region-manifest-declared
-  legacy registry. That bounded adapter is not canonical manifest layer
-  availability and not a solar analysis contract;
+- the five-group public whitelist is manifest-declared. Roads and all three
+  wind population sources are now manifest-driven; remaining unmigrated
+  non-road options still come from the region-manifest-declared legacy
+  registry. That bounded adapter is not canonical manifest layer availability
+  and not a solar analysis contract;
 - wind potential, establishment rollups, and scenario allocation use validated
   per-cell `display_area_m2`; Frozen V2's unweighted cell mean remains the
   parity oracle, and exact polygon-clipped land area remains later work;
@@ -244,11 +244,14 @@ Current slice:
   this contract, and adversarial checks prove that a broken migrated contract
   cannot reopen the legacy primary loader. The user approved the clean
   localhost checkpoint on 2026-07-31, so this bounded primary increment is
-  locally promoted. The wind allocation-ranking consumer now obtains the
-  primary layer from the canonical manifest engine at R7/R6/R5 and matches the
-  previous ranking values exactly; its localhost review is pending. The two
-  validated optional settlement proxies and public `settlement` alias remain
-  explicit work inside the incomplete population slice.
+  locally promoted. The wind allocation-ranking consumer now obtains all
+  three population layers from the canonical manifest engine at R7/R6/R5 and
+  matches the previous ranking values exactly. The polygon `built_centre` and
+  point `built_low_selection` sources are canonical, and the public wind
+  `settlement` alias and legacy optional-source path are removed. The
+  simplified manifest-driven population control is implemented and
+  automatically validated; final localhost visual approval remains before
+  the complete population slice is locally promoted.
 
 ## Definition of done for a slice
 

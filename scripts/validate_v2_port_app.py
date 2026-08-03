@@ -157,7 +157,7 @@ def _ready_public_ui_contract(
 ) -> tuple[set[str], set[str], set[str], set[str]]:
     registry_groups, registry_layers, registry_meta = load_registry(region_id)
     public_group_ids = set(public_wind_group_ids(region_id))
-    manifest_public_group_ids = {"roads", "settlement"}
+    manifest_public_group_ids = {"roads", "population"}
     legacy_public_group_ids = public_group_ids - manifest_public_group_ids
     roads_group = roads_control_contract(region_id)
     population_group = population_control_contract(region_id)
@@ -185,10 +185,7 @@ def _ready_public_ui_contract(
     ready_layer_ids = {
         str(layer_id)
         for layer_id, layer in registry_layers.items()
-        if (
-            str(layer.group_id) in legacy_public_group_ids
-            or str(layer.group_id) == "settlement"
-        )
+        if str(layer.group_id) in legacy_public_group_ids
         and str(layer_id) not in manifest_layer_ids
         and is_ready(str(layer_id))
     }
@@ -207,12 +204,11 @@ def _ready_public_ui_contract(
     if any(layer.ready for layer in roads_group.layers):
         ready_group_ids.add("roads")
     if any(layer.ready for layer in population_group.layers):
-        ready_group_ids.add("settlement")
+        ready_group_ids.add("population")
     public_layer_ids = {
         str(layer_id)
         for layer_id, layer in registry_layers.items()
         if str(layer.group_id) in legacy_public_group_ids
-        or str(layer.group_id) == "settlement"
     }
     public_layer_ids.update(manifest_layer_ids)
     extra_group_ids = set(registry_groups) - public_group_ids - {"transport"}
@@ -317,6 +313,7 @@ def _check_manifest_empty_start_and_public_controls(
         str(layer_id)
         for layer_id, layer in load_registry(region_id)[1].items()
         if str(layer.group_id) in extra_group_ids
+        and str(layer_id) not in public_layer_ids
     }
     report.check(
         rendered_group_ids == ready_group_ids
@@ -364,7 +361,7 @@ def _check_manifest_empty_start_and_public_controls(
     try:
         population_slider = _by_key(
             app.slider,
-            f"{WIND_ANALYSIS_KEY_PREFIX}settlement",
+            f"{WIND_ANALYSIS_KEY_PREFIX}population",
         )
     except Exception as exc:
         report.check(
@@ -858,15 +855,42 @@ def _check_population_slice(report: Report) -> None:
         )
         return
 
+    checkbox_by_key = {
+        str(item.key or ""): str(item.label)
+        for item in app.checkbox
+    }
+    population_layer_labels = {
+        "wind_control__layer__population_points": "Befolkning 250 m-rutor",
+        "wind_control__layer__built_centre": "Bebyggelsekärnor",
+        "wind_control__layer__built_low_selection": "Fritidshus",
+    }
+    expander_labels = {
+        str(getattr(item, "label", ""))
+        for item in getattr(app, "expander", [])
+    }
+    report.check(
+        all(
+            checkbox_by_key.get(key) == label
+            for key, label in population_layer_labels.items()
+        )
+        and "wind_control__group__population" not in checkbox_by_key
+        and "Fler datakällor" in expander_labels,
+        "trondelag: the population control exposes its manifest primary "
+        "source directly, keeps two manifest optional sources under Fler "
+        "datakällor, and has no redundant group checkbox.",
+        "trondelag: the simplified population control drifted: "
+        f"checkboxes={checkbox_by_key}, expanders={sorted(expander_labels)}.",
+    )
+
     try:
         _select_wind_group_layers(
             app,
-            "settlement",
+            "population",
             ("population_points",),
         )
         population_slider = _by_key(
             app.slider,
-            "wind_control__analysis__settlement",
+            "wind_control__analysis__population",
         )
         population_slider.set_value(100)
         _wind_apply_button(app).click().run(timeout=120)
@@ -885,11 +909,11 @@ def _check_population_slice(report: Report) -> None:
         not first_exceptions
         and not first_errors
         and isinstance(selected, dict)
-        and selected.get("settlement") == ["population_points"]
+        and selected.get("population") == ["population_points"]
         and not any(
             selected_layer_ids
             for group_id, selected_layer_ids in selected.items()
-            if group_id != "settlement"
+            if group_id != "population"
         )
         and first_share is not None
         and abs(first_share - 84.2) <= 0.05,
@@ -907,14 +931,14 @@ def _check_population_slice(report: Report) -> None:
         report,
         app,
         expected_share=84.2,
-        group_id="settlement",
+        group_id="population",
         group_label="population",
     ):
         return
 
     population_slider = _by_key(
         app.slider,
-        "wind_control__analysis__settlement",
+        "wind_control__analysis__population",
     )
     population_slider.set_value(1000)
     _wind_apply_button(app).click().run(timeout=120)
@@ -929,6 +953,48 @@ def _check_population_slice(report: Report) -> None:
         "trondelag: population_points R7/1000 m drifted: "
         f"share={second_share}, share_error={second_share_error}, "
         f"exceptions={second_exceptions}, errors={second_errors}.",
+    )
+
+    try:
+        _select_wind_group_layers(
+            app,
+            "population",
+            (
+                "population_points",
+                "built_centre",
+                "built_low_selection",
+            ),
+        )
+        population_slider = _by_key(
+            app.slider,
+            "wind_control__analysis__population",
+        )
+        population_slider.set_value(500)
+        _wind_apply_button(app).click().run(timeout=120)
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            f"trondelag: combined population controls failed: {exc}",
+        )
+        return
+    combined_exceptions, combined_errors = _app_failures(app)
+    combined_selected = _session_state_value(app, WIND_SELECTION_STATE_KEY)
+    combined_share, combined_share_error = _safe_wind_share_pct(app)
+    report.check(
+        not combined_exceptions
+        and not combined_errors
+        and isinstance(combined_selected, dict)
+        and combined_selected.get("population")
+        == ["population_points", "built_centre", "built_low_selection"]
+        and combined_share is not None
+        and abs(combined_share - 36.3) <= 0.05,
+        "trondelag: the grid, polygon, and point population sources combine "
+        "canonically in the real R7 app at 500 m (36.3%).",
+        "trondelag: combined population source behavior drifted: "
+        f"selection={combined_selected}, share={combined_share}, "
+        f"share_error={combined_share_error}, exceptions="
+        f"{combined_exceptions}, errors={combined_errors}.",
     )
 
 
