@@ -244,6 +244,10 @@ WIND_POPULATION_GROUP_ID = CANONICAL_POPULATION_GROUP_ID
 WIND_POPULATION_GROUP_LABEL = "Befolkning och bebyggelse"
 SOLAR_POPULATION_GROUP_ID = "settlement"
 WIND_POPULATION_SOURCE_LAYER_ID = "population_points"
+WIND_POPULATION_PARAM_KEY = "settlement_distance_m"
+# `settlement_distance_m` remains an internal saved-state/model key until a
+# versioned state migration can rename it. It is not a public wind group id;
+# the public and manifest group id is canonical `population`.
 WIND_ROADS_GROUP_ID = CANONICAL_ROADS_GROUP_ID
 WIND_ROADS_PARAM_KEY = "road_distance_m"
 WIND_CULTURE_GROUP_ID = "culture"
@@ -4312,10 +4316,6 @@ def _protected_group_label() -> str:
     return PROTECTED_NATURE_LABEL
 
 
-def _population_group_label() -> str:
-    return WIND_POPULATION_GROUP_LABEL
-
-
 def _apply_wind_layer_selection_state(layer_selection: dict[str, list[str]]) -> dict[str, list[str]]:
     region_id = _wind_region_id()
     selected = normalize_group_layer_map(layer_selection, region_id)
@@ -7864,7 +7864,7 @@ def _solar_rules_from_params(solar_rules: dict[str, Any], params: dict[str, floa
 
 def _default_wind_params() -> dict[str, float]:
     return {
-        "settlement_distance_m": 100.0,
+        WIND_POPULATION_PARAM_KEY: 100.0,
         "road_distance_m": 100.0,
         "grid_max_distance_m": 2000.0,
         "protected_buffer_m": 0.0,
@@ -7882,7 +7882,7 @@ def _reference_default_wind_params() -> dict[str, float]:
     params = _default_wind_params()
     params.update(
         {
-            "settlement_distance_m": 500.0,
+            WIND_POPULATION_PARAM_KEY: 500.0,
             "road_distance_m": 300.0,
             "grid_max_distance_m": 1000.0,
             "protected_buffer_m": 250.0,
@@ -7897,9 +7897,17 @@ def _reference_default_wind_layer_selection(
     region_id: str,
 ) -> dict[str, list[str]]:
     normalized_region_id = _wind_region_id(region_id)
+    population_layer_ids = canonical_population_layer_ids(
+        normalized_region_id
+    )
+    if not population_layer_ids:
+        raise ValueError(
+            f"{normalized_region_id}/wind declares no canonical population "
+            "layers"
+        )
     return normalize_group_layer_map(
         {
-            WIND_POPULATION_GROUP_ID: [WIND_POPULATION_SOURCE_LAYER_ID],
+            WIND_POPULATION_GROUP_ID: [population_layer_ids[0]],
             WIND_ROADS_GROUP_ID: list(
                 canonical_road_layer_ids(normalized_region_id)
             ),
@@ -7954,7 +7962,7 @@ def _wind_score_params_from_ui(ui_params: dict[str, float]) -> dict[str, float]:
         "base_score": 55.0,
         "everyday_matrix_bonus": 12.0,
         "infrastructure_bonus": min(float(ui_params["grid_max_distance_m"]) / 15000.0, 1.0) * 18.0,
-        "settlement_penalty": min(float(ui_params["settlement_distance_m"]) / 3000.0, 1.0) * 35.0,
+        "settlement_penalty": min(float(ui_params[WIND_POPULATION_PARAM_KEY]) / 3000.0, 1.0) * 35.0,
         "road_penalty": min(float(ui_params["road_distance_m"]) / 2000.0, 1.0) * 12.0,
         "protected_penalty": 10.0 + min(float(ui_params["protected_buffer_m"]) / 2000.0, 1.0) * 25.0,
         "coastal_penalty": 8.0 + min(float(ui_params["coastal_buffer_m"]) / 1000.0, 1.0) * 18.0,
@@ -8055,7 +8063,7 @@ def _reset_builder(prefix: str, defaults: dict[str, float]) -> None:
 
 
 def _wind_builder_controls(defaults: dict[str, float]) -> None:
-    _builder_slider("wind_builder", "settlement_distance_m", "Minsta avstånd till boende", 100.0, 3000.0, 50.0, defaults, "Större avstånd begränsar etablering närmare bebyggelse.")
+    _builder_slider("wind_builder", WIND_POPULATION_PARAM_KEY, "Minsta avstånd till boende", 100.0, 3000.0, 50.0, defaults, "Större avstånd begränsar etablering närmare bebyggelse.")
     _builder_slider("wind_builder", "road_distance_m", "Minsta avstånd till vägar", 50.0, 2000.0, 25.0, defaults, "Större avstånd begränsar etablering närmare vägar och bebyggelse.")
     _builder_slider("wind_builder", "grid_max_distance_m", "Max avstånd till elinfrastruktur", 500.0, 15000.0, 250.0, defaults, "Större tillåtet avstånd gör fler lägen tekniskt möjliga.")
     _builder_slider("wind_builder", "protected_buffer_m", "Buffert skyddade områden", 0.0, 2000.0, 50.0, defaults, "0 stänger av gruppen. Högre värden hard-excludar skyddade natur- och habitatlager.")
@@ -8652,7 +8660,7 @@ def _wind_group_param_key(group_id: str) -> str | None:
     if str(group_id) == WIND_ROADS_GROUP_ID:
         return WIND_ROADS_PARAM_KEY
     if str(group_id) == WIND_POPULATION_GROUP_ID:
-        return "settlement_distance_m"
+        return WIND_POPULATION_PARAM_KEY
     return GROUP_PARAM_MAP.get(str(group_id))
 
 
@@ -8962,16 +8970,11 @@ def _wind_group_controls(
                 main_layers = group_layers
                 advanced_layers: list[Any] = []
                 if is_population_group:
-                    main_layers = [
-                        layer
-                        for layer in group_layers
-                        if layer.id == WIND_POPULATION_SOURCE_LAYER_ID
-                    ]
-                    advanced_layers = [
-                        layer
-                        for layer in group_layers
-                        if layer.id != WIND_POPULATION_SOURCE_LAYER_ID
-                    ]
+                    # Manifest order is the population-control layout contract:
+                    # the first declared layer is primary and the rest are
+                    # optional sources under "Fler datakällor".
+                    main_layers = group_layers[:1]
+                    advanced_layers = group_layers[1:]
                 elif is_protected_group or is_culture_group or is_reindeer_group:
                     main_layers = []
                     advanced_layers = group_layers
@@ -9238,7 +9241,6 @@ def _wind_polygon_source_layers(
                     }
                 )
             continue
-        canonical_population_ids: set[str] = set()
         if group_id == WIND_POPULATION_GROUP_ID:
             population_group = population_control_contract(region_id)
             population_layers = {
@@ -9248,7 +9250,6 @@ def _wind_polygon_source_layers(
                 layer_spec = population_layers.get(layer_id)
                 if layer_spec is None:
                     continue
-                canonical_population_ids.add(layer_id)
                 geojson = population_source_geojson(region_id, layer_id)
                 source_color = _rgb_to_hex(layer_spec.source_color)
                 map_layers.append(
@@ -9274,12 +9275,11 @@ def _wind_polygon_source_layers(
                         "layer_kind": "vector",
                     }
                 )
+            continue
         group_meta = groups.get(group_id)
         translated_group_label = GROUP_LABELS.get(group_id, group_meta.label if group_meta is not None else group_id)
         if group_meta is not None:
             translated_group_label = group_label(group_meta, WIND_CONTROL_LANGUAGE, group_meta.label)
-        if group_id == WIND_POPULATION_GROUP_ID:
-            translated_group_label = str(population_group.label)
         if group_id == SOLAR_PROTECTED_GROUP_ID:
             translated_group_label = PROTECTED_NATURE_LABEL
             protected_features: list[dict[str, Any]] = []
@@ -9328,15 +9328,12 @@ def _wind_polygon_source_layers(
                 )
             continue
         for layer_id in selected.get(group_id, []):
-            if layer_id in canonical_population_ids:
-                continue
             layer_spec = layers.get(layer_id)
             if layer_spec is None:
                 continue
             geojson = source_geojson_for_layer(registry_meta, layer_id)
             if geojson is None:
                 continue
-            is_trondelag_population = group_id == WIND_POPULATION_GROUP_ID and layer_id == WIND_POPULATION_SOURCE_LAYER_ID
             map_layers.append(
                 {
                     "name": f"Vind källa: {layer_label(layer_spec, WIND_CONTROL_LANGUAGE, layer_spec.label)} ({translated_group_label})",
@@ -9345,7 +9342,7 @@ def _wind_polygon_source_layers(
                     "legend_items": [],
                     "legend_id": f"wind_polygon_source_{layer_id}",
                     "legend_title": "",
-                    "default_visible": bool(is_trondelag_population),
+                    "default_visible": False,
                     "stroke_color": _rgb_to_hex(layer_spec.source_color),
                     "fill_color": _rgb_to_hex(layer_spec.source_color),
                     "stroke_opacity": max(min(opacity, 1.0), 0.0),
@@ -9374,23 +9371,15 @@ def _wind_polygon_group_layers(
         if runtime_group is None or runtime_group.get("geojson") is None:
             continue
         opacity = _wind_group_opacity(group.id)
-        selected_sources = str(runtime_group.get("selected_sources", "") or "")
         analysis_value = int(round(float(runtime_group.get("analysis_value_m", 0.0) or 0.0)))
-        buffer_layer_id = (
-            f"wind:{WIND_POPULATION_GROUP_ID}:buffer:{analysis_value}:{WIND_POPULATION_SOURCE_LAYER_ID}"
-            if group.id == WIND_POPULATION_GROUP_ID and selected_sources.strip().lower() == "population points"
-            else f"wind:{group.id}:buffer:{analysis_value}"
-        )
         map_layers.append(
             {
                 "name": (
                     f"Vindbuffert: {_protected_group_label()}"
                     if group.id == SOLAR_PROTECTED_GROUP_ID
-                    else f"Vindbuffert: {_population_group_label()}"
-                    if group.id == WIND_POPULATION_GROUP_ID
                     else f"Vindbuffert: {group_label(groups[group.id], WIND_CONTROL_LANGUAGE, groups[group.id].label)}"
                 ),
-                "buffer_layer_id": buffer_layer_id,
+                "buffer_layer_id": f"wind:{group.id}:buffer:{analysis_value}",
                 "feature_collection": runtime_group["geojson"],
                 "fill_property": "fill",
                 "legend_items": [],

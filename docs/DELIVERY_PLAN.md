@@ -43,7 +43,8 @@ The delivery is complete when:
 The schedule moved one business day on 2026-07-31 because the complete roads
 slice had not yet reached its locally promoted gate. Roads then passed that
 gate later the same day, so a bounded primary-population increment began on
-31 July; the population completion date remains 6 August.
+31 July. The complete population slice passed its local-promotion gate early
+on 3 August; nature remains scheduled to begin next.
 
 ## Branch and publication cadence
 
@@ -110,9 +111,11 @@ Current milestone status:
   `built_low_selection` sources are manifest-declared and canonical in
   controls, calculation, previews, and ranking; no population source reaches
   the legacy loader, and the public wind `settlement` alias is removed. The
-  simplified control and complete automated gate are ready on localhost; the
-  complete population slice awaits final visual approval before local
-  promotion.
+  final control uses manifest layer order for primary-versus-optional
+  placement, and dead population cases in the legacy wind renderers are
+  removed. Clean-process localhost review was approved on 2026-08-03, so the
+  complete population slice is locally promoted but unpublished. Nature is
+  the next planned slice.
 
 ## Slice gates
 

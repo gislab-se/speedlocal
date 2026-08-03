@@ -1,7 +1,6 @@
 # Population and settlement slice characterization
 
-Status: complete implementation and automated gate; final localhost control
-review pending before local promotion
+Status: locally promoted on 2026-08-03; unpublished
 Behavior reference: frozen V2 for Trøndelag only
 Integration target: V2 Final wind restriction flow
 
@@ -16,6 +15,11 @@ Two optional Trøndelag sources are also canonical: `built_centre` is a
 polygon source for settlement centres and `built_low_selection` is a point
 source based on leisure-home centroids. Solar population behavior is a
 separate future slice and is not claimed here.
+
+Manifest layer order is the public control-layout contract. The first
+declared population source is shown as the primary source, and later declared
+sources are shown under `Fler datakällor`. No source id is hardcoded as the
+primary UI option.
 
 ## Accepted Trøndelag behavior
 
@@ -97,7 +101,13 @@ No region id may select an adapter or analysis algorithm.
   and allocation ranking consume the three-layer canonical population result.
 - **Removed:** all population fallthrough to the legacy distance loader, the
   public wind `settlement` alias, the redundant population group checkbox,
-  and the Trøndelag-specific wind population preview path.
+  the Trøndelag-specific wind population preview path, and the dead
+  population cases in the legacy wind source/buffer renderers.
+
+`settlement_distance_m` remains an internal saved-state/model parameter key
+until a versioned state migration can rename it. It is not a public group id
+or a manifest availability contract. Solar's separate registry-backed
+population helpers remain intentionally deferred to the solar slice.
 
 ## First-increment gates
 
@@ -122,10 +132,10 @@ parity, real Streamlit AppTest, and vector previews. They prove that all three
 population sources stay on the canonical path at R7/R6/R5 and that promoted
 roads behavior is unchanged.
 
-The user approved the primary and allocation-ranking behavior in the clean
-localhost process. The final simplified three-source control is hot-reloaded
-on port 8502 and awaits visual approval before the complete slice is marked
-locally promoted.
+The user approved the final simplified three-source control in a clean
+localhost process on port 8502 on 2026-08-03. The complete population slice is
+therefore locally promoted. Publication remains separate, and `main` and the
+external deployment are unchanged.
 
 ## Allocation-ranking increment
 

@@ -907,18 +907,27 @@ def _check_population_slice(report: Report) -> None:
         str(getattr(item, "label", ""))
         for item in getattr(app, "expander", [])
     }
+    rendered_population_layer_order = [
+        str(item.key or "")
+        for item in app.checkbox
+        if str(item.key or "") in population_layer_labels
+    ]
     report.check(
         all(
             checkbox_by_key.get(key) == label
             for key, label in population_layer_labels.items()
         )
         and "wind_control__group__population" not in checkbox_by_key
-        and "Fler datakällor" in expander_labels,
+        and "Fler datakällor" in expander_labels
+        and rendered_population_layer_order
+        == list(population_layer_labels),
         "trondelag: the population control exposes its manifest primary "
         "source directly, keeps two manifest optional sources under Fler "
         "datakällor, and has no redundant group checkbox.",
         "trondelag: the simplified population control drifted: "
-        f"checkboxes={checkbox_by_key}, expanders={sorted(expander_labels)}.",
+        f"checkboxes={checkbox_by_key}, order="
+        f"{rendered_population_layer_order}, "
+        f"expanders={sorted(expander_labels)}.",
     )
 
     try:

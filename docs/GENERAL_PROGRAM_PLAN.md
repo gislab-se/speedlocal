@@ -180,11 +180,10 @@ Implemented foundation:
   shared V2 runtime archive; this is conformance evidence, not two-region
   behavioral parity.
 
-Current slice:
+Current slice status:
 
-- population and settlement, beginning with the primary Trøndelag
-  `population_points` grid proxy;
-- population characterization: complete;
+- population and settlement: complete and locally promoted on 2026-08-03;
+- nature is the next thematic slice;
 - dynamic medium and large road layers: complete;
 - generic group result and distance-engine contract conformance: complete;
 - the temporary separate parity app has been removed;
@@ -233,8 +232,7 @@ Current slice:
 - all automated complete-roads gates pass. The user approved reset and the
   final manifest-backed UI in a clean localhost process on 2026-07-31, so the
   complete roads slice is locally promoted. Publication remains separate and
-  waits for an eligible Tuesday or Friday window; population is the next
-  thematic slice;
+  waits for an eligible Tuesday or Friday window;
 - the primary population contract now declares polygon geometry, grid
   representation, H3 R8 numeric rows, the complete slider range, and explicit
   fail-closed zero-acceptance semantics plus exact signatures for target cells
@@ -248,10 +246,11 @@ Current slice:
   three population layers from the canonical manifest engine at R7/R6/R5 and
   matches the previous ranking values exactly. The polygon `built_centre` and
   point `built_low_selection` sources are canonical, and the public wind
-  `settlement` alias and legacy optional-source path are removed. The
-  simplified manifest-driven population control is implemented and
-  automatically validated; final localhost visual approval remains before
-  the complete population slice is locally promoted.
+  `settlement` alias and legacy optional-source path are removed. Manifest
+  order controls primary-versus-optional placement, and dead population cases
+  in the legacy wind renderers are removed. The user approved the final clean-
+  process localhost control on 2026-08-03, so the complete population slice
+  is locally promoted but unpublished. Nature is the next planned slice.
 
 ## Definition of done for a slice
 
