@@ -33,8 +33,8 @@ The delivery is complete when:
 | 7–10 Aug | Nature | Dynamic nature layers and hard-exclusion parity |
 | 11–12 Aug | Culture | Dynamic culture layers and hard-exclusion parity |
 | 13–14 Aug | Grid infrastructure | Proximity-feasibility operation and parity |
-| 17–18 Aug | Combined result | Common restriction composition and explanations |
-| 19–20 Aug | Wind and solar | Shared potential outputs and continuous technology mix |
+| 17–18 Aug | Combined result | Common technology-applicable restriction union, model-area denominator, and explanations |
+| 19–20 Aug | Wind and solar | Shared area-derived potential outputs, consistent map/hover values, and continuous technology mix |
 | 21–24 Aug | Energy scenarios and social acceptance | Scenario-to-area flow and acceptance overlay |
 | 25 Aug | Region onboarding | Bornholm V1 acceptance gate plus Skaraborg manifests, adapters, validation, and visible state |
 | 26 Aug | Product cleanup | Remove replaced V2 paths, simplify UI, update copy and labels |
@@ -116,6 +116,12 @@ Current milestone status:
   removed. Clean-process localhost review was approved on 2026-08-03, so the
   complete population slice is locally promoted but unpublished. Nature is
   the next planned slice.
+- Shared potential-area semantics: decision recorded on 2026-08-03. The
+  promoted roads/population soft-distance percentages remain frozen-V2 parity
+  proxies until the planned combined-result and wind/solar phases replace
+  them with technology-specific remaining area divided by the common
+  manifest-declared model land area. This does not change the current dates or
+  thematic slice order.
 
 ## Slice gates
 
@@ -170,7 +176,8 @@ During this plan:
   sufficient for the Trøndelag polygon-grid, polygon-feature, and
   point-feature sources without a region-name algorithm branch.
 - **17 Aug:** confirm that the common restriction result supports both wind and
-  solar.
+  solar, unions overlapping applicable restrictions once, and returns area-
+  derived percentages using the manifest-declared model land denominator.
 - **21 Aug:** confirm that scenario and acceptance inputs are delivery-quality.
 - **24 Aug:** decide whether Skaraborg is active or visibly limited by missing
   reviewed data.

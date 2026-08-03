@@ -144,6 +144,37 @@ render_result(result)
 Streamlit owns interaction and presentation. `speedlocal/` owns contracts,
 source resolution, validation, and analysis.
 
+## Shared potential-area contract
+
+The user-confirmed destination for the combined result is one comparable,
+area-derived percentage per technology and display hex:
+
+```text
+technology potential % =
+    remaining establishment area after active applicable restrictions
+    / manifest-declared model land area in the hex
+    * 100
+```
+
+- `speedlocal/` returns both potential area and potential percentage for wind
+  and solar; the map class, summaries, and hover consume those same values.
+- Overlapping restrictions are unioned per technology before area is removed,
+  so overlap is not counted twice.
+- Technology applicability, denominator, analysis resolution, and effect
+  semantics are validated manifest contracts. Region ids do not select an
+  algorithm.
+- Point, grid, polygon, and line sources feed a common fine analysis surface
+  or equivalent area calculation chosen from declared data characteristics.
+- Expensive source normalization and distance surfaces are precomputed or
+  cached by source identity. Applying controls thresholds the reusable surface
+  and aggregates area; hovering remains a client-side presentation event.
+
+The locally promoted Trøndelag roads and population slices intentionally keep
+their frozen-V2 soft-distance cell proxy until the planned combined-result and
+wind/solar phases. Their current percentages are parity values, not claims of
+exact polygon-clipped free land. This decision defines the later replacement
+contract without reopening those promoted slices or changing the slice order.
+
 ## Data-driven rules
 
 - Public regions come only from `regions/index.json`.

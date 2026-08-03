@@ -48,6 +48,24 @@ numeric behavior for parity while labelling the proxy honestly. Raw R8 rows
 are aggregated to each requested parent before filtering to and completing the
 manifest-declared R7, R6, or R5 target domain.
 
+## Percentage interpretation and deferred shared result
+
+The promoted population percentage is a frozen-V2 soft-distance acceptance
+proxy. It is not the geometrically measured share of an R7/R6/R5 hex that
+remains outside the displayed population buffer. A display hex can therefore
+look partly free but receive zero wind potential when its rolled minimum
+distance is at or inside the threshold, or when its signed sparse coverage is
+missing. Conversely, a positive proxy value may round to `0 %` in the current
+integer-only hover.
+
+On 2026-08-03 the user confirmed the future common interpretation: wind and
+solar hover percentages must each be the remaining establishment area after
+all active technology-applicable restrictions, divided by the same manifest-
+declared model land area for that hex. Map classification, hover, and summary
+must consume that single result. This is scheduled for the combined-result
+and wind/solar phases after nature, culture, and grid infrastructure are
+manifest-migrated; it does not reopen or redefine this promoted parity slice.
+
 ## Frozen numeric anchors
 
 | Resolution | Distance | Mean potential | Zero-acceptance cells | Model potential area (km²) |
