@@ -17,6 +17,8 @@ from speedlocal.validation import validate_contract, validate_layer
 
 CANONICAL_ROADS_GROUP_ID = "roads"
 CANONICAL_POPULATION_GROUP_ID = "population"
+CANONICAL_NATURE_GROUP_ID = "nature"
+CANONICAL_DISTANCE_OPERATIONS = {"distance_exclusion", "hard_exclusion"}
 CANONICAL_TO_TRANSITIONAL_GROUP_ID = {
     "nature": "protected",
     "culture": "culture",
@@ -103,6 +105,12 @@ def public_wind_group_ids(region_id: str) -> tuple[str, ...]:
         }:
             group_ids.append(group_id)
             continue
+        if (
+            group_id == CANONICAL_NATURE_GROUP_ID
+            and any(layer.group_id == group_id for layer in analysis.layers.values())
+        ):
+            group_ids.append(group_id)
+            continue
         transitional_id = CANONICAL_TO_TRANSITIONAL_GROUP_ID.get(group_id)
         if transitional_id is not None:
             group_ids.append(transitional_id)
@@ -125,12 +133,15 @@ def default_wind_layer_selection(region_id: str) -> dict[str, list[str]]:
                 f"{region_id}/wind default request references unknown layer: "
                 f"{layer_id}"
             )
-        public_group_id = (
-            layer.group_id
-            if layer.group_id
-            in {CANONICAL_ROADS_GROUP_ID, CANONICAL_POPULATION_GROUP_ID}
-            else CANONICAL_TO_TRANSITIONAL_GROUP_ID.get(layer.group_id)
-        )
+        public_group_id = layer.group_id
+        if layer.group_id not in {
+            CANONICAL_ROADS_GROUP_ID,
+            CANONICAL_POPULATION_GROUP_ID,
+            CANONICAL_NATURE_GROUP_ID,
+        }:
+            public_group_id = CANONICAL_TO_TRANSITIONAL_GROUP_ID.get(
+                layer.group_id
+            )
         if public_group_id is None:
             raise ValueError(
                 f"{region_id}/wind default layer {layer_id} belongs to an "
@@ -146,7 +157,7 @@ def vector_preview_layer_ids(region_id: str) -> tuple[str, ...]:
     return tuple(
         layer.id
         for layer in analysis.layers.values()
-        if layer.operation == "distance_exclusion"
+        if layer.operation in CANONICAL_DISTANCE_OPERATIONS
         and layer.source.source_geometry_required
     )
 
@@ -186,7 +197,7 @@ def canonical_wind_group_layer_ids(
         layer.id
         for layer in analysis.layers.values()
         if layer.group_id == str(group_id)
-        and layer.operation == "distance_exclusion"
+        and layer.operation in CANONICAL_DISTANCE_OPERATIONS
     )
     if not layer_ids:
         raise ValueError(
@@ -205,6 +216,14 @@ def canonical_population_layer_ids(region_id: str) -> tuple[str, ...]:
     return canonical_wind_group_layer_ids(
         region_id,
         CANONICAL_POPULATION_GROUP_ID,
+    )
+
+
+def canonical_nature_layer_ids(region_id: str) -> tuple[str, ...]:
+    """Return canonical nature layers in manifest order."""
+    return canonical_wind_group_layer_ids(
+        region_id,
+        CANONICAL_NATURE_GROUP_ID,
     )
 
 
@@ -238,6 +257,23 @@ def wind_group_control_contract(
         )
 
     public_id = str(public_group_id or canonical_group_id)
+    operations = {
+        analysis.layers[layer_id].operation
+        for layer_id in canonical_wind_group_layer_ids(
+            region_id,
+            canonical_group_id,
+        )
+    }
+    if len(operations) != 1:
+        raise ValueError(
+            f"{region_id}/wind {canonical_group_id} layers must use one operation"
+        )
+    operation = operations.pop()
+    analysis_kind = (
+        "hard_exclusion"
+        if operation == "hard_exclusion"
+        else "distance_conflict"
+    )
     layer_controls: list[WindLayerControlContract] = []
     for layer_id in canonical_wind_group_layer_ids(
         region_id,
@@ -270,7 +306,7 @@ def wind_group_control_contract(
         id=public_id,
         canonical_id=str(canonical_group_id),
         label=group_ui.label,
-        analysis_kind="distance_conflict",
+        analysis_kind=analysis_kind,
         analysis_label=group_ui.analysis_label,
         analysis_min_m=int(parameter.minimum),
         analysis_max_m=int(parameter.maximum),
@@ -297,6 +333,14 @@ def population_control_contract(region_id: str) -> WindGroupControlContract:
     return wind_group_control_contract(
         region_id,
         CANONICAL_POPULATION_GROUP_ID,
+    )
+
+
+def nature_control_contract(region_id: str) -> WindGroupControlContract:
+    """Expose canonical manifest-driven nature controls."""
+    return wind_group_control_contract(
+        region_id,
+        CANONICAL_NATURE_GROUP_ID,
     )
 
 
@@ -345,6 +389,15 @@ def population_source_geojson(region_id: str, layer_id: str) -> dict:
     )
 
 
+def nature_source_geojson(region_id: str, layer_id: str) -> dict:
+    """Read one validated canonical nature source."""
+    return wind_source_geojson(
+        region_id,
+        CANONICAL_NATURE_GROUP_ID,
+        layer_id,
+    )
+
+
 def wind_group_buffer_parameter_contract(
     region_id: str,
     canonical_group_id: str,
@@ -364,12 +417,12 @@ def wind_group_buffer_parameter_contract(
             )
         if (
             layer.group_id != canonical_group_id
-            or layer.operation != "distance_exclusion"
+            or layer.operation not in CANONICAL_DISTANCE_OPERATIONS
         ):
             raise ValueError(
                 f"{region_id}/wind layer {layer_id} is not a canonical "
                 f"{canonical_group_id} "
-                "distance-exclusion layer"
+                "distance-based layer"
             )
         parameter = layer.parameters.get("buffer_m")
         if parameter is None:
@@ -551,6 +604,24 @@ def population_acceptance_frame(
     return wind_group_acceptance_frame(
         region_id,
         CANONICAL_POPULATION_GROUP_ID,
+        layer_ids,
+        buffer_m,
+        analysis_cell_ids,
+        target_resolution,
+    )
+
+
+def nature_acceptance_frame(
+    region_id: str,
+    layer_ids: Collection[str],
+    buffer_m: float,
+    analysis_cell_ids: Collection[str],
+    target_resolution: int,
+) -> pd.DataFrame:
+    """Adapt canonical nature hard-exclusion results to V2 Final."""
+    return wind_group_acceptance_frame(
+        region_id,
+        CANONICAL_NATURE_GROUP_ID,
         layer_ids,
         buffer_m,
         analysis_cell_ids,

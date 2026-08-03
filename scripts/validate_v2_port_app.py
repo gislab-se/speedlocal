@@ -40,6 +40,7 @@ from acceptance_model.layers import (  # noqa: E402
 from potential_model.manifests import load_region, v2_source_root  # noqa: E402
 from potential_model.speedlocal_bridge import (  # noqa: E402
     default_wind_layer_selection,
+    nature_control_contract,
     population_control_contract,
     public_wind_group_ids,
     roads_control_contract,
@@ -157,13 +158,14 @@ def _ready_public_ui_contract(
 ) -> tuple[set[str], set[str], set[str], set[str]]:
     registry_groups, registry_layers, registry_meta = load_registry(region_id)
     public_group_ids = set(public_wind_group_ids(region_id))
-    manifest_public_group_ids = {"roads", "population"}
+    manifest_public_group_ids = {"roads", "population", "nature"}
     legacy_public_group_ids = public_group_ids - manifest_public_group_ids
     roads_group = roads_control_contract(region_id)
     population_group = population_control_contract(region_id)
+    nature_group = nature_control_contract(region_id)
     manifest_layer_ids = {
         layer.id
-        for group in (roads_group, population_group)
+        for group in (roads_group, population_group, nature_group)
         for layer in group.layers
     }
     status_frame = layer_status_table(registry_meta)
@@ -191,7 +193,7 @@ def _ready_public_ui_contract(
     }
     ready_layer_ids.update(
         layer.id
-        for group in (roads_group, population_group)
+        for group in (roads_group, population_group, nature_group)
         for layer in group.layers
         if layer.ready
     )
@@ -205,6 +207,8 @@ def _ready_public_ui_contract(
         ready_group_ids.add("roads")
     if any(layer.ready for layer in population_group.layers):
         ready_group_ids.add("population")
+    if any(layer.ready for layer in nature_group.layers):
+        ready_group_ids.add("nature")
     public_layer_ids = {
         str(layer_id)
         for layer_id, layer in registry_layers.items()
@@ -385,6 +389,32 @@ def _check_manifest_empty_start_and_public_controls(
             f"max={population_slider.max}, step={population_slider.step}.",
         )
 
+    try:
+        nature_slider = _by_key(
+            app.slider,
+            f"{WIND_ANALYSIS_KEY_PREFIX}nature",
+        )
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            f"{region_id}: manifest-backed nature slider is unavailable: {exc}",
+        )
+    else:
+        report.check(
+            not nature_slider.disabled
+            and int(nature_slider.value) == 0
+            and int(nature_slider.min) == 0
+            and int(nature_slider.max) == 2000
+            and int(nature_slider.step) == 50,
+            f"{region_id}: nature uses the manifest-backed 0/2000/50 "
+            "hard-exclusion buffer contract.",
+            f"{region_id}: nature parameter contract drifted: "
+            f"disabled={nature_slider.disabled}, value={nature_slider.value}, "
+            f"min={nature_slider.min}, max={nature_slider.max}, "
+            f"step={nature_slider.step}.",
+        )
+
     visual_ids = (
         _element_ids(app.toggle, WIND_VISUAL_SOURCE_KEY_PREFIX)
         | _element_ids(app.toggle, WIND_VISUAL_BUFFER_KEY_PREFIX)
@@ -452,7 +482,7 @@ def _check_manifest_empty_start_and_public_controls(
             app,
             "potential_start_default_version_trondelag",
         )
-        == "manifest_population_group_v7"
+        == "manifest_nature_group_v1"
         and not any(
             item.key == "wind_control__group__settlement"
             for item in app.checkbox
@@ -1046,6 +1076,128 @@ def _check_population_slice(report: Report) -> None:
     )
 
 
+def _check_nature_slice(report: Report) -> None:
+    app = AppTest.from_file(str(APP_PATH), default_timeout=120)
+    app.query_params["region"] = TRONDELAG_REGION_ID
+    app.run(timeout=120)
+    initial_exceptions, initial_errors = _app_failures(app)
+    if initial_exceptions or initial_errors:
+        report.check(
+            False,
+            "",
+            "trondelag: nature slice setup failed: "
+            f"exceptions={initial_exceptions}, errors={initial_errors}",
+        )
+        return
+
+    checkbox_by_key = {
+        str(item.key or ""): str(item.label)
+        for item in app.checkbox
+    }
+    report.check(
+        checkbox_by_key.get("wind_control__layer__protected_areas")
+        == "Naturvernområden"
+        and "wind_control__group__nature" not in checkbox_by_key
+        and "wind_control__group__protected" not in checkbox_by_key,
+        "trondelag: nature exposes its single manifest source directly "
+        "without a redundant or legacy group checkbox.",
+        "trondelag: simplified nature control drifted: "
+        f"checkboxes={checkbox_by_key}.",
+    )
+
+    try:
+        _select_wind_group_layers(app, "nature", ("protected_areas",))
+        nature_slider = _by_key(
+            app.slider,
+            "wind_control__analysis__nature",
+        )
+        nature_slider.set_value(0)
+        _wind_apply_button(app).click().run(timeout=120)
+    except Exception as exc:
+        report.check(False, "", f"trondelag: nature controls failed: {exc}")
+        return
+
+    first_exceptions, first_errors = _app_failures(app)
+    selected = _session_state_value(app, WIND_SELECTION_STATE_KEY)
+    first_share, first_share_error = _safe_wind_share_pct(app)
+    report.check(
+        not first_exceptions
+        and not first_errors
+        and isinstance(selected, dict)
+        and selected.get("nature") == ["protected_areas"]
+        and not any(
+            layer_ids
+            for group_id, layer_ids in selected.items()
+            if group_id != "nature"
+        )
+        and first_share is not None
+        and abs(first_share - 71.2) <= 0.05,
+        "trondelag: protected_areas renders canonical binary R7 behavior at "
+        "0 m (71.2%).",
+        "trondelag: protected_areas R7/0 m drifted: "
+        f"selection={selected}, share={first_share}, "
+        f"share_error={first_share_error}, exceptions={first_exceptions}, "
+        f"errors={first_errors}.",
+    )
+    if first_share is None or first_exceptions or first_errors:
+        return
+
+    if not _check_wind_map_review_toggles(
+        report,
+        app,
+        expected_share=71.2,
+        group_id="nature",
+        group_label="nature",
+    ):
+        return
+
+    nature_slider = _by_key(
+        app.slider,
+        "wind_control__analysis__nature",
+    )
+    nature_slider.set_value(2000)
+    _wind_apply_button(app).click().run(timeout=120)
+    try:
+        _by_key(
+            app.radio,
+            "combined_h3_display_mode",
+        ).set_value("selected").run(timeout=120)
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            f"trondelag: nature resolution mode failed: {exc}",
+        )
+        return
+    expected_by_resolution = {7: 60.2, 6: 40.8, 5: 12.9}
+    observed: dict[int, float | None] = {}
+    resolution_errors: list[str] = []
+    for resolution, expected_share in expected_by_resolution.items():
+        _by_key(app.radio, "combined_h3_resolution").set_value(
+            resolution
+        ).run(timeout=120)
+        exceptions, errors = _app_failures(app)
+        share, share_error = _safe_wind_share_pct(app)
+        observed[resolution] = share
+        if (
+            exceptions
+            or errors
+            or share is None
+            or abs(share - expected_share) > 0.05
+        ):
+            resolution_errors.append(
+                f"R{resolution}: share={share}, share_error={share_error}, "
+                f"exceptions={exceptions}, errors={errors}"
+            )
+    report.check(
+        not resolution_errors,
+        "trondelag: the 2000 m nature hard exclusion uses canonical "
+        "R7/R6/R5 behavior (60.2/40.8/12.9%).",
+        "trondelag: nature R7/R6/R5 behavior drifted: "
+        f"observed={observed}, errors={resolution_errors}.",
+    )
+
+
 def _check_missing_source_root(report: Report) -> None:
     configured = os.environ.pop(V2_SOURCE_ROOT_ENV, None)
     app = None
@@ -1123,6 +1275,7 @@ def main() -> int:
         },
     )
     _check_population_slice(report)
+    _check_nature_slice(report)
     return report.emit()
 
 

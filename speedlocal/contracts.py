@@ -7,7 +7,7 @@ from typing import Any
 
 STANDARD_GROUP_IDS = ("roads", "population", "nature", "culture", "grid_infrastructure")
 SUPPORTED_GEOMETRY_FAMILIES = {"point", "line", "polygon", "grid"}
-SUPPORTED_OPERATIONS = {"distance_exclusion"}
+SUPPORTED_OPERATIONS = {"distance_exclusion", "hard_exclusion"}
 
 
 @dataclass(frozen=True)
@@ -114,12 +114,21 @@ class SourceContract:
     expected_geometry_families: tuple[str, ...]
     data_representation: str = "auto"
     source_geometry_required: bool = True
+    geometry_collection_policy: str = "reject_mixed"
     distance_h3_resolution: int | None = None
     distance_coverage: DistanceCoverageContract = field(
         default_factory=DistanceCoverageContract
     )
 
     def __post_init__(self) -> None:
+        if self.geometry_collection_policy not in {
+            "reject_mixed",
+            "highest_dimension",
+        }:
+            raise ValueError(
+                "geometry_collection_policy must be 'reject_mixed' or "
+                "'highest_dimension'"
+            )
         resolution = self.distance_h3_resolution
         if resolution is not None:
             if isinstance(resolution, bool) or not isinstance(resolution, int):
@@ -306,6 +315,9 @@ def source_contract(raw: dict[str, Any]) -> SourceContract:
         expected_geometry_families=tuple(str(item) for item in raw["expected_geometry_families"]),
         data_representation=str(raw.get("data_representation") or "auto"),
         source_geometry_required=bool(raw.get("source_geometry_required", True)),
+        geometry_collection_policy=str(
+            raw.get("geometry_collection_policy") or "reject_mixed"
+        ),
         distance_h3_resolution=distance_h3_resolution,
         distance_coverage=distance_coverage_contract(raw.get("distance_coverage")),
     )

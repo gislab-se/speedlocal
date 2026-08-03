@@ -96,6 +96,7 @@ def main() -> int:
     population_layer = contract.layers["population_points"]
     built_centre_layer = contract.layers["built_centre"]
     built_low_layer = contract.layers["built_low_selection"]
+    nature_layer = contract.layers["protected_areas"]
     native_crs = str(region["native_crs"])
 
     zero = build_vector_buffer_preview(
@@ -147,6 +148,21 @@ def main() -> int:
         [population_layer, built_centre_layer, built_low_layer],
         native_crs=native_crs,
         buffer_m=500,
+    )
+    nature_at_0 = build_vector_buffer_preview(
+        [nature_layer],
+        native_crs=native_crs,
+        buffer_m=0,
+    )
+    nature_at_250 = build_vector_buffer_preview(
+        [nature_layer],
+        native_crs=native_crs,
+        buffer_m=250,
+    )
+    nature_at_1000 = build_vector_buffer_preview(
+        [nature_layer],
+        native_crs=native_crs,
+        buffer_m=1000,
     )
 
     report.check(
@@ -231,6 +247,23 @@ def main() -> int:
         ),
         "All three manifest population geometries dissolve into one preview.",
         "The combined population preview did not preserve all three sources.",
+    )
+    report.check(
+        nature_at_0.layer_ids == ("protected_areas",)
+        and nature_at_0.semantics == "dissolved_source_footprint"
+        and nature_at_0.geometry_type in {"Polygon", "MultiPolygon"}
+        and nature_at_0.source_feature_count == 412
+        and nature_at_0.declared_feature_count == 420
+        and nature_at_0.area_m2 > 0,
+        "The 0 m nature preview applies its declared highest-dimension policy.",
+        "The 0 m nature preview did not preserve the manifest geometry policy.",
+    )
+    report.check(
+        nature_at_250.geometry_type in {"Polygon", "MultiPolygon"}
+        and nature_at_250.area_m2 > nature_at_0.area_m2
+        and nature_at_1000.area_m2 > nature_at_250.area_m2,
+        "The protected-nature preview grows monotonically at 0/250/1000 m.",
+        "The protected-nature preview did not grow with its metric buffer.",
     )
     report.check(
         at_300.geojson.get("type") == "FeatureCollection"

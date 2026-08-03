@@ -30,7 +30,7 @@ The delivery is complete when:
 |---|---|---|
 | 29 Jul–3 Aug | Roads | Trøndelag V2 characterization, dynamic road layers, contract validation, generic UI path |
 | 31 Jul–6 Aug | Population | Point/grid/polygon dispatch and Trøndelag V2 parity |
-| 7–10 Aug | Nature | Dynamic nature layers and hard-exclusion parity |
+| 3–10 Aug | Nature | Dynamic nature layers and hard-exclusion parity |
 | 11–12 Aug | Culture | Dynamic culture layers and hard-exclusion parity |
 | 13–14 Aug | Grid infrastructure | Proximity-feasibility operation and parity |
 | 17–18 Aug | Combined result | Common technology-applicable restriction union, model-area denominator, and explanations |
@@ -44,7 +44,8 @@ The schedule moved one business day on 2026-07-31 because the complete roads
 slice had not yet reached its locally promoted gate. Roads then passed that
 gate later the same day, so a bounded primary-population increment began on
 31 July. The complete population slice passed its local-promotion gate early
-on 3 August; nature remains scheduled to begin next.
+on 3 August, so the first bounded nature increment began the same day. The
+later slice order and final nature target date remain unchanged.
 
 ## Branch and publication cadence
 
@@ -115,7 +116,14 @@ Current milestone status:
   placement, and dead population cases in the legacy wind renderers are
   removed. Clean-process localhost review was approved on 2026-08-03, so the
   complete population slice is locally promoted but unpublished. Nature is
-  the next planned slice.
+  now in progress.
+- Nature first increment: the Trøndelag `protected_areas` polygon source is
+  manifest-declared under canonical `nature` and runs through generic binary
+  `hard_exclusion` at R7/R6/R5. The old public wind `protected` alias and
+  legacy distance-loader path are removed for Trøndelag. Generic-engine,
+  independent frozen-reference, vector-preview, and focused real-Streamlit
+  gates and full repository checks pass; localhost visual review remains
+  before local promotion.
 - Shared potential-area semantics: decision recorded on 2026-08-03. The
   promoted roads/population soft-distance percentages remain frozen-V2 parity
   proxies until the planned combined-result and wind/solar phases replace

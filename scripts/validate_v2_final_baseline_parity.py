@@ -122,6 +122,26 @@ POPULATION_EXPECTATIONS = {
         3000.0: (12.83255305936073, 309, 3_363.591524290177),
     },
 }
+NATURE_EXPECTATIONS = {
+    7: {
+        0.0: (71.16126683654896, 3_961),
+        250.0: (71.16126683654896, 3_961),
+        1000.0: (70.96468875136513, 3_988),
+        2000.0: (60.18929741536221, 5_468),
+    },
+    6: {
+        0.0: (51.41007859454462, 1_051),
+        250.0: (51.41007859454462, 1_051),
+        1000.0: (51.08645399907536, 1_058),
+        2000.0: (40.77669902912621, 1_281),
+    },
+    5: {
+        0.0: (17.26027397260274, 302),
+        250.0: (17.26027397260274, 302),
+        1000.0: (17.26027397260274, 302),
+        2000.0: (12.87671232876712, 318),
+    },
+}
 
 for import_root in (ROOT, PORT_ROOT, PORT_APPS):
     if str(import_root) not in sys.path:
@@ -293,6 +313,45 @@ def _population_acceptance_oracle(
     return oracle
 
 
+def _nature_acceptance_oracle(
+    registry: dict,
+    threshold_m: float,
+    target_resolution: int,
+    target_cell_ids: set[str],
+) -> dict[str, float]:
+    """Reproduce frozen protected-nature hard-exclusion semantics."""
+    distance = distance_table_for_layer(registry, "protected_areas")
+    rolled: dict[str, tuple[float, bool]] = {}
+    for row in distance.itertuples(index=False):
+        source_id = str(row.hex_id)
+        target_id = (
+            source_id
+            if target_resolution == 7
+            else str(h3.cell_to_parent(source_id, target_resolution))
+        )
+        value = (
+            float(row.distance_m),
+            str(row.intersects).strip().lower() in {"1", "true", "yes"},
+        )
+        previous = rolled.get(target_id)
+        rolled[target_id] = value if previous is None else (
+            min(previous[0], value[0]),
+            previous[1] or value[1],
+        )
+    oracle: dict[str, float] = {}
+    for cell_id in target_cell_ids:
+        if cell_id not in rolled:
+            raise ValueError(
+                f"Frozen protected_areas is missing target cell: {cell_id}"
+            )
+        distance_m, intersects = rolled[cell_id]
+        blocked = intersects or (
+            threshold_m > 0 and distance_m <= threshold_m
+        )
+        oracle[cell_id] = 0.0 if blocked else 1.0
+    return oracle
+
+
 def main() -> int:
     report = Report()
     source_value = os.environ.get(V2_SOURCE_ROOT_ENV, "").strip()
@@ -360,7 +419,12 @@ def main() -> int:
                 result is not None
                 and result.get("fast_distance") is True
                 and result.get("canonical_layer_ids")
-                == ["population_points", "roads_large", "roads_medium"]
+                == [
+                    "population_points",
+                    "protected_areas",
+                    "roads_large",
+                    "roads_medium",
+                ]
                 and abs(actual_share - expected_share) <= 1e-12,
                 f"Trøndelag R{resolution} at {road_distance:.0f} m preserves "
                 f"frozen full-flow output ({expected_share:.12f}%).",
@@ -462,6 +526,83 @@ def main() -> int:
                 f"zero={actual_zero_acceptance}, area={actual_area:.12f}, "
                 f"max_cell_error={max_cell_error}, canonical="
                 f"{((result or {}).get('canonical_layer_ids') or [])}.",
+            )
+
+    nature_only = {
+        group_id: []
+        for group_id in app.public_wind_group_ids("trondelag")
+    }
+    nature_only[app.WIND_NATURE_GROUP_ID] = ["protected_areas"]
+    for resolution, expectations in NATURE_EXPECTATIONS.items():
+        display_geometry_path = app._h3_display_geometry_path(
+            trondelag_region,
+            resolution,
+        )
+        target_cell_ids = set(
+            app.load_h3_display_geometries(display_geometry_path)
+        )
+        for buffer_m, (expected_share, expected_blocked) in expectations.items():
+            params = app._reference_default_wind_params()
+            params[app.WIND_NATURE_PARAM_KEY] = buffer_m
+            result = app._wind_fast_distance_runtime_result(
+                trondelag_region,
+                params,
+                nature_only,
+                resolution,
+            )
+            frame = (
+                (result or {}).get("fast_distance_frame")
+                if isinstance(result, dict)
+                else None
+            )
+            oracle = _nature_acceptance_oracle(
+                trondelag_registry,
+                buffer_m,
+                resolution,
+                target_cell_ids,
+            )
+            actual = (
+                {
+                    str(row.hex_id):
+                    float(row.potential_area_share_pct) / 100.0
+                    for row in frame.itertuples(index=False)
+                }
+                if isinstance(frame, pd.DataFrame)
+                else {}
+            )
+            max_cell_error = (
+                max(
+                    abs(actual[cell_id] - oracle[cell_id])
+                    for cell_id in actual
+                )
+                if actual and actual.keys() == oracle.keys()
+                else float("inf")
+            )
+            actual_share = float(
+                ((result or {}).get("combined") or {}).get(
+                    "land_share_pct",
+                    -1.0,
+                )
+            )
+            actual_blocked = (
+                int(frame["potential_area_share_pct"].eq(0.0).sum())
+                if isinstance(frame, pd.DataFrame)
+                else -1
+            )
+            report.check(
+                result is not None
+                and result.get("canonical_layer_ids") == ["protected_areas"]
+                and len(frame) == DISPLAY_COUNTS[resolution]
+                and actual_blocked == expected_blocked
+                and abs(actual_share - expected_share) <= 1e-12
+                and max_cell_error <= 1e-12,
+                f"Trøndelag protected_areas R{resolution} uses canonical "
+                f"hard exclusion at {buffer_m:.0f} m "
+                f"({expected_share:.12f}%, {expected_blocked} blocked).",
+                f"Trøndelag protected_areas R{resolution} drifted at "
+                f"{buffer_m:.0f} m: share={actual_share:.12f}, "
+                f"blocked={actual_blocked}, max_cell_error={max_cell_error}, "
+                f"canonical={((result or {}).get('canonical_layer_ids') or [])}.",
             )
 
     roads_large_only = {
@@ -823,6 +964,53 @@ def main() -> int:
         f"{invalid_population_selection_errors}",
     )
 
+    invalid_nature_selection_errors: list[str] = []
+    for invalid_layer_ids, expected_message in (
+        (("protected_areas", "protected_areas"), "duplicate layer ids"),
+        (("nature_unknown",), "undeclared nature layers"),
+        (("",), "blank layer id"),
+    ):
+        invalid_selection = {
+            group_id: []
+            for group_id in app.public_wind_group_ids("trondelag")
+        }
+        invalid_selection[app.WIND_NATURE_GROUP_ID] = list(
+            invalid_layer_ids
+        )
+        try:
+            app._wind_fast_distance_runtime_result(
+                trondelag_region,
+                app._reference_default_wind_params(),
+                invalid_selection,
+                7,
+            )
+        except ValueError as exc:
+            if expected_message not in str(exc):
+                invalid_nature_selection_errors.append(str(exc))
+        else:
+            invalid_nature_selection_errors.append(
+                f"{invalid_layer_ids!r} did not fail closed"
+            )
+    try:
+        app.normalize_group_layer_map(
+            {"protected": ["protected_areas"]},
+            "trondelag",
+        )
+    except ValueError as exc:
+        if "Legacy protected nature selections" not in str(exc):
+            invalid_nature_selection_errors.append(str(exc))
+    else:
+        invalid_nature_selection_errors.append(
+            "the legacy protected nature alias did not fail closed"
+        )
+    report.check(
+        not invalid_nature_selection_errors,
+        "The V2 Final runtime rejects duplicate, blank, and undeclared raw "
+        "nature selections and the removed protected alias.",
+        "The V2 Final nature-selection boundary validation drifted: "
+        f"{invalid_nature_selection_errors}",
+    )
+
     original_population_distance_loader = app.distance_table_for_layer
     population_loader_calls: list[str] = []
     population_loader_results: list[dict[str, object] | None] = []
@@ -937,6 +1125,55 @@ def main() -> int:
         f"error={combined_population_error}, "
         f"max_cell_error={combined_population_oracle_error}, "
         f"loader_calls={population_loader_calls}.",
+    )
+
+    original_nature_distance_loader = app.distance_table_for_layer
+    nature_loader_calls: list[str] = []
+    nature_loader_errors: list[str] = []
+    nature_loader_results: list[dict[str, object] | None] = []
+    try:
+        def _reject_legacy_nature(registry_meta, layer_id):
+            normalized_layer_id = str(layer_id)
+            nature_loader_calls.append(normalized_layer_id)
+            if normalized_layer_id == "protected_areas":
+                raise AssertionError(
+                    "protected_areas reached legacy distance loading"
+                )
+            return original_nature_distance_loader(
+                registry_meta,
+                normalized_layer_id,
+            )
+
+        app.distance_table_for_layer = _reject_legacy_nature
+        for resolution in (7, 6, 5):
+            nature_loader_results.append(
+                app._wind_fast_distance_runtime_result(
+                    trondelag_region,
+                    {
+                        **app._reference_default_wind_params(),
+                        app.WIND_NATURE_PARAM_KEY: 1000.0,
+                    },
+                    nature_only,
+                    resolution,
+                )
+            )
+    except Exception as exc:
+        nature_loader_errors.append(str(exc))
+    finally:
+        app.distance_table_for_layer = original_nature_distance_loader
+    report.check(
+        not nature_loader_errors
+        and len(nature_loader_results) == 3
+        and all(
+            result is not None
+            and result.get("canonical_layer_ids") == ["protected_areas"]
+            for result in nature_loader_results
+        )
+        and "protected_areas" not in nature_loader_calls,
+        "The wind nature filter never reaches the legacy distance loader at "
+        "R7/R6/R5.",
+        "The nature filter still depends on legacy distance loading: "
+        f"{nature_loader_errors or nature_loader_calls}",
     )
 
     original_priority_groups = app._allocation_priority_layer_groups
@@ -1055,6 +1292,22 @@ def main() -> int:
         "loader or changed values: "
         f"errors={priority_errors}, loader_calls={priority_loader_calls}, "
         f"max_errors={priority_max_errors}.",
+    )
+    nature_priority_specs = [
+        spec
+        for spec in priority_specs
+        if spec.get("canonical_group_id")
+        == app.CANONICAL_NATURE_GROUP_ID
+    ]
+    report.check(
+        len(nature_priority_specs) == 1
+        and nature_priority_specs[0].get("canonical_layer_ids")
+        == ["protected_areas"]
+        and nature_priority_specs[0].get("layer_ids") == [],
+        "Wind allocation ranking exposes protected_areas only through the "
+        "canonical nature contract.",
+        "Wind allocation ranking still exposes a legacy protected-nature "
+        f"path: {nature_priority_specs}.",
     )
 
     original_population_contract = app.population_control_contract

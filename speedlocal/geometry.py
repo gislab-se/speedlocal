@@ -60,10 +60,10 @@ def _preview_error(code: str, message: str, error: Exception | None = None) -> G
 
 
 def _validate_buffer_contract(layer: LayerContract, distance: float) -> None:
-    if layer.operation != "distance_exclusion":
+    if layer.operation not in {"distance_exclusion", "hard_exclusion"}:
         raise GeometryPreviewError(
             "layer_operation_unsupported",
-            f"Layer {layer.id!r} does not declare distance_exclusion.",
+            f"Layer {layer.id!r} does not declare a distance-based operation.",
         )
     parameter = layer.parameters.get("buffer_m")
     if parameter is None or parameter.unit != "m":
@@ -183,7 +183,26 @@ def _geometry_family(geometry: BaseGeometry) -> str:
     )
 
 
-def _raw_geometries(payload: dict[str, Any], layer_id: str) -> list[dict[str, Any]]:
+def _raw_geometries(
+    payload: dict[str, Any],
+    layer_id: str,
+    geometry_collection_policy: str,
+) -> list[dict[str, Any]]:
+    def expand_geometry(geometry: dict[str, Any]) -> list[dict[str, Any]]:
+        if geometry.get("type") != "GeometryCollection":
+            return [geometry]
+        if geometry_collection_policy != "highest_dimension":
+            return [geometry]
+        expanded: list[dict[str, Any]] = []
+        for child in geometry.get("geometries") or []:
+            if not isinstance(child, dict):
+                raise GeometryPreviewError(
+                    "source_geometry_invalid",
+                    f"Layer {layer_id!r} has an invalid collection member.",
+                )
+            expanded.extend(expand_geometry(child))
+        return expanded
+
     payload_type = payload.get("type")
     if payload_type == "FeatureCollection":
         features = payload.get("features")
@@ -205,7 +224,7 @@ def _raw_geometries(payload: dict[str, Any], layer_id: str) -> list[dict[str, An
                     "source_geometry_missing",
                     f"Layer {layer_id!r} feature {index} has no geometry.",
                 )
-            geometries.append(geometry)
+            geometries.extend(expand_geometry(geometry))
         return geometries
     if payload_type == "Feature":
         geometry = payload.get("geometry")
@@ -214,9 +233,9 @@ def _raw_geometries(payload: dict[str, Any], layer_id: str) -> list[dict[str, An
                 "source_geometry_missing",
                 f"Layer {layer_id!r} has no geometry.",
             )
-        return [geometry]
+        return expand_geometry(geometry)
     if isinstance(payload_type, str):
-        return [payload]
+        return expand_geometry(payload)
     raise GeometryPreviewError(
         "source_geojson_invalid",
         f"Layer {layer_id!r} is not valid GeoJSON.",
@@ -228,6 +247,7 @@ def _load_source_geometries(
     *,
     layer_id: str,
     expected_family: str,
+    geometry_collection_policy: str,
 ) -> tuple[list[BaseGeometry], CRS]:
     try:
         with path.open("r", encoding="utf-8") as handle:
@@ -245,7 +265,12 @@ def _load_source_geometries(
         )
     source_crs = _source_crs(payload, layer_id)
     geometries: list[BaseGeometry] = []
-    for index, raw_geometry in enumerate(_raw_geometries(payload, layer_id)):
+    raw_geometries = _raw_geometries(
+        payload,
+        layer_id,
+        geometry_collection_policy,
+    )
+    for index, raw_geometry in enumerate(raw_geometries):
         try:
             geometry = shape(raw_geometry)
         except Exception as exc:
@@ -267,6 +292,10 @@ def _load_source_geometries(
             )
         family = _geometry_family(geometry)
         if family != expected_family:
+            if geometry_collection_policy == "highest_dimension":
+                dimensions = {"point": 0, "line": 1, "polygon": 2}
+                if dimensions[family] < dimensions[expected_family]:
+                    continue
             raise GeometryPreviewError(
                 "source_geometry_family_mismatch",
                 f"Layer {layer_id!r} geometry {index} is {family}; "
@@ -341,6 +370,9 @@ def build_vector_buffer_preview(
             validated.assets.geojson_path,
             layer_id=layer.id,
             expected_family=validated.geometry_family,
+            geometry_collection_policy=(
+                layer.source.geometry_collection_policy
+            ),
         )
         try:
             to_native = Transformer.from_crs(

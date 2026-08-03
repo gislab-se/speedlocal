@@ -22,6 +22,15 @@
         "expanded_by_default": true,
         "blend_default": 50,
         "group_color": "#b7532d"
+      },
+      {
+        "id": "nature",
+        "label": "Skyddad natur",
+        "analysis_label": "Valfri buffert",
+        "interpretation": "Skyddad natur är en binär restriktion. En hexagon utesluts när vald naturkälla skär den eller ligger inom den valda bufferten.",
+        "expanded_by_default": false,
+        "blend_default": 60,
+        "group_color": "#407749"
       }
     ]
   },
@@ -304,6 +313,36 @@
       "ui": {
         "note": "Punktproxy baserad på fritidshuscentroider.",
         "source_color": "#eca074",
+        "point_radius": 45
+      }
+    },
+    {
+      "id": "protected_areas",
+      "label": "Naturvernområden",
+      "group_id": "nature",
+      "source": {
+        "provider": "v2_archive",
+        "asset_manifest": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/asset_manifest.csv",
+        "layer_id": "protected_areas",
+        "expected_geometry_families": ["polygon"],
+        "data_representation": "features",
+        "geometry_collection_policy": "highest_dimension",
+        "distance_h3_resolution": 7
+      },
+      "operation": "hard_exclusion",
+      "parameters": {
+        "buffer_m": {
+          "type": "number",
+          "unit": "m",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 2000,
+          "step": 50
+        }
+      },
+      "ui": {
+        "note": "NEA Naturvern, klippt och upplöst som första källa för skyddad natur.",
+        "source_color": "#407749",
         "point_radius": 45
       }
     }

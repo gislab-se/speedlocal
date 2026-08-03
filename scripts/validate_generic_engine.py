@@ -117,6 +117,26 @@ OPTIONAL_POPULATION_EXPECTATIONS = {
         5: (0.0637616383561644, 337, 790.380581158766),
     },
 }
+NATURE_EXPECTATIONS = {
+    7: {
+        0.0: (0.7116126683654896, 3_961),
+        250.0: (0.7116126683654896, 3_961),
+        1000.0: (0.7096468875136513, 3_988),
+        2000.0: (0.6018929741536221, 5_468),
+    },
+    6: {
+        0.0: (0.5141007859454462, 1_051),
+        250.0: (0.5141007859454462, 1_051),
+        1000.0: (0.5108645399907536, 1_058),
+        2000.0: (0.4077669902912621, 1_281),
+    },
+    5: {
+        0.0: (0.1726027397260274, 302),
+        250.0: (0.1726027397260274, 302),
+        1000.0: (0.1726027397260274, 302),
+        2000.0: (0.1287671232876712, 318),
+    },
+}
 
 
 def _v2_roads_oracle(contract, threshold: float) -> tuple[int, int, float]:
@@ -665,6 +685,41 @@ def main() -> int:
         for layer in (built_centre, built_low)
     )
     checks += 9
+
+    nature = validate_layer(trondelag.layers["protected_areas"])
+    nature_buffer = nature.contract.parameters["buffer_m"]
+    assert nature.contract.group_id == "nature"
+    assert nature.contract.operation == "hard_exclusion"
+    assert nature.geometry_family == "polygon"
+    assert nature.processing_adapter == "polygon_generic"
+    assert nature.assets.feature_count == 420
+    assert nature.contract.source.distance_h3_resolution == 7
+    assert nature.contract.source.geometry_collection_policy == "highest_dimension"
+    assert (
+        nature_buffer.default,
+        nature_buffer.minimum,
+        nature_buffer.maximum,
+        nature_buffer.step,
+    ) == (0.0, 0.0, 2000.0, 50.0)
+    checks += 8
+
+    try:
+        validate_layer(
+            replace(
+                nature.contract,
+                source=replace(
+                    nature.contract.source,
+                    geometry_collection_policy="reject_mixed",
+                ),
+            )
+        )
+    except ValueError as exc:
+        assert "Expected one geometry family" in str(exc)
+    else:
+        raise AssertionError(
+            "Mixed nature geometry passed without its manifest policy"
+        )
+    checks += 1
     for invalid_distance_resolution in (True, 6.5, -1, 16):
         try:
             replace(
@@ -1180,6 +1235,39 @@ def main() -> int:
                 f"{expected_zero_acceptance} zero-acceptance, "
                 f"{group.mean_acceptance:.15f} mean acceptance, "
                 f"{model_area_km2:.9f} km2 model area"
+            )
+
+    for resolution, expectations in NATURE_EXPECTATIONS.items():
+        target_cell_ids = display_cell_ids_by_resolution[resolution]
+        for threshold, (expected_mean, expected_blocked) in expectations.items():
+            result = run_analysis(
+                "trondelag",
+                "wind",
+                ["protected_areas"],
+                {"protected_areas": {"buffer_m": threshold}},
+                target_resolution=resolution,
+            )
+            assert len(result.layers) == 1
+            layer_result = result.layers[0]
+            group = result.groups[0]
+            assert layer_result.operation == "hard_exclusion"
+            assert layer_result.geometry_family == "polygon"
+            assert layer_result.processing_adapter == "polygon_generic"
+            assert group.group_id == "nature"
+            assert group.layer_ids == ("protected_areas",)
+            assert group.cell_count == TRONDELAG_DISPLAY_COUNTS[resolution]
+            assert group.blocked_cell_count == expected_blocked
+            assert layer_result.blocked_cell_count == expected_blocked
+            assert abs(group.mean_acceptance - expected_mean) < 1e-12
+            assert {cell.cell_id for cell in group.cells} == set(target_cell_ids)
+            assert all(cell.acceptance in {0.0, 1.0} for cell in group.cells)
+            assert sum(cell.blocked for cell in group.cells) == expected_blocked
+            checks += 12
+            print(
+                f"PASS trondelag protected_areas R{resolution} "
+                f"{threshold:g} m: {group.cell_count} cells, "
+                f"{group.blocked_cell_count} blocked, "
+                f"{group.mean_acceptance:.15f} mean acceptance"
             )
 
     assert len({round(value, 12) for value in area_by_resolution[7].values()}) > 1

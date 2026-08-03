@@ -203,7 +203,15 @@ def _distance_exclusion(
     blocked_count = sum(
         1
         for distance, intersects in rows.values()
-        if intersects or (distance is not None and distance <= threshold)
+        if intersects
+        or (
+            distance is not None
+            and distance <= threshold
+            and (
+                layer.contract.operation != "hard_exclusion"
+                or threshold > 0
+            )
+        )
     )
     return (
         LayerResult(
@@ -315,6 +323,12 @@ def _distance_group_result(
     group_id: str,
     layer_results: list[tuple[LayerResult, dict[str, DistanceObservation]]],
 ) -> GroupResult:
+    operations = {result.operation for result, _ in layer_results}
+    if len(operations) != 1:
+        raise ValueError(f"Layers in group {group_id} must use one operation")
+    operation = operations.pop()
+    if operation not in {"distance_exclusion", "hard_exclusion"}:
+        raise ValueError(f"Unsupported distance-group operation: {operation}")
     thresholds = {result.threshold_m for result, _ in layer_results}
     if len(thresholds) != 1:
         raise ValueError(f"Layers in group {group_id} must use one shared threshold")
@@ -333,12 +347,16 @@ def _distance_group_result(
         intersects = any(intersection for _, intersection in values)
         coverage_missing = not observed_distances
         blocked = intersects or (
-            min_distance is not None and min_distance <= threshold
+            min_distance is not None
+            and min_distance <= threshold
+            and (operation != "hard_exclusion" or threshold > 0)
         )
         blocked_count += int(blocked)
-        if intersects:
+        if coverage_missing:
             acceptance = 0.0
-        elif coverage_missing:
+        elif operation == "hard_exclusion":
+            acceptance = 0.0 if blocked else 1.0
+        elif intersects:
             acceptance = 0.0
         elif threshold <= 0:
             acceptance = 1.0
@@ -436,7 +454,10 @@ def run_analysis(
     ] = {}
     for layer_id in requested:
         validated = validate_layer(contract.layers[layer_id])
-        if validated.contract.operation == "distance_exclusion":
+        if validated.contract.operation in {
+            "distance_exclusion",
+            "hard_exclusion",
+        }:
             distance_resolution = (
                 validated.contract.source.distance_h3_resolution
                 if validated.contract.source.distance_h3_resolution is not None

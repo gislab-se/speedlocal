@@ -253,21 +253,31 @@ def resolve_layer_assets(layer: LayerContract) -> LayerAssets:
     )
 
 
-def detect_geojson_geometry_family(path: Path) -> str:
+def detect_geojson_geometry_family(
+    path: Path,
+    geometry_collection_policy: str = "reject_mixed",
+) -> str:
     with path.open("r", encoding="utf-8") as handle:
         payload = json.load(handle)
     geometry_types: set[str] = set()
+
+    def add_geometry_types(geometry: Any) -> None:
+        if not isinstance(geometry, dict):
+            return
+        geometry_type = str(geometry.get("type") or "").lower()
+        if geometry_type == "geometrycollection":
+            for child in geometry.get("geometries") or []:
+                add_geometry_types(child)
+        elif geometry_type:
+            geometry_types.add(geometry_type)
+
     if payload.get("type") == "FeatureCollection":
         for feature in payload.get("features") or []:
-            geometry = feature.get("geometry") or {}
-            if geometry.get("type"):
-                geometry_types.add(str(geometry["type"]).lower())
+            add_geometry_types(feature.get("geometry"))
     elif payload.get("type") == "Feature":
-        geometry = payload.get("geometry") or {}
-        if geometry.get("type"):
-            geometry_types.add(str(geometry["type"]).lower())
+        add_geometry_types(payload.get("geometry"))
     elif payload.get("type"):
-        geometry_types.add(str(payload["type"]).lower())
+        add_geometry_types(payload)
 
     families = set()
     for geometry_type in geometry_types:
@@ -277,6 +287,9 @@ def detect_geojson_geometry_family(path: Path) -> str:
             families.add("line")
         elif "polygon" in geometry_type:
             families.add("polygon")
+    if len(families) > 1 and geometry_collection_policy == "highest_dimension":
+        dimensions = {"point": 0, "line": 1, "polygon": 2}
+        return max(families, key=dimensions.__getitem__)
     if len(families) != 1:
         raise ValueError(f"Expected one geometry family in {path}, found: {sorted(families)}")
     return families.pop()

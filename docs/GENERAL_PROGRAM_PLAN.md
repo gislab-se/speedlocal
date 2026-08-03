@@ -206,7 +206,7 @@ Implemented foundation:
 - manifest-driven medium, large, and combined roads at Trøndelag's public
   R7/R6/R5 resolutions plus a Bornholm onboarding/diagnostic contract;
 - geometry-driven line adapter;
-- generic distance-exclusion execution;
+- generic distance-exclusion and binary hard-exclusion execution;
 - distance-engine contract validation against both regional datasets in the
   shared V2 runtime archive; this is conformance evidence, not two-region
   behavioral parity.
@@ -214,7 +214,8 @@ Implemented foundation:
 Current slice status:
 
 - population and settlement: complete and locally promoted on 2026-08-03;
-- nature is the next thematic slice;
+- nature: automated promotion gates pass for the complete current Trøndelag
+  `protected_areas` source; localhost visual review is pending;
 - dynamic medium and large road layers: complete;
 - generic group result and distance-engine contract conformance: complete;
 - the temporary separate parity app has been removed;
@@ -240,9 +241,10 @@ Current slice status:
   manifest;
 - V2 Final starts from the wind manifest's empty request; source and buffer
   visibility are map-review state and do not alter the numeric request;
-- the five-group public whitelist is manifest-declared. Roads and all three
-  wind population sources are now manifest-driven; remaining unmigrated
-  non-road options still come from the region-manifest-declared legacy
+- the five-group public whitelist is manifest-declared. Roads, all three wind
+  population sources, and Trøndelag `protected_areas` under canonical
+  `nature` are now manifest-driven; remaining unmigrated non-road options
+  still come from the region-manifest-declared legacy
   registry. That bounded adapter is not canonical manifest layer availability
   and not a solar analysis contract;
 - wind potential, establishment rollups, and scenario allocation use validated
@@ -281,7 +283,14 @@ Current slice status:
   order controls primary-versus-optional placement, and dead population cases
   in the legacy wind renderers are removed. The user approved the final clean-
   process localhost control on 2026-08-03, so the complete population slice
-  is locally promoted but unpublished. Nature is the next planned slice.
+  is locally promoted but unpublished;
+- the nature manifest declares `protected_areas` with generic binary
+  `hard_exclusion`, a 0–2,000 m buffer contract, and an explicit
+  highest-dimension policy for its dissolved geometry collection. Canonical
+  R7/R6/R5 engine, frozen-reference, real-app, source/buffer preview,
+  allocation-ranking, runtime, and repository gates pass. The public wind
+  `protected` alias and legacy Trøndelag loader path are removed; localhost
+  visual approval remains before local promotion.
 
 ## Definition of done for a slice
 

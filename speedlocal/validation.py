@@ -216,7 +216,10 @@ def validate_layer(layer: LayerContract) -> ValidatedLayer:
     if not assets.geojson_path.is_file() or not assets.distance_path.is_file():
         raise FileNotFoundError(f"Layer {layer.id} runtime assets are incomplete")
     try:
-        detected = detect_geojson_geometry_family(assets.geojson_path)
+        detected = detect_geojson_geometry_family(
+            assets.geojson_path,
+            layer.source.geometry_collection_policy,
+        )
         geometry_validation = "detected"
     except ValueError:
         if layer.source.source_geometry_required:
