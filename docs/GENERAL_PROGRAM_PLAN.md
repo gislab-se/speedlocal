@@ -244,9 +244,11 @@ Current slice:
   this contract, and adversarial checks prove that a broken migrated contract
   cannot reopen the legacy primary loader. The user approved the clean
   localhost checkpoint on 2026-07-31, so this bounded primary increment is
-  locally promoted. The optional settlement proxies, public `settlement`
-  alias, and allocation-ranking consumer remain explicit work inside the
-  incomplete population slice.
+  locally promoted. The wind allocation-ranking consumer now obtains the
+  primary layer from the canonical manifest engine at R7/R6/R5 and matches the
+  previous ranking values exactly; its localhost review is pending. The two
+  validated optional settlement proxies and public `settlement` alias remain
+  explicit work inside the incomplete population slice.
 
 ## Definition of done for a slice
 

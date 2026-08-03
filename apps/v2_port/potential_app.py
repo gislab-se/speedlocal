@@ -9669,15 +9669,34 @@ def _allocation_priority_distance_cap_m(group: Any) -> float:
     return max(cap, 1.0)
 
 
-def _allocation_priority_layer_groups(technology: str) -> list[dict[str, Any]]:
+def _allocation_priority_layer_groups(
+    region_id: str,
+    technology: str,
+) -> list[dict[str, Any]]:
     groups, layers, registry_meta = load_acceptance_registry()
     availability = _wind_layer_status_lookup(registry_meta)
+    canonical_population_group: WindGroupControlContract | None = None
+    canonical_population_ids: tuple[str, ...] = ()
     raw_groups: list[tuple[str, list[str]]] = []
     if str(technology) == "solar":
         raw_groups.append((WIND_SETTLEMENT_GROUP_ID, [WIND_POPULATION_SOURCE_LAYER_ID]))
         for group_id in SOLAR_FILTER_GROUP_IDS:
             raw_groups.append((group_id, list(_solar_filter_layer_ids(group_id))))
     else:
+        canonical_population_group = population_control_contract(region_id)
+        unavailable_population_ids = [
+            layer.id
+            for layer in canonical_population_group.layers
+            if not layer.ready
+        ]
+        if unavailable_population_ids:
+            raise ValueError(
+                f"{region_id}/wind canonical population ranking layers are not "
+                f"ready: {unavailable_population_ids}"
+            )
+        canonical_population_ids = tuple(
+            layer.id for layer in canonical_population_group.layers
+        )
         for group_id, layer_ids in WIND_GROUP_LAYER_DEFAULTS.items():
             raw_groups.append((group_id, list(layer_ids)))
 
@@ -9687,7 +9706,25 @@ def _allocation_priority_layer_groups(technology: str) -> list[dict[str, Any]]:
         if group_id in seen_group_ids:
             continue
         seen_group_ids.add(group_id)
-        group = groups.get(group_id)
+        canonical_layer_ids: list[str] = []
+        if (
+            str(technology) == "wind"
+            and group_id == WIND_SETTLEMENT_GROUP_ID
+        ):
+            if canonical_population_group is None or not canonical_population_ids:
+                raise ValueError(
+                    f"{region_id}/wind declares no canonical population "
+                    "ranking layers"
+                )
+            group = canonical_population_group
+            canonical_layer_ids = list(canonical_population_ids)
+            layer_ids = [
+                str(layer_id)
+                for layer_id in layer_ids
+                if str(layer_id) not in set(canonical_population_ids)
+            ]
+        else:
+            group = groups.get(group_id)
         if group is None:
             continue
         ready_layer_ids = [
@@ -9695,13 +9732,19 @@ def _allocation_priority_layer_groups(technology: str) -> list[dict[str, Any]]:
             for layer_id in layer_ids
             if str(layer_id) in layers and _wind_layer_is_ready(str(layer_id), availability)
         ]
-        if not ready_layer_ids:
+        if not ready_layer_ids and not canonical_layer_ids:
             continue
         specs.append(
             {
                 "group_id": str(group_id),
                 "group": group,
                 "layer_ids": ready_layer_ids,
+                "canonical_group_id": (
+                    CANONICAL_POPULATION_GROUP_ID
+                    if canonical_layer_ids
+                    else None
+                ),
+                "canonical_layer_ids": canonical_layer_ids,
                 "label": group_label(group, WIND_CONTROL_LANGUAGE, group.label),
                 "analysis_kind": str(group.analysis_kind),
             }
@@ -9754,6 +9797,29 @@ def _allocation_priority_reason(row: Any, components: list[dict[str, str]]) -> s
     return ". ".join(parts) if parts else "Balanserad placering enligt landskaps- och teknikranking."
 
 
+@st.cache_data(show_spinner=False, max_entries=12)
+def _cached_population_allocation_distance_frame(
+    region_id: str,
+    layer_ids: tuple[str, ...],
+    buffer_m: float,
+    target_resolution: int,
+) -> pd.DataFrame:
+    canonical_domain_ids = tuple(
+        _cached_wind_analysis_domain_cell_areas_km2(
+            str(region_id),
+            int(target_resolution),
+        )
+    )
+    frame = population_acceptance_frame(
+        str(region_id),
+        layer_ids,
+        float(buffer_m),
+        canonical_domain_ids,
+        int(target_resolution),
+    )
+    return frame[["hex_id", "distance_m", "intersects"]].copy()
+
+
 def _apply_landscape_priority_to_allocation_frame(
     frame: pd.DataFrame,
     region: dict[str, Any],
@@ -9768,15 +9834,34 @@ def _apply_landscape_priority_to_allocation_frame(
 
     work = frame.copy()
     work["hex_id"] = work["hex_id"].astype(str)
-    groups, _, registry_meta = load_acceptance_registry()
+    region_id = str(region.get("region_id") or "").strip().lower()
+    _, _, registry_meta = load_acceptance_registry()
     component_cols: list[str] = []
     component_meta: list[dict[str, str]] = []
-    for spec in _allocation_priority_layer_groups(str(technology)):
+    for spec in _allocation_priority_layer_groups(region_id, str(technology)):
         group_id = str(spec["group_id"])
-        group = groups.get(group_id)
+        group = spec["group"]
         if group is None:
             continue
         parts: list[pd.DataFrame] = []
+        canonical_layer_ids = [
+            str(layer_id)
+            for layer_id in spec.get("canonical_layer_ids", [])
+        ]
+        if canonical_layer_ids:
+            canonical_group_id = str(spec.get("canonical_group_id") or "")
+            if canonical_group_id != CANONICAL_POPULATION_GROUP_ID:
+                raise ValueError(
+                    "Unsupported canonical allocation-ranking group: "
+                    f"{canonical_group_id or '<blank>'}"
+                )
+            canonical_frame = _cached_population_allocation_distance_frame(
+                region_id,
+                tuple(canonical_layer_ids),
+                float(group.analysis_default_m),
+                int(target_resolution),
+            )
+            parts.append(canonical_frame)
         for layer_id in spec["layer_ids"]:
             layer_frame = _target_resolution_distance_frame(
                 distance_table_for_layer(registry_meta, str(layer_id)),

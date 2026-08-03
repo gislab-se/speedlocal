@@ -935,6 +935,120 @@ def main() -> int:
         f"loader_calls={population_loader_calls}.",
     )
 
+    original_priority_groups = app._allocation_priority_layer_groups
+    original_priority_loader = app.distance_table_for_layer
+    priority_loader_calls: list[str] = []
+    priority_errors: list[str] = []
+    priority_max_errors: dict[int, float] = {}
+    priority_specs = original_priority_groups("trondelag", "wind")
+    population_priority_specs = [
+        spec
+        for spec in priority_specs
+        if spec.get("canonical_group_id")
+        == app.CANONICAL_POPULATION_GROUP_ID
+    ]
+    try:
+        if len(population_priority_specs) != 1:
+            raise AssertionError(
+                "wind allocation ranking does not expose one canonical "
+                "population specification"
+            )
+        canonical_spec = population_priority_specs[0]
+        canonical_ids = [
+            str(layer_id)
+            for layer_id in canonical_spec.get("canonical_layer_ids", [])
+        ]
+        legacy_spec = dict(canonical_spec)
+        legacy_spec["layer_ids"] = canonical_ids + [
+            str(layer_id)
+            for layer_id in canonical_spec.get("layer_ids", [])
+        ]
+        legacy_spec["canonical_group_id"] = None
+        legacy_spec["canonical_layer_ids"] = []
+
+        def _priority_primary_guard(registry_meta, layer_id):
+            normalized_layer_id = str(layer_id)
+            priority_loader_calls.append(normalized_layer_id)
+            if normalized_layer_id == app.WIND_POPULATION_SOURCE_LAYER_ID:
+                raise AssertionError(
+                    "population_points reached legacy allocation-ranking loading"
+                )
+            return original_priority_loader(registry_meta, normalized_layer_id)
+
+        for resolution in (7, 6, 5):
+            domain_ids = list(
+                app.wind_analysis_domain_cell_areas_km2(
+                    "trondelag",
+                    resolution,
+                )
+            )
+            priority_source = pd.DataFrame(
+                {
+                    "hex_id": domain_ids,
+                    "potential_area_share_pct": 50.0,
+                    "core_score": 0.5,
+                }
+            )
+            app._allocation_priority_layer_groups = (
+                lambda _region_id, _technology, spec=legacy_spec: [spec]
+            )
+            legacy_priority = app._apply_landscape_priority_to_allocation_frame(
+                priority_source,
+                trondelag_region,
+                "wind",
+                resolution,
+            ).sort_values("hex_id")
+
+            app._allocation_priority_layer_groups = (
+                lambda _region_id, _technology, spec=canonical_spec: [spec]
+            )
+            app.distance_table_for_layer = _priority_primary_guard
+            canonical_priority = app._apply_landscape_priority_to_allocation_frame(
+                priority_source,
+                trondelag_region,
+                "wind",
+                resolution,
+            ).sort_values("hex_id")
+            error_columns = (
+                "landscape_priority_score",
+                "allocation_priority_score",
+                "technical_priority_score",
+                "core_score",
+            )
+            priority_max_errors[resolution] = max(
+                float(
+                    (
+                        pd.to_numeric(canonical_priority[column], errors="coerce")
+                        - pd.to_numeric(legacy_priority[column], errors="coerce")
+                    )
+                    .abs()
+                    .max()
+                )
+                for column in error_columns
+            )
+            app.distance_table_for_layer = original_priority_loader
+    except Exception as exc:
+        priority_errors.append(str(exc))
+    finally:
+        app._allocation_priority_layer_groups = original_priority_groups
+        app.distance_table_for_layer = original_priority_loader
+
+    report.check(
+        not priority_errors
+        and len(population_priority_specs) == 1
+        and population_priority_specs[0].get("canonical_layer_ids")
+        == [app.WIND_POPULATION_SOURCE_LAYER_ID]
+        and app.WIND_POPULATION_SOURCE_LAYER_ID not in priority_loader_calls
+        and priority_max_errors.keys() == {7, 6, 5}
+        and max(priority_max_errors.values(), default=float("inf")) <= 1e-12,
+        "Wind allocation ranking uses canonical population distances at "
+        "R7/R6/R5 without changing the accepted legacy ranking values.",
+        "Population allocation ranking still depends on the legacy primary "
+        "loader or changed values: "
+        f"errors={priority_errors}, loader_calls={priority_loader_calls}, "
+        f"max_errors={priority_max_errors}.",
+    )
+
     original_population_contract = app.population_control_contract
     original_population_ids = app.canonical_population_layer_ids
     original_population_loader = app.distance_table_for_layer
@@ -971,11 +1085,19 @@ def main() -> int:
             broken_contract_errors.append(
                 "broken population controls did not fail"
             )
+        try:
+            app._allocation_priority_layer_groups("trondelag", "wind")
+        except ValueError as exc:
+            broken_contract_errors.append(str(exc))
+        else:
+            broken_contract_errors.append(
+                "broken population allocation ranking did not fail"
+            )
     finally:
         app.population_control_contract = original_population_contract
         app.distance_table_for_layer = original_population_loader
     report.check(
-        len(broken_contract_errors) == 2
+        len(broken_contract_errors) == 3
         and all(
             "no population ui descriptor" in message
             for message in broken_contract_errors

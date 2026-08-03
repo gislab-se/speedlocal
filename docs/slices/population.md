@@ -1,6 +1,7 @@
 # Population and settlement slice characterization
 
-Status: active; primary increment locally approved, complete slice open
+Status: active; primary increment locally approved, ranking increment awaiting
+localhost review, complete slice open
 Behavior reference: frozen V2 for Trøndelag only
 Integration target: V2 Final wind restriction flow
 
@@ -94,9 +95,8 @@ No region id may select an adapter or analysis algorithm.
   control and fast-distance runtime now consumes the canonical result.
 - **Removed in this increment:** primary-layer fallthrough to the legacy
   distance loader and the Trøndelag-specific wind population preview path.
-- **Still transitional:** optional settlement inputs, the public `settlement`
-  alias, and the separate allocation-ranking consumer of the legacy population
-  table.
+- **Still transitional:** optional settlement inputs and the public
+  `settlement` alias.
 
 ## First-increment gates
 
@@ -129,5 +129,34 @@ a mixed buffer preview.
 
 This increment is not the complete population slice. Completion also requires
 canonical optional settlement sources, removal of the public `settlement`
-alias, migration of the allocation-ranking consumer, final regression, and
-localhost approval of that complete behavior.
+alias, final regression, and localhost approval of that complete behavior.
+
+## Allocation-ranking increment
+
+The wind allocation-ranking consumer now obtains `population_points`
+distance/intersection observations from the canonical manifest engine at
+R7/R6/R5. It keeps the accepted ranking formula and continues to combine the
+primary source with optional transitional settlement proxies by minimum
+distance and any intersection. The legacy registry loader is permitted only
+for those still-transitional optional sources; attempting to load
+`population_points` there is an automated failure.
+
+The immutable canonical ranking frame is cached per region, selected canonical
+layer set, manifest default ranking threshold, and target resolution so normal
+Streamlit reruns do not repeatedly process the 89,312-row source artifact.
+Accepted-reference validation compares every R7/R6/R5 ranking score with the
+previous frozen-registry path and reports zero drift. The automated gate is
+ready for localhost review; this increment is not yet locally promoted.
+
+## Optional-source decision
+
+`built_centre` and `built_low_selection` should be migrated, not removed. Both
+are explicit accepted Trøndelag public options, are off by default, and are
+already present in the checksum-pinned runtime package. `built_centre` resolves
+to one `MultiPolygon`; `built_low_selection` resolves to 10,966 points. Each
+has a complete 89,312-row R8 distance artifact over the same signed source-cell
+universe as the primary layer, so the shared geometry-driven adapters and
+sparse R8-to-R7/R6/R5 contract are sufficient without a regional algorithm.
+The next bounded increment is to declare both in the analysis manifest, add
+individual and combined accepted-reference gates, and remove their remaining
+registry adapter path.

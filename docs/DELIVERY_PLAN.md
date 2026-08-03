@@ -104,8 +104,10 @@ Current milestone status:
   R8-to-R7/R6/R5 parity and real-Streamlit gates. Signed sparse-coverage drift
   and broken migrated UI/layer contracts fail closed before legacy loading.
   Clean-process localhost review was approved on 2026-07-31, so the bounded
-  primary increment is locally promoted. Optional settlement proxies, the
-  public `settlement` alias, and the separate allocation-ranking consumer
+  primary increment is locally promoted. The wind allocation-ranking consumer
+  now uses canonical population distances at R7/R6/R5 with zero accepted-value
+  drift and no legacy primary-layer load; localhost review is pending for that
+  checkpoint. Optional settlement proxies and the public `settlement` alias
   remain transitional, so the complete population slice is not yet promoted.
 
 ## Slice gates
