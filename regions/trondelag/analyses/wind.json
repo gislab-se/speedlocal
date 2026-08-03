@@ -31,6 +31,15 @@
         "expanded_by_default": false,
         "blend_default": 60,
         "group_color": "#407749"
+      },
+      {
+        "id": "culture",
+        "label": "Värdefulla kulturmiljöer",
+        "analysis_label": "Valfri buffert",
+        "interpretation": "Kulturmiljöer är en binär restriktion. En hexagon utesluts när någon vald kulturkälla skär den eller ligger inom den valda bufferten.",
+        "expanded_by_default": false,
+        "blend_default": 60,
+        "group_color": "#844e94"
       }
     ]
   },
@@ -343,6 +352,65 @@
       "ui": {
         "note": "NEA Naturvern, klippt och upplöst som första källa för skyddad natur.",
         "source_color": "#407749",
+        "point_radius": 45
+      }
+    },
+    {
+      "id": "cultural_preservation",
+      "label": "Kulturmiljöer och kulturminnen",
+      "group_id": "culture",
+      "source": {
+        "provider": "v2_archive",
+        "asset_manifest": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/asset_manifest.csv",
+        "layer_id": "cultural_preservation",
+        "expected_geometry_families": ["polygon"],
+        "data_representation": "features",
+        "geometry_validity_policy": "make_valid",
+        "distance_h3_resolution": 7
+      },
+      "operation": "hard_exclusion",
+      "parameters": {
+        "buffer_m": {
+          "type": "number",
+          "unit": "m",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 1500,
+          "step": 50
+        }
+      },
+      "ui": {
+        "note": "Kulturmiljöer och kulturminnen från norska Riksantikvaren.",
+        "source_color": "#844e94",
+        "point_radius": 45
+      }
+    },
+    {
+      "id": "valuable_cultural_environment",
+      "label": "Värdefulla kulturlandskap",
+      "group_id": "culture",
+      "source": {
+        "provider": "v2_archive",
+        "asset_manifest": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/asset_manifest.csv",
+        "layer_id": "valuable_cultural_environment",
+        "expected_geometry_families": ["polygon"],
+        "data_representation": "features",
+        "distance_h3_resolution": 7
+      },
+      "operation": "hard_exclusion",
+      "parameters": {
+        "buffer_m": {
+          "type": "number",
+          "unit": "m",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 1500,
+          "step": 50
+        }
+      },
+      "ui": {
+        "note": "Värdefulla kulturlandskap från norska Miljødirektoratet.",
+        "source_color": "#9c65ab",
         "point_radius": 45
       }
     }

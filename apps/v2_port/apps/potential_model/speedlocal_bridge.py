@@ -18,6 +18,7 @@ from speedlocal.validation import validate_contract, validate_layer
 CANONICAL_ROADS_GROUP_ID = "roads"
 CANONICAL_POPULATION_GROUP_ID = "population"
 CANONICAL_NATURE_GROUP_ID = "nature"
+CANONICAL_CULTURE_GROUP_ID = "culture"
 CANONICAL_DISTANCE_OPERATIONS = {"distance_exclusion", "hard_exclusion"}
 CANONICAL_TO_TRANSITIONAL_GROUP_ID = {
     "nature": "protected",
@@ -105,9 +106,11 @@ def public_wind_group_ids(region_id: str) -> tuple[str, ...]:
         }:
             group_ids.append(group_id)
             continue
-        if (
-            group_id == CANONICAL_NATURE_GROUP_ID
-            and any(layer.group_id == group_id for layer in analysis.layers.values())
+        if group_id in {
+            CANONICAL_NATURE_GROUP_ID,
+            CANONICAL_CULTURE_GROUP_ID,
+        } and any(
+            layer.group_id == group_id for layer in analysis.layers.values()
         ):
             group_ids.append(group_id)
             continue
@@ -115,6 +118,18 @@ def public_wind_group_ids(region_id: str) -> tuple[str, ...]:
         if transitional_id is not None:
             group_ids.append(transitional_id)
     return tuple(group_ids)
+
+
+def canonical_wind_group_is_declared(
+    region_id: str,
+    group_id: str,
+) -> bool:
+    """Return whether a canonical group has manifest-declared layers."""
+    analysis = _validated_wind_analysis(region_id)
+    return any(
+        layer.group_id == str(group_id)
+        for layer in analysis.layers.values()
+    )
 
 
 def default_wind_layer_selection(region_id: str) -> dict[str, list[str]]:
@@ -138,6 +153,7 @@ def default_wind_layer_selection(region_id: str) -> dict[str, list[str]]:
             CANONICAL_ROADS_GROUP_ID,
             CANONICAL_POPULATION_GROUP_ID,
             CANONICAL_NATURE_GROUP_ID,
+            CANONICAL_CULTURE_GROUP_ID,
         }:
             public_group_id = CANONICAL_TO_TRANSITIONAL_GROUP_ID.get(
                 layer.group_id
@@ -224,6 +240,14 @@ def canonical_nature_layer_ids(region_id: str) -> tuple[str, ...]:
     return canonical_wind_group_layer_ids(
         region_id,
         CANONICAL_NATURE_GROUP_ID,
+    )
+
+
+def canonical_culture_layer_ids(region_id: str) -> tuple[str, ...]:
+    """Return canonical culture layers in manifest order."""
+    return canonical_wind_group_layer_ids(
+        region_id,
+        CANONICAL_CULTURE_GROUP_ID,
     )
 
 
@@ -344,6 +368,14 @@ def nature_control_contract(region_id: str) -> WindGroupControlContract:
     )
 
 
+def culture_control_contract(region_id: str) -> WindGroupControlContract:
+    """Expose canonical manifest-driven culture controls."""
+    return wind_group_control_contract(
+        region_id,
+        CANONICAL_CULTURE_GROUP_ID,
+    )
+
+
 def wind_source_geojson(
     region_id: str,
     canonical_group_id: str,
@@ -394,6 +426,15 @@ def nature_source_geojson(region_id: str, layer_id: str) -> dict:
     return wind_source_geojson(
         region_id,
         CANONICAL_NATURE_GROUP_ID,
+        layer_id,
+    )
+
+
+def culture_source_geojson(region_id: str, layer_id: str) -> dict:
+    """Read one validated canonical culture source."""
+    return wind_source_geojson(
+        region_id,
+        CANONICAL_CULTURE_GROUP_ID,
         layer_id,
     )
 
@@ -622,6 +663,24 @@ def nature_acceptance_frame(
     return wind_group_acceptance_frame(
         region_id,
         CANONICAL_NATURE_GROUP_ID,
+        layer_ids,
+        buffer_m,
+        analysis_cell_ids,
+        target_resolution,
+    )
+
+
+def culture_acceptance_frame(
+    region_id: str,
+    layer_ids: Collection[str],
+    buffer_m: float,
+    analysis_cell_ids: Collection[str],
+    target_resolution: int,
+) -> pd.DataFrame:
+    """Adapt canonical culture hard-exclusion results to V2 Final."""
+    return wind_group_acceptance_frame(
+        region_id,
+        CANONICAL_CULTURE_GROUP_ID,
         layer_ids,
         buffer_m,
         analysis_cell_ids,

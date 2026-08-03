@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Iterable, Literal
 
 from pyproj import CRS, Transformer
+from shapely import make_valid
 from shapely.geometry import mapping, shape
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import transform, unary_union
@@ -248,6 +249,7 @@ def _load_source_geometries(
     layer_id: str,
     expected_family: str,
     geometry_collection_policy: str,
+    geometry_validity_policy: str,
 ) -> tuple[list[BaseGeometry], CRS]:
     try:
         with path.open("r", encoding="utf-8") as handle:
@@ -285,11 +287,27 @@ def _load_source_geometries(
                 f"Layer {layer_id!r} geometry {index} is empty.",
             )
         if not geometry.is_valid:
-            raise GeometryPreviewError(
-                "source_geometry_invalid",
-                f"Layer {layer_id!r} geometry {index} is invalid: "
-                f"{explain_validity(geometry)}.",
-            )
+            if geometry_validity_policy != "make_valid":
+                raise GeometryPreviewError(
+                    "source_geometry_invalid",
+                    f"Layer {layer_id!r} geometry {index} is invalid: "
+                    f"{explain_validity(geometry)}.",
+                )
+            try:
+                geometry = make_valid(geometry)
+            except Exception as exc:
+                raise _preview_error(
+                    "source_geometry_repair_failed",
+                    f"Layer {layer_id!r} geometry {index} could not be "
+                    "repaired under its manifest policy.",
+                    exc,
+                )
+            if geometry.is_empty or not geometry.is_valid:
+                raise GeometryPreviewError(
+                    "source_geometry_repair_failed",
+                    f"Layer {layer_id!r} geometry {index} remained invalid "
+                    "after its manifest-declared repair.",
+                )
         family = _geometry_family(geometry)
         if family != expected_family:
             if geometry_collection_policy == "highest_dimension":
@@ -323,6 +341,31 @@ def _ensure_usable_geometry(geometry: BaseGeometry, stage: str) -> None:
         )
 
 
+def _repair_result_if_declared(
+    geometry: BaseGeometry,
+    stage: str,
+    repair_declared: bool,
+) -> BaseGeometry:
+    if geometry.is_valid or not repair_declared:
+        return geometry
+    try:
+        repaired = make_valid(geometry)
+    except Exception as exc:
+        raise _preview_error(
+            "geometry_result_repair_failed",
+            f"The {stage} geometry could not be repaired under the selected "
+            "layers' manifest policy.",
+            exc,
+        )
+    if repaired.is_empty or not repaired.is_valid:
+        raise GeometryPreviewError(
+            "geometry_result_repair_failed",
+            f"The {stage} geometry remained invalid after its "
+            "manifest-declared repair.",
+        )
+    return repaired
+
+
 def build_vector_buffer_preview(
     layers: Iterable[LayerContract],
     *,
@@ -349,6 +392,10 @@ def build_vector_buffer_preview(
     native_geometries: list[BaseGeometry] = []
     source_feature_count = 0
     declared_feature_count = 0
+    result_repair_declared = any(
+        layer.source.geometry_validity_policy == "make_valid"
+        for layer in layer_list
+    )
 
     for layer in layer_list:
         _validate_buffer_contract(layer, distance)
@@ -372,6 +419,9 @@ def build_vector_buffer_preview(
             expected_family=validated.geometry_family,
             geometry_collection_policy=(
                 layer.source.geometry_collection_policy
+            ),
+            geometry_validity_policy=(
+                layer.source.geometry_validity_policy
             ),
         )
         try:
@@ -404,6 +454,11 @@ def build_vector_buffer_preview(
             "The selected source geometries could not be dissolved.",
             exc,
         )
+    dissolved = _repair_result_if_declared(
+        dissolved,
+        "dissolved source",
+        result_repair_declared,
+    )
     _ensure_usable_geometry(dissolved, "dissolved source")
 
     semantics: PreviewSemantics
@@ -420,6 +475,11 @@ def build_vector_buffer_preview(
                 exc,
             )
         semantics = "metric_buffer"
+    native_result = _repair_result_if_declared(
+        native_result,
+        semantics.replace("_", " "),
+        result_repair_declared,
+    )
     _ensure_usable_geometry(native_result, semantics.replace("_", " "))
 
     area_m2 = float(native_result.area)
@@ -432,6 +492,11 @@ def build_vector_buffer_preview(
             "The preview could not be transformed to EPSG:4326.",
             exc,
         )
+    web_geometry = _repair_result_if_declared(
+        web_geometry,
+        "EPSG:4326 preview",
+        result_repair_declared,
+    )
     _ensure_usable_geometry(web_geometry, "EPSG:4326 preview")
 
     canonical_native_crs = target_crs.to_string()

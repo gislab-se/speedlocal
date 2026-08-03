@@ -142,6 +142,23 @@ NATURE_EXPECTATIONS = {
         2000.0: (12.87671232876712, 318),
     },
 }
+CULTURE_SELECTION_EXPECTATIONS = {
+    ("cultural_preservation",): {
+        7: {0.0: (12_665 / 13_735 * 100.0, 1_070), 250.0: (12_665 / 13_735 * 100.0, 1_070), 1000.0: (12_662 / 13_735 * 100.0, 1_073), 1500.0: (12_619 / 13_735 * 100.0, 1_116)},
+        6: {0.0: (1_966 / 2_163 * 100.0, 197), 250.0: (1_966 / 2_163 * 100.0, 197), 1000.0: (1_966 / 2_163 * 100.0, 197), 1500.0: (1_960 / 2_163 * 100.0, 203)},
+        5: {0.0: (317 / 365 * 100.0, 48), 250.0: (317 / 365 * 100.0, 48), 1000.0: (317 / 365 * 100.0, 48), 1500.0: (314 / 365 * 100.0, 51)},
+    },
+    ("valuable_cultural_environment",): {
+        7: {0.0: (13_212 / 13_735 * 100.0, 523), 250.0: (13_212 / 13_735 * 100.0, 523), 1000.0: (13_204 / 13_735 * 100.0, 531), 1500.0: (12_995 / 13_735 * 100.0, 740)},
+        6: {0.0: (1_909 / 2_163 * 100.0, 254), 250.0: (1_909 / 2_163 * 100.0, 254), 1000.0: (1_908 / 2_163 * 100.0, 255), 1500.0: (1_863 / 2_163 * 100.0, 300)},
+        5: {0.0: (235 / 365 * 100.0, 130), 250.0: (235 / 365 * 100.0, 130), 1000.0: (234 / 365 * 100.0, 131), 1500.0: (227 / 365 * 100.0, 138)},
+    },
+    ("cultural_preservation", "valuable_cultural_environment"): {
+        7: {0.0: (12_206 / 13_735 * 100.0, 1_529), 250.0: (12_206 / 13_735 * 100.0, 1_529), 1000.0: (12_199 / 13_735 * 100.0, 1_536), 1500.0: (11_980 / 13_735 * 100.0, 1_755)},
+        6: {0.0: (1_751 / 2_163 * 100.0, 412), 250.0: (1_751 / 2_163 * 100.0, 412), 1000.0: (1_750 / 2_163 * 100.0, 413), 1500.0: (1_709 / 2_163 * 100.0, 454)},
+        5: {0.0: (212 / 365 * 100.0, 153), 250.0: (212 / 365 * 100.0, 153), 1000.0: (212 / 365 * 100.0, 153), 1500.0: (205 / 365 * 100.0, 160)},
+    },
+}
 
 for import_root in (ROOT, PORT_ROOT, PORT_APPS):
     if str(import_root) not in sys.path:
@@ -313,36 +330,40 @@ def _population_acceptance_oracle(
     return oracle
 
 
-def _nature_acceptance_oracle(
+def _hard_exclusion_acceptance_oracle(
     registry: dict,
+    layer_ids: tuple[str, ...],
     threshold_m: float,
     target_resolution: int,
     target_cell_ids: set[str],
 ) -> dict[str, float]:
-    """Reproduce frozen protected-nature hard-exclusion semantics."""
-    distance = distance_table_for_layer(registry, "protected_areas")
+    """Reproduce frozen multi-source hard-exclusion semantics."""
     rolled: dict[str, tuple[float, bool]] = {}
-    for row in distance.itertuples(index=False):
-        source_id = str(row.hex_id)
-        target_id = (
-            source_id
-            if target_resolution == 7
-            else str(h3.cell_to_parent(source_id, target_resolution))
-        )
-        value = (
-            float(row.distance_m),
-            str(row.intersects).strip().lower() in {"1", "true", "yes"},
-        )
-        previous = rolled.get(target_id)
-        rolled[target_id] = value if previous is None else (
-            min(previous[0], value[0]),
-            previous[1] or value[1],
-        )
+    for layer_id in layer_ids:
+        distance = distance_table_for_layer(registry, layer_id)
+        for row in distance.itertuples(index=False):
+            source_id = str(row.hex_id)
+            target_id = (
+                source_id
+                if target_resolution == 7
+                else str(h3.cell_to_parent(source_id, target_resolution))
+            )
+            value = (
+                float(row.distance_m),
+                str(row.intersects).strip().lower()
+                in {"1", "true", "yes"},
+            )
+            previous = rolled.get(target_id)
+            rolled[target_id] = value if previous is None else (
+                min(previous[0], value[0]),
+                previous[1] or value[1],
+            )
     oracle: dict[str, float] = {}
     for cell_id in target_cell_ids:
         if cell_id not in rolled:
             raise ValueError(
-                f"Frozen protected_areas is missing target cell: {cell_id}"
+                "Frozen hard-exclusion selection is missing target cell: "
+                f"{cell_id}"
             )
         distance_m, intersects = rolled[cell_id]
         blocked = intersects or (
@@ -350,6 +371,21 @@ def _nature_acceptance_oracle(
         )
         oracle[cell_id] = 0.0 if blocked else 1.0
     return oracle
+
+
+def _nature_acceptance_oracle(
+    registry: dict,
+    threshold_m: float,
+    target_resolution: int,
+    target_cell_ids: set[str],
+) -> dict[str, float]:
+    return _hard_exclusion_acceptance_oracle(
+        registry,
+        ("protected_areas",),
+        threshold_m,
+        target_resolution,
+        target_cell_ids,
+    )
 
 
 def main() -> int:
@@ -420,10 +456,12 @@ def main() -> int:
                 and result.get("fast_distance") is True
                 and result.get("canonical_layer_ids")
                 == [
+                    "cultural_preservation",
                     "population_points",
                     "protected_areas",
                     "roads_large",
                     "roads_medium",
+                    "valuable_cultural_environment",
                 ]
                 and abs(actual_share - expected_share) <= 1e-12,
                 f"Trøndelag R{resolution} at {road_distance:.0f} m preserves "
@@ -604,6 +642,86 @@ def main() -> int:
                 f"blocked={actual_blocked}, max_cell_error={max_cell_error}, "
                 f"canonical={((result or {}).get('canonical_layer_ids') or [])}.",
             )
+
+    for layer_ids, resolution_expectations in CULTURE_SELECTION_EXPECTATIONS.items():
+        culture_only = {
+            group_id: []
+            for group_id in app.public_wind_group_ids("trondelag")
+        }
+        culture_only[app.WIND_CULTURE_GROUP_ID] = list(layer_ids)
+        for resolution, expectations in resolution_expectations.items():
+            display_geometry_path = app._h3_display_geometry_path(
+                trondelag_region,
+                resolution,
+            )
+            target_cell_ids = set(
+                app.load_h3_display_geometries(display_geometry_path)
+            )
+            for buffer_m, (expected_share, expected_blocked) in expectations.items():
+                params = app._reference_default_wind_params()
+                params["culture_buffer_m"] = buffer_m
+                result = app._wind_fast_distance_runtime_result(
+                    trondelag_region,
+                    params,
+                    culture_only,
+                    resolution,
+                )
+                frame = (
+                    (result or {}).get("fast_distance_frame")
+                    if isinstance(result, dict)
+                    else None
+                )
+                oracle = _hard_exclusion_acceptance_oracle(
+                    trondelag_registry,
+                    layer_ids,
+                    buffer_m,
+                    resolution,
+                    target_cell_ids,
+                )
+                actual = (
+                    {
+                        str(row.hex_id):
+                        float(row.potential_area_share_pct) / 100.0
+                        for row in frame.itertuples(index=False)
+                    }
+                    if isinstance(frame, pd.DataFrame)
+                    else {}
+                )
+                max_cell_error = (
+                    max(
+                        abs(actual[cell_id] - oracle[cell_id])
+                        for cell_id in actual
+                    )
+                    if actual and actual.keys() == oracle.keys()
+                    else float("inf")
+                )
+                actual_share = float(
+                    ((result or {}).get("combined") or {}).get(
+                        "land_share_pct",
+                        -1.0,
+                    )
+                )
+                actual_blocked = (
+                    int(frame["potential_area_share_pct"].eq(0.0).sum())
+                    if isinstance(frame, pd.DataFrame)
+                    else -1
+                )
+                report.check(
+                    result is not None
+                    and result.get("canonical_layer_ids") == sorted(layer_ids)
+                    and len(frame) == DISPLAY_COUNTS[resolution]
+                    and actual_blocked == expected_blocked
+                    and abs(actual_share - expected_share) <= 1e-12
+                    and max_cell_error <= 1e-12,
+                    f"Trøndelag {'+'.join(layer_ids)} R{resolution} uses "
+                    f"canonical hard exclusion at {buffer_m:.0f} m "
+                    f"({expected_share:.12f}%, {expected_blocked} blocked).",
+                    f"Trøndelag {'+'.join(layer_ids)} R{resolution} drifted "
+                    f"at {buffer_m:.0f} m: share={actual_share:.12f}, "
+                    f"blocked={actual_blocked}, "
+                    f"max_cell_error={max_cell_error}, canonical="
+                    f"{((result or {}).get('canonical_layer_ids') or [])}.",
+                )
 
     roads_large_only = {
         group_id: []
@@ -1011,6 +1129,45 @@ def main() -> int:
         f"{invalid_nature_selection_errors}",
     )
 
+    invalid_culture_selection_errors: list[str] = []
+    for invalid_layer_ids, expected_message in (
+        (
+            ("cultural_preservation", "cultural_preservation"),
+            "duplicate layer ids",
+        ),
+        (("culture_unknown",), "undeclared culture layers"),
+        (("cultural_conservation_values",), "undeclared culture layers"),
+        (("",), "blank layer id"),
+    ):
+        invalid_selection = {
+            group_id: []
+            for group_id in app.public_wind_group_ids("trondelag")
+        }
+        invalid_selection[app.WIND_CULTURE_GROUP_ID] = list(
+            invalid_layer_ids
+        )
+        try:
+            app._wind_fast_distance_runtime_result(
+                trondelag_region,
+                app._reference_default_wind_params(),
+                invalid_selection,
+                7,
+            )
+        except ValueError as exc:
+            if expected_message not in str(exc):
+                invalid_culture_selection_errors.append(str(exc))
+        else:
+            invalid_culture_selection_errors.append(
+                f"{invalid_layer_ids!r} did not fail closed"
+            )
+    report.check(
+        not invalid_culture_selection_errors,
+        "The V2 Final runtime rejects duplicate, blank, and undeclared raw "
+        "culture selections, including the undeclared third registry layer.",
+        "The V2 Final culture-selection boundary validation drifted: "
+        f"{invalid_culture_selection_errors}",
+    )
+
     original_population_distance_loader = app.distance_table_for_layer
     population_loader_calls: list[str] = []
     population_loader_results: list[dict[str, object] | None] = []
@@ -1176,6 +1333,64 @@ def main() -> int:
         f"{nature_loader_errors or nature_loader_calls}",
     )
 
+    canonical_culture_ids = list(
+        app.canonical_culture_layer_ids("trondelag")
+    )
+    culture_only = {
+        group_id: []
+        for group_id in app.public_wind_group_ids("trondelag")
+    }
+    culture_only[app.WIND_CULTURE_GROUP_ID] = canonical_culture_ids
+    original_culture_distance_loader = app.distance_table_for_layer
+    culture_loader_calls: list[str] = []
+    culture_loader_errors: list[str] = []
+    culture_loader_results: list[dict[str, object] | None] = []
+    try:
+        def _reject_legacy_culture(registry_meta, layer_id):
+            normalized_layer_id = str(layer_id)
+            culture_loader_calls.append(normalized_layer_id)
+            if normalized_layer_id in canonical_culture_ids:
+                raise AssertionError(
+                    f"{normalized_layer_id} reached legacy distance loading"
+                )
+            return original_culture_distance_loader(
+                registry_meta,
+                normalized_layer_id,
+            )
+
+        app.distance_table_for_layer = _reject_legacy_culture
+        for resolution in (7, 6, 5):
+            culture_loader_results.append(
+                app._wind_fast_distance_runtime_result(
+                    trondelag_region,
+                    {
+                        **app._reference_default_wind_params(),
+                        "culture_buffer_m": 1000.0,
+                    },
+                    culture_only,
+                    resolution,
+                )
+            )
+    except Exception as exc:
+        culture_loader_errors.append(str(exc))
+    finally:
+        app.distance_table_for_layer = original_culture_distance_loader
+    report.check(
+        not culture_loader_errors
+        and len(culture_loader_results) == 3
+        and all(
+            result is not None
+            and result.get("canonical_layer_ids")
+            == sorted(canonical_culture_ids)
+            for result in culture_loader_results
+        )
+        and not set(canonical_culture_ids).intersection(culture_loader_calls),
+        "The wind culture filter never reaches the legacy distance loader at "
+        "R7/R6/R5.",
+        "The culture filter still depends on legacy distance loading: "
+        f"{culture_loader_errors or culture_loader_calls}",
+    )
+
     original_priority_groups = app._allocation_priority_layer_groups
     original_priority_loader = app.distance_table_for_layer
     priority_loader_calls: list[str] = []
@@ -1308,6 +1523,25 @@ def main() -> int:
         "canonical nature contract.",
         "Wind allocation ranking still exposes a legacy protected-nature "
         f"path: {nature_priority_specs}.",
+    )
+    culture_priority_specs = [
+        spec
+        for spec in priority_specs
+        if spec.get("canonical_group_id")
+        == app.CANONICAL_CULTURE_GROUP_ID
+    ]
+    report.check(
+        len(culture_priority_specs) == 1
+        and culture_priority_specs[0].get("canonical_layer_ids")
+        == [
+            "cultural_preservation",
+            "valuable_cultural_environment",
+        ]
+        and culture_priority_specs[0].get("layer_ids") == [],
+        "Wind allocation ranking exposes both culture sources only through "
+        "the canonical culture contract.",
+        "Wind allocation ranking still exposes a legacy culture path: "
+        f"{culture_priority_specs}.",
     )
 
     original_population_contract = app.population_control_contract

@@ -39,6 +39,7 @@ from acceptance_model.layers import (  # noqa: E402
 )
 from potential_model.manifests import load_region, v2_source_root  # noqa: E402
 from potential_model.speedlocal_bridge import (  # noqa: E402
+    culture_control_contract,
     default_wind_layer_selection,
     nature_control_contract,
     population_control_contract,
@@ -158,14 +159,15 @@ def _ready_public_ui_contract(
 ) -> tuple[set[str], set[str], set[str], set[str]]:
     registry_groups, registry_layers, registry_meta = load_registry(region_id)
     public_group_ids = set(public_wind_group_ids(region_id))
-    manifest_public_group_ids = {"roads", "population", "nature"}
+    manifest_public_group_ids = {"roads", "population", "nature", "culture"}
     legacy_public_group_ids = public_group_ids - manifest_public_group_ids
     roads_group = roads_control_contract(region_id)
     population_group = population_control_contract(region_id)
     nature_group = nature_control_contract(region_id)
+    culture_group = culture_control_contract(region_id)
     manifest_layer_ids = {
         layer.id
-        for group in (roads_group, population_group, nature_group)
+        for group in (roads_group, population_group, nature_group, culture_group)
         for layer in group.layers
     }
     status_frame = layer_status_table(registry_meta)
@@ -193,7 +195,7 @@ def _ready_public_ui_contract(
     }
     ready_layer_ids.update(
         layer.id
-        for group in (roads_group, population_group, nature_group)
+        for group in (roads_group, population_group, nature_group, culture_group)
         for layer in group.layers
         if layer.ready
     )
@@ -209,6 +211,8 @@ def _ready_public_ui_contract(
         ready_group_ids.add("population")
     if any(layer.ready for layer in nature_group.layers):
         ready_group_ids.add("nature")
+    if any(layer.ready for layer in culture_group.layers):
+        ready_group_ids.add("culture")
     public_layer_ids = {
         str(layer_id)
         for layer_id, layer in registry_layers.items()
@@ -415,6 +419,33 @@ def _check_manifest_empty_start_and_public_controls(
             f"step={nature_slider.step}.",
         )
 
+    try:
+        culture_slider = _by_key(
+            app.slider,
+            f"{WIND_ANALYSIS_KEY_PREFIX}culture",
+        )
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            f"{region_id}: manifest-backed culture slider is unavailable: "
+            f"{exc}",
+        )
+    else:
+        report.check(
+            not culture_slider.disabled
+            and int(culture_slider.value) == 0
+            and int(culture_slider.min) == 0
+            and int(culture_slider.max) == 1500
+            and int(culture_slider.step) == 50,
+            f"{region_id}: culture uses the manifest-backed 0/1500/50 "
+            "hard-exclusion buffer contract.",
+            f"{region_id}: culture parameter contract drifted: "
+            f"disabled={culture_slider.disabled}, "
+            f"value={culture_slider.value}, min={culture_slider.min}, "
+            f"max={culture_slider.max}, step={culture_slider.step}.",
+        )
+
     visual_ids = (
         _element_ids(app.toggle, WIND_VISUAL_SOURCE_KEY_PREFIX)
         | _element_ids(app.toggle, WIND_VISUAL_BUFFER_KEY_PREFIX)
@@ -482,7 +513,7 @@ def _check_manifest_empty_start_and_public_controls(
             app,
             "potential_start_default_version_trondelag",
         )
-        == "manifest_nature_group_v1"
+        == "manifest_culture_group_v1"
         and not any(
             item.key == "wind_control__group__settlement"
             for item in app.checkbox
@@ -1198,6 +1229,137 @@ def _check_nature_slice(report: Report) -> None:
     )
 
 
+def _check_culture_slice(report: Report) -> None:
+    app = AppTest.from_file(str(APP_PATH), default_timeout=120)
+    app.query_params["region"] = TRONDELAG_REGION_ID
+    app.run(timeout=120)
+    initial_exceptions, initial_errors = _app_failures(app)
+    if initial_exceptions or initial_errors:
+        report.check(
+            False,
+            "",
+            "trondelag: culture slice setup failed: "
+            f"exceptions={initial_exceptions}, errors={initial_errors}",
+        )
+        return
+
+    checkbox_by_key = {
+        str(item.key or ""): str(item.label)
+        for item in app.checkbox
+    }
+    report.check(
+        checkbox_by_key.get(
+            "wind_control__layer__cultural_preservation"
+        )
+        == "Kulturmiljöer och kulturminnen"
+        and checkbox_by_key.get(
+            "wind_control__layer__valuable_cultural_environment"
+        )
+        == "Värdefulla kulturlandskap"
+        and "wind_control__group__culture" not in checkbox_by_key,
+        "trondelag: culture exposes both manifest sources directly without "
+        "the redundant group checkbox.",
+        "trondelag: simplified culture control drifted: "
+        f"checkboxes={checkbox_by_key}.",
+    )
+
+    culture_layer_ids = (
+        "cultural_preservation",
+        "valuable_cultural_environment",
+    )
+    try:
+        _select_wind_group_layers(app, "culture", culture_layer_ids)
+        culture_slider = _by_key(
+            app.slider,
+            "wind_control__analysis__culture",
+        )
+        culture_slider.set_value(0)
+        _wind_apply_button(app).click().run(timeout=120)
+    except Exception as exc:
+        report.check(False, "", f"trondelag: culture controls failed: {exc}")
+        return
+
+    first_exceptions, first_errors = _app_failures(app)
+    selected = _session_state_value(app, WIND_SELECTION_STATE_KEY)
+    first_share, first_share_error = _safe_wind_share_pct(app)
+    report.check(
+        not first_exceptions
+        and not first_errors
+        and isinstance(selected, dict)
+        and selected.get("culture") == list(culture_layer_ids)
+        and not any(
+            layer_ids
+            for group_id, layer_ids in selected.items()
+            if group_id != "culture"
+        )
+        and first_share is not None
+        and abs(first_share - 88.9) <= 0.05,
+        "trondelag: both culture sources render canonical binary R7 "
+        "behavior at 0 m (88.9%).",
+        "trondelag: combined culture R7/0 m drifted: "
+        f"selection={selected}, share={first_share}, "
+        f"share_error={first_share_error}, exceptions={first_exceptions}, "
+        f"errors={first_errors}.",
+    )
+    if first_share is None or first_exceptions or first_errors:
+        return
+
+    if not _check_wind_map_review_toggles(
+        report,
+        app,
+        expected_share=88.9,
+        group_id="culture",
+        group_label="culture",
+    ):
+        return
+
+    culture_slider = _by_key(
+        app.slider,
+        "wind_control__analysis__culture",
+    )
+    culture_slider.set_value(1500)
+    _wind_apply_button(app).click().run(timeout=120)
+    try:
+        _by_key(
+            app.radio,
+            "combined_h3_display_mode",
+        ).set_value("selected").run(timeout=120)
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            f"trondelag: culture resolution mode failed: {exc}",
+        )
+        return
+    expected_by_resolution = {7: 87.2, 6: 79.0, 5: 56.2}
+    observed: dict[int, float | None] = {}
+    resolution_errors: list[str] = []
+    for resolution, expected_share in expected_by_resolution.items():
+        _by_key(app.radio, "combined_h3_resolution").set_value(
+            resolution
+        ).run(timeout=120)
+        exceptions, errors = _app_failures(app)
+        share, share_error = _safe_wind_share_pct(app)
+        observed[resolution] = share
+        if (
+            exceptions
+            or errors
+            or share is None
+            or abs(share - expected_share) > 0.05
+        ):
+            resolution_errors.append(
+                f"R{resolution}: share={share}, share_error={share_error}, "
+                f"exceptions={exceptions}, errors={errors}"
+            )
+    report.check(
+        not resolution_errors,
+        "trondelag: the 1500 m culture hard exclusion uses canonical "
+        "R7/R6/R5 behavior (87.2/79.0/56.2%).",
+        "trondelag: culture R7/R6/R5 behavior drifted: "
+        f"observed={observed}, errors={resolution_errors}.",
+    )
+
+
 def _check_missing_source_root(report: Report) -> None:
     configured = os.environ.pop(V2_SOURCE_ROOT_ENV, None)
     app = None
@@ -1276,6 +1438,7 @@ def main() -> int:
     )
     _check_population_slice(report)
     _check_nature_slice(report)
+    _check_culture_slice(report)
     return report.emit()
 
 

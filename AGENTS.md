@@ -70,8 +70,12 @@
   wind `protected` adapter is removed for Trøndelag. A reliable result hover
   and literal technology-specific establishment-area percentages remain
   deferred to the combined-result and wind/solar phases.
-- The next planned slice is culture. Begin it only from a new dated daily plan
-  and preserve the promoted roads, population, and nature regression gates.
+- Culture is active. Both complete current Trøndelag sources are
+  manifest-declared under canonical `culture`; their generic binary
+  hard-exclusion automated gates pass at R7/R6/R5. The redundant wind culture
+  group toggle, advanced-source adapter, and legacy distance paths are removed
+  for Trøndelag. Localhost visual review is the remaining local-promotion gate;
+  do not begin grid infrastructure before it is approved.
 - Bornholm source and engine contracts may validate in parallel as onboarding
   diagnostics, but they do not block Trøndelag slice promotion.
 - Do not implement regional exceptions yet.

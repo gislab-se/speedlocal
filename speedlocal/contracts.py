@@ -115,6 +115,7 @@ class SourceContract:
     data_representation: str = "auto"
     source_geometry_required: bool = True
     geometry_collection_policy: str = "reject_mixed"
+    geometry_validity_policy: str = "reject_invalid"
     distance_h3_resolution: int | None = None
     distance_coverage: DistanceCoverageContract = field(
         default_factory=DistanceCoverageContract
@@ -128,6 +129,14 @@ class SourceContract:
             raise ValueError(
                 "geometry_collection_policy must be 'reject_mixed' or "
                 "'highest_dimension'"
+            )
+        if self.geometry_validity_policy not in {
+            "reject_invalid",
+            "make_valid",
+        }:
+            raise ValueError(
+                "geometry_validity_policy must be 'reject_invalid' or "
+                "'make_valid'"
             )
         resolution = self.distance_h3_resolution
         if resolution is not None:
@@ -317,6 +326,9 @@ def source_contract(raw: dict[str, Any]) -> SourceContract:
         source_geometry_required=bool(raw.get("source_geometry_required", True)),
         geometry_collection_policy=str(
             raw.get("geometry_collection_policy") or "reject_mixed"
+        ),
+        geometry_validity_policy=str(
+            raw.get("geometry_validity_policy") or "reject_invalid"
         ),
         distance_h3_resolution=distance_h3_resolution,
         distance_coverage=distance_coverage_contract(raw.get("distance_coverage")),

@@ -216,7 +216,8 @@ Current slice status:
 - population and settlement: complete and locally promoted on 2026-08-03;
 - nature: complete current Trøndelag `protected_areas` behavior locally
   promoted on 2026-08-03 and unpublished;
-- culture: next planned slice;
+- culture: automated promotion gates pass for both complete current Trøndelag
+  sources; localhost visual review is pending;
 - dynamic medium and large road layers: complete;
 - generic group result and distance-engine contract conformance: complete;
 - the temporary separate parity app has been removed;
@@ -243,8 +244,9 @@ Current slice status:
 - V2 Final starts from the wind manifest's empty request; source and buffer
   visibility are map-review state and do not alter the numeric request;
 - the five-group public whitelist is manifest-declared. Roads, all three wind
-  population sources, and Trøndelag `protected_areas` under canonical
-  `nature` are now manifest-driven; remaining unmigrated non-road options
+  population sources, Trøndelag `protected_areas` under canonical `nature`,
+  and both Trøndelag culture sources are now manifest-driven; remaining
+  unmigrated non-road options
   still come from the region-manifest-declared legacy
   registry. That bounded adapter is not canonical manifest layer availability
   and not a solar analysis contract;
@@ -297,6 +299,15 @@ Current slice status:
   establishment-area percentages are explicitly deferred to the shared
   combined-result and wind/solar phases; the promoted nature result remains
   the accepted binary per-cell parity contract.
+- the culture manifest declares `cultural_preservation` and
+  `valuable_cultural_environment` with generic binary `hard_exclusion` and a
+  shared 0–1,500 m buffer contract. The RA source explicitly declares the
+  generic `make_valid` preview policy for its dissolved self-intersection;
+  invalid geometry otherwise fails closed. Canonical R7/R6/R5 engine,
+  frozen-reference, real-app, source/buffer preview, allocation-ranking,
+  runtime, and repository gates pass. The redundant Trøndelag wind culture
+  group toggle, advanced-source adapter, and legacy distance paths are
+  removed; localhost visual approval remains before local promotion.
 
 ## Definition of done for a slice
 

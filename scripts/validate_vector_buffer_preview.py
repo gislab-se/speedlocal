@@ -5,7 +5,7 @@ import math
 import os
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 
@@ -97,6 +97,10 @@ def main() -> int:
     built_centre_layer = contract.layers["built_centre"]
     built_low_layer = contract.layers["built_low_selection"]
     nature_layer = contract.layers["protected_areas"]
+    cultural_preservation_layer = contract.layers["cultural_preservation"]
+    cultural_environment_layer = contract.layers[
+        "valuable_cultural_environment"
+    ]
     native_crs = str(region["native_crs"])
 
     zero = build_vector_buffer_preview(
@@ -161,6 +165,31 @@ def main() -> int:
     )
     nature_at_1000 = build_vector_buffer_preview(
         [nature_layer],
+        native_crs=native_crs,
+        buffer_m=1000,
+    )
+    cultural_preservation_at_0 = build_vector_buffer_preview(
+        [cultural_preservation_layer],
+        native_crs=native_crs,
+        buffer_m=0,
+    )
+    cultural_environment_at_0 = build_vector_buffer_preview(
+        [cultural_environment_layer],
+        native_crs=native_crs,
+        buffer_m=0,
+    )
+    culture_at_0 = build_vector_buffer_preview(
+        [cultural_preservation_layer, cultural_environment_layer],
+        native_crs=native_crs,
+        buffer_m=0,
+    )
+    culture_at_250 = build_vector_buffer_preview(
+        [cultural_preservation_layer, cultural_environment_layer],
+        native_crs=native_crs,
+        buffer_m=250,
+    )
+    culture_at_1000 = build_vector_buffer_preview(
+        [cultural_preservation_layer, cultural_environment_layer],
         native_crs=native_crs,
         buffer_m=1000,
     )
@@ -264,6 +293,71 @@ def main() -> int:
         and nature_at_1000.area_m2 > nature_at_250.area_m2,
         "The protected-nature preview grows monotonically at 0/250/1000 m.",
         "The protected-nature preview did not grow with its metric buffer.",
+    )
+    report.check(
+        cultural_preservation_at_0.layer_ids
+        == ("cultural_preservation",)
+        and cultural_preservation_at_0.source_feature_count == 1
+        and cultural_preservation_at_0.declared_feature_count == 64
+        and cultural_preservation_at_0.geometry_type
+        in {"Polygon", "MultiPolygon"}
+        and cultural_preservation_at_0.area_m2 > 0,
+        "The cultural-preservation preview uses its dissolved polygon source.",
+        "The cultural-preservation preview drifted from its manifest source.",
+    )
+    report.check(
+        cultural_environment_at_0.layer_ids
+        == ("valuable_cultural_environment",)
+        and cultural_environment_at_0.source_feature_count == 1
+        and cultural_environment_at_0.declared_feature_count == 146
+        and cultural_environment_at_0.geometry_type
+        in {"Polygon", "MultiPolygon"}
+        and cultural_environment_at_0.area_m2 > 0,
+        "The valuable-cultural-environment preview uses its polygon source.",
+        "The valuable-cultural-environment preview drifted from its source.",
+    )
+    report.check(
+        culture_at_0.layer_ids
+        == (
+            "cultural_preservation",
+            "valuable_cultural_environment",
+        )
+        and culture_at_0.source_feature_count == 2
+        and culture_at_0.declared_feature_count == 210
+        and culture_at_0.area_m2
+        >= max(
+            cultural_preservation_at_0.area_m2,
+            cultural_environment_at_0.area_m2,
+        ),
+        "Both culture sources dissolve into one complete 0 m footprint.",
+        "The combined culture footprint did not preserve both sources.",
+    )
+    report.check(
+        culture_at_250.geometry_type in {"Polygon", "MultiPolygon"}
+        and culture_at_250.area_m2 > culture_at_0.area_m2
+        and culture_at_1000.area_m2 > culture_at_250.area_m2,
+        "The combined culture preview grows monotonically at 0/250/1000 m.",
+        "The combined culture preview did not grow with its metric buffer.",
+    )
+    report.check(
+        _failure_code(
+            lambda: build_vector_buffer_preview(
+                [
+                    replace(
+                        cultural_preservation_layer,
+                        source=replace(
+                            cultural_preservation_layer.source,
+                            geometry_validity_policy="reject_invalid",
+                        ),
+                    )
+                ],
+                native_crs=native_crs,
+                buffer_m=0,
+            )
+        )
+        == "source_geometry_invalid",
+        "The invalid culture geometry requires its explicit manifest repair policy.",
+        "Invalid culture geometry was repaired without manifest authorization.",
     )
     report.check(
         at_300.geojson.get("type") == "FeatureCollection"

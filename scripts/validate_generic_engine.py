@@ -137,6 +137,23 @@ NATURE_EXPECTATIONS = {
         2000.0: (0.1287671232876712, 318),
     },
 }
+CULTURE_SELECTION_EXPECTATIONS = {
+    ("cultural_preservation",): {
+        7: {0.0: (12_665 / 13_735, 1_070), 250.0: (12_665 / 13_735, 1_070), 1000.0: (12_662 / 13_735, 1_073), 1500.0: (12_619 / 13_735, 1_116)},
+        6: {0.0: (1_966 / 2_163, 197), 250.0: (1_966 / 2_163, 197), 1000.0: (1_966 / 2_163, 197), 1500.0: (1_960 / 2_163, 203)},
+        5: {0.0: (317 / 365, 48), 250.0: (317 / 365, 48), 1000.0: (317 / 365, 48), 1500.0: (314 / 365, 51)},
+    },
+    ("valuable_cultural_environment",): {
+        7: {0.0: (13_212 / 13_735, 523), 250.0: (13_212 / 13_735, 523), 1000.0: (13_204 / 13_735, 531), 1500.0: (12_995 / 13_735, 740)},
+        6: {0.0: (1_909 / 2_163, 254), 250.0: (1_909 / 2_163, 254), 1000.0: (1_908 / 2_163, 255), 1500.0: (1_863 / 2_163, 300)},
+        5: {0.0: (235 / 365, 130), 250.0: (235 / 365, 130), 1000.0: (234 / 365, 131), 1500.0: (227 / 365, 138)},
+    },
+    ("cultural_preservation", "valuable_cultural_environment"): {
+        7: {0.0: (12_206 / 13_735, 1_529), 250.0: (12_206 / 13_735, 1_529), 1000.0: (12_199 / 13_735, 1_536), 1500.0: (11_980 / 13_735, 1_755)},
+        6: {0.0: (1_751 / 2_163, 412), 250.0: (1_751 / 2_163, 412), 1000.0: (1_750 / 2_163, 413), 1500.0: (1_709 / 2_163, 454)},
+        5: {0.0: (212 / 365, 153), 250.0: (212 / 365, 153), 1000.0: (212 / 365, 153), 1500.0: (205 / 365, 160)},
+    },
+}
 
 
 def _v2_roads_oracle(contract, threshold: float) -> tuple[int, int, float]:
@@ -702,6 +719,54 @@ def main() -> int:
         nature_buffer.step,
     ) == (0.0, 0.0, 2000.0, 50.0)
     checks += 8
+
+    culture_layers = tuple(
+        validate_layer(trondelag.layers[layer_id])
+        for layer_id in (
+            "cultural_preservation",
+            "valuable_cultural_environment",
+        )
+    )
+    assert all(
+        layer.contract.group_id == "culture"
+        and layer.contract.operation == "hard_exclusion"
+        and layer.geometry_family == "polygon"
+        and layer.processing_adapter == "polygon_generic"
+        and layer.contract.source.distance_h3_resolution == 7
+        for layer in culture_layers
+    )
+    assert [layer.assets.feature_count for layer in culture_layers] == [64, 146]
+    assert (
+        culture_layers[0].contract.source.geometry_validity_policy
+        == "make_valid"
+    )
+    assert (
+        culture_layers[1].contract.source.geometry_validity_policy
+        == "reject_invalid"
+    )
+    assert all(
+        (
+            layer.contract.parameters["buffer_m"].default,
+            layer.contract.parameters["buffer_m"].minimum,
+            layer.contract.parameters["buffer_m"].maximum,
+            layer.contract.parameters["buffer_m"].step,
+        )
+        == (0.0, 0.0, 1500.0, 50.0)
+        for layer in culture_layers
+    )
+    checks += 5
+    try:
+        replace(
+            culture_layers[0].contract.source,
+            geometry_validity_policy="silently_fix",
+        )
+    except ValueError as exc:
+        assert "geometry_validity_policy" in str(exc)
+    else:
+        raise AssertionError(
+            "Unknown geometry-validity policy did not fail closed"
+        )
+    checks += 1
 
     try:
         validate_layer(
@@ -1269,6 +1334,39 @@ def main() -> int:
                 f"{group.blocked_cell_count} blocked, "
                 f"{group.mean_acceptance:.15f} mean acceptance"
             )
+
+    for layer_ids, resolution_expectations in CULTURE_SELECTION_EXPECTATIONS.items():
+        for resolution, expectations in resolution_expectations.items():
+            target_cell_ids = display_cell_ids_by_resolution[resolution]
+            for threshold, (expected_mean, expected_blocked) in expectations.items():
+                result = run_analysis(
+                    "trondelag",
+                    "wind",
+                    list(layer_ids),
+                    {
+                        layer_id: {"buffer_m": threshold}
+                        for layer_id in layer_ids
+                    },
+                    target_resolution=resolution,
+                )
+                group = result.groups[0]
+                assert all(layer.operation == "hard_exclusion" for layer in result.layers)
+                assert all(layer.geometry_family == "polygon" for layer in result.layers)
+                assert all(layer.processing_adapter == "polygon_generic" for layer in result.layers)
+                assert group.group_id == "culture"
+                assert group.layer_ids == layer_ids
+                assert group.cell_count == TRONDELAG_DISPLAY_COUNTS[resolution]
+                assert group.blocked_cell_count == expected_blocked
+                assert abs(group.mean_acceptance - expected_mean) < 1e-12
+                assert {cell.cell_id for cell in group.cells} == set(target_cell_ids)
+                assert all(cell.acceptance in {0.0, 1.0} for cell in group.cells)
+                checks += 10
+                print(
+                    f"PASS trondelag {'+'.join(layer_ids)} R{resolution} "
+                    f"{threshold:g} m: {group.cell_count} cells, "
+                    f"{group.blocked_cell_count} blocked, "
+                    f"{group.mean_acceptance:.15f} mean acceptance"
+                )
 
     assert len({round(value, 12) for value in area_by_resolution[7].values()}) > 1
     checks += 1

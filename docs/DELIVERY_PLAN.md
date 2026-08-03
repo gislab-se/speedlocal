@@ -31,7 +31,7 @@ The delivery is complete when:
 | 29 Jul–3 Aug | Roads | Trøndelag V2 characterization, dynamic road layers, contract validation, generic UI path |
 | 31 Jul–6 Aug | Population | Point/grid/polygon dispatch and Trøndelag V2 parity |
 | 3–10 Aug | Nature | Dynamic nature layers and hard-exclusion parity |
-| 11–12 Aug | Culture | Dynamic culture layers and hard-exclusion parity |
+| 3–12 Aug | Culture | Dynamic culture layers and hard-exclusion parity |
 | 13–14 Aug | Grid infrastructure | Proximity-feasibility operation and parity |
 | 17–18 Aug | Combined result | Common technology-applicable restriction union, model-area denominator, and explanations |
 | 19–20 Aug | Wind and solar | Shared area-derived potential outputs, consistent map/hover values, and continuous technology mix |
@@ -45,7 +45,10 @@ slice had not yet reached its locally promoted gate. Roads then passed that
 gate later the same day, so a bounded primary-population increment began on
 31 July. The complete population slice passed its local-promotion gate early
 on 3 August, so the first bounded nature increment began the same day. The
-later slice order and final nature target date remain unchanged.
+complete nature slice passed its local-promotion gate later on 3 August, so
+the complete-current-group culture candidate began the same day, ahead of its
+original 11 August start. The later slice order and final culture target date
+remain unchanged.
 
 ## Branch and publication cadence
 
@@ -126,8 +129,16 @@ Current milestone status:
   approved on 2026-08-03, so the complete current nature slice is locally
   promoted but unpublished. The reviewed hover limitation and the distinction
   between binary cell parity and literal free-area percentage are deferred to
-  the planned combined-result and wind/solar phases. Culture is the next
-  thematic slice.
+  the planned combined-result and wind/solar phases.
+- Culture complete-current-group candidate: `cultural_preservation` and
+  `valuable_cultural_environment` are manifest-declared under canonical
+  `culture` and run through generic binary `hard_exclusion` at R7/R6/R5. The
+  redundant group toggle, advanced-source registry adapter, and legacy
+  calculation/preview/ranking paths are removed for Trøndelag. The invalid
+  dissolved RA geometry uses an explicit, generic, fail-closed-by-default
+  manifest repair policy. Generic-engine, independent frozen-reference,
+  vector-preview, real-Streamlit, runtime, guardrail, delivery, and frozen
+  archive gates pass; localhost visual review remains before local promotion.
 - Shared potential-area semantics: decision recorded on 2026-08-03. The
   promoted roads/population soft-distance percentages remain frozen-V2 parity
   proxies until the planned combined-result and wind/solar phases replace
