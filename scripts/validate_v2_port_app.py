@@ -429,6 +429,45 @@ def _check_manifest_empty_start_and_public_controls(
             f"{reset_exceptions}, errors={reset_errors}.",
         )
 
+    app.session_state["potential_start_default_version_trondelag"] = (
+        "manifest_empty_selection_v6"
+    )
+    app.session_state[WIND_SELECTION_STATE_KEY] = {
+        "settlement": ["built_centre"]
+    }
+    app.session_state["wind_control__analysis__settlement"] = 500
+    app.session_state["wind_control__group__settlement"] = True
+    app.run(timeout=120)
+    migration_exceptions, migration_errors = _app_failures(app)
+    migrated_selection = _session_state_value(
+        app,
+        WIND_SELECTION_STATE_KEY,
+    )
+    report.check(
+        not migration_exceptions
+        and not migration_errors
+        and isinstance(migrated_selection, dict)
+        and not any(migrated_selection.values())
+        and _session_state_value(
+            app,
+            "potential_start_default_version_trondelag",
+        )
+        == "manifest_population_group_v7"
+        and not any(
+            item.key == "wind_control__group__settlement"
+            for item in app.checkbox
+        )
+        and any(
+            item.key == "wind_control__analysis__population"
+            for item in app.slider
+        ),
+        f"{region_id}: a pre-migration browser session resets once to the "
+        "canonical population control without an app error.",
+        f"{region_id}: stale settlement session migration failed: "
+        f"selection={migrated_selection}, exceptions={migration_exceptions}, "
+        f"errors={migration_errors}.",
+    )
+
 
 def _select_wind_group_layers(
     app: AppTest,

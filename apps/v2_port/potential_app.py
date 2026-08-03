@@ -216,7 +216,9 @@ WIND_LAYER_SELECTION_KEY = "wind_builder_selected_layers"
 WIND_RUNTIME_OVERLAY_KEY = "wind_builder_runtime_overlay_enabled"
 SOLAR_APPLIED_CONFIG_KEY = "solar_applied_config"
 START_DEFAULT_VERSION_KEY = "potential_start_default_version"
-START_DEFAULT_VERSION = "manifest_empty_selection_v6"
+# Reset pre-migration browser sessions once so the removed public wind
+# `settlement` widget state cannot reach the canonical `population` boundary.
+START_DEFAULT_VERSION = "manifest_population_group_v7"
 WIND_EMPTY_SELECTION_ACTIVE_KEY = "wind_empty_selection_active"
 WIND_CONTROL_LANGUAGE = "sv"
 WIND_RUNTIME_BASE_RESOLUTION = 10
