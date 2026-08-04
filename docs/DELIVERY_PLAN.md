@@ -49,9 +49,10 @@ complete nature slice passed its local-promotion gate later on 3 August, so
 the complete-current-group culture candidate began and passed local promotion
 the same day. The complete grid-infrastructure candidate then began on
 4 August and passed local promotion the same day, ahead of its original 13
-August start. The population R8-to-direct-R7 correction is the next increment
-before combined-result work. The later slice order and final delivery date
-remain unchanged.
+August start. The population R8-to-direct-R7 correction passed its automated,
+runtime-package, and clean-process localhost gates on 4 August and is locally
+promoted. Combined-result work is therefore the next planned slice.
+The later slice order and final delivery date remain unchanged.
 
 ## Branch and publication cadence
 
@@ -81,6 +82,11 @@ Current milestone status:
   published, anonymously redownloaded, and validated through a clean public
   cold start and the real root entrypoint; authenticated Streamlit Cloud visual
   and interaction smoke review approved.
+- Trøndelag direct-R7 runtime checkpoint: reproducible 48-file package prepared
+  locally with three generated population tables; full materialization, root-
+  app, runtime-source, numeric-baseline, and interactive gates pass. The
+  correction is locally promoted but not published and does not replace the
+  current 45-file public Release.
 - Bornholm catalog/source onboarding: in progress. Its 300/400 m polygon
   fixtures are diagnostic replay, not public parity.
 - Bornholm V1 characterization and technical pinning: not started.
@@ -154,19 +160,21 @@ Current milestone status:
   real-Streamlit gates pass on 2026-08-04. The user approved the corrected
   clean-process localhost review on the same date, so the complete current
   slice is locally promoted but unpublished.
-- Population R7 correction: the locally promoted frozen-V2 parity path starts
-  from R8 distance rows and rolls them up to R7/R6/R5. This is a known
-  potential modeling problem rather than the desired final R7 contract.
-  Before combined-result local promotion, calculate population directly
-  against the manifest-declared R7 domain, derive R6/R5 from R7, quantify and
-  explicitly accept any frozen-reference drift, and rerun the complete
-  regression gate. This correction is the exact next increment before the
-  combined-result slice; no population calculation changes are part of the
-  grid-infrastructure promotion checkpoint.
-- Shared potential-area semantics: decision recorded on 2026-08-03. The
-  promoted roads/population soft-distance percentages remain frozen-V2 parity
-  proxies until the planned combined-result and wind/solar phases replace
-  them with technology-specific remaining area divided by the common
+- Population R7 correction: the former frozen-V2 parity path started
+  from R8 distance rows and rolled them up to R7/R6/R5. The correction now
+  calculates all three population sources directly against the declared R7
+  domain, derives R6/R5 from R7, and removes sparse coverage. All 84 layer-
+  combination/resolution/threshold drift comparisons are recorded and the
+  intentional frozen-reference drift is accepted against an independent
+  geometry oracle. Generic engine, baseline, five-group regression, and the
+  reproducible 48-file runtime-package gates pass. Clean-process localhost
+  review was approved on 2026-08-04, so the correction is locally promoted but
+  unpublished. The coarse `built_low_selection` SSB 1 km-grid centroid proxy
+  is visibly caution-flagged and recorded as a known data-quality limitation.
+- Shared potential-area semantics: decision recorded on 2026-08-03. Roads
+  retain the frozen-V2 proxy; the population correction uses direct R7 but is
+  still a soft-distance cell proxy. The planned combined-result and wind/solar
+  phases replace both with technology-specific remaining area divided by the common
   manifest-declared model land area. This does not change the current dates or
   thematic slice order.
 

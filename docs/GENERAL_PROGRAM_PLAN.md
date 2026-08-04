@@ -169,11 +169,11 @@ technology potential % =
   cached by source identity. Applying controls thresholds the reusable surface
   and aggregates area; hovering remains a client-side presentation event.
 
-The locally promoted Trøndelag roads and population slices intentionally keep
-their frozen-V2 soft-distance cell proxy until the planned combined-result and
-wind/solar phases. Their current percentages are parity values, not claims of
-exact polygon-clipped free land. This decision defines the later replacement
-contract without reopening those promoted slices or changing the slice order.
+The locally promoted Trøndelag roads slice keeps its frozen-V2 soft-distance
+cell proxy. The locally promoted population correction measures the declared R7
+domain directly and derives R6/R5 from R7, but it remains a soft-distance cell
+proxy rather than exact polygon-clipped free land. The planned combined-result
+and wind/solar phases still own literal technology-specific area percentages.
 
 ## Data-driven rules
 
@@ -213,7 +213,8 @@ Implemented foundation:
 
 Current slice status:
 
-- population and settlement: complete and locally promoted on 2026-08-03;
+- population and settlement: complete on 2026-08-03; its direct-R7 correction
+  is locally promoted on 2026-08-04 and unpublished;
 - nature: complete current Trøndelag `protected_areas` behavior locally
   promoted on 2026-08-03 and unpublished;
 - culture: complete current Trøndelag behavior locally promoted on 2026-08-03
@@ -227,8 +228,9 @@ Current slice status:
   through manifest-declared `v2_archive` providers;
 - duplicate local registry files and their duplicate path resolver are removed;
 - runtime strategy is manifest-declared rather than selected by region-name
-  branches: Trøndelag retains frozen V2's fast soft-distance runtime, while
-  Bornholm's checksum-validated polygon artifacts remain diagnostic only;
+  branches: Trøndelag uses checksum-pinned distance tables, including the
+  generated direct-R7 population correction checkpoint, while Bornholm's
+  checksum-validated polygon artifacts remain diagnostic only;
 - Trøndelag's frozen-public checkpoints pass in the real UI: 6.7% at 300 m
   and 6.2% at 1000 m;
 - Bornholm's historical 3.9% and 3.3% polygon fixtures replay correctly and
@@ -272,10 +274,10 @@ Current slice status:
   complete roads slice is locally promoted. Publication remains separate and
   waits for an eligible Tuesday or Friday window;
 - the primary population contract now declares polygon geometry, grid
-  representation, H3 R8 numeric rows, the complete slider range, and explicit
-  fail-closed zero-acceptance semantics plus exact signatures for target cells
-  outside the sparse distance artifact. Independent R8-to-R7/R6/R5 cell,
-  aggregate, and model-area checks pass at 100, 500, 1,000, and 3,000 m. The
+  representation, complete H3 R7 numeric rows, the complete slider range, and
+  fail-closed complete-coverage semantics. Independent source-geometry-to-R7
+  cell, aggregate, and model-area checks pass at 100, 500, 1,000, and 3,000 m.
+  R6/R5 are derived only from R7. The
   real V2 Final control, calculation, source preview, and buffer preview use
   this contract, and adversarial checks prove that a broken migrated contract
   cannot reopen the legacy primary loader. The user approved the clean
@@ -321,13 +323,14 @@ Current slice status:
   gates pass. The user approved clean-process localhost review on 2026-08-04,
   so the complete current grid-infrastructure slice is locally promoted but
   unpublished;
-- the population parity result currently starts from frozen-V2 R8 distance
-  rows and rolls them up to R7/R6/R5. This remains valid reference parity but
-  is a known potential modeling problem for the intended R7 contract. Before
-  the combined-result slice is locally promoted, population must be
-  recalculated directly against the manifest-declared R7 domain, with R6/R5
-  derived from R7, frozen-reference drift quantified and
-  explicitly accepted, and new accepted-reference evidence secured.
+- the locally promoted population correction calculates all three sources
+  directly against the manifest-declared R7 domain and derives R6/R5 from R7.
+  All 84 R8-to-R7 drift comparisons are recorded, an independent geometry
+  oracle secures the new accepted anchors, the reproducible 48-file runtime
+  checkpoint passes its full package gate, and all five group regressions pass.
+  The user approved clean-process localhost review on 2026-08-04. The coarse
+  `built_low_selection` SSB 1 km-grid centroid proxy remains visibly
+  caution-flagged as a known limitation. Combined-result work is next.
 
 ## Definition of done for a slice
 

@@ -497,6 +497,27 @@ def _check_manifest_empty_start_and_public_controls(
     grid_layers = {
         layer.id: layer for layer in grid_control_contract(region_id).layers
     }
+    population_layers = {
+        layer.id: layer
+        for layer in population_control_contract(region_id).layers
+    }
+    leisure_home_layer = population_layers.get("built_low_selection")
+    report.check(
+        leisure_home_layer is not None
+        and int(leisure_home_layer.point_radius) == 4,
+        f"{region_id}: the manifest renders leisure homes as compact 4 px "
+        "source markers, not map-scale discs.",
+        f"{region_id}: the leisure-home source marker radius drifted: "
+        f"{None if leisure_home_layer is None else leisure_home_layer.point_radius}.",
+    )
+    report.check(
+        leisure_home_layer is not None
+        and leisure_home_layer.quality_flag == "caution"
+        and "1 km-gridproxy" in leisure_home_layer.note,
+        f"{region_id}: the manifest discreetly flags the coarse leisure-home "
+        "grid proxy in the control and explains it in the tooltip.",
+        f"{region_id}: the leisure-home quality flag or explanation drifted.",
+    )
     turbine_layer = grid_layers.get("existing_wind_turbines")
     report.check(
         turbine_layer is not None and int(turbine_layer.point_radius) == 4,
@@ -1022,7 +1043,9 @@ def _check_population_slice(report: Report) -> None:
     population_layer_labels = {
         "wind_control__layer__population_points": "Befolkning 250 m-rutor",
         "wind_control__layer__built_centre": "Bebyggelsekärnor",
-        "wind_control__layer__built_low_selection": "Fritidshus",
+        "wind_control__layer__built_low_selection": (
+            "Fritidshus :orange[:material/warning:]"
+        ),
     }
     expander_labels = {
         str(getattr(item, "label", ""))
@@ -1085,9 +1108,9 @@ def _check_population_slice(report: Report) -> None:
             if group_id != "population"
         )
         and first_share is not None
-        and abs(first_share - 84.2) <= 0.05,
+        and abs(first_share - 70.7) <= 0.05,
         "trondelag: population_points renders the canonical R7 result at "
-        "100 m (84.2%).",
+        "100 m (70.7%).",
         "trondelag: population_points R7/100 m drifted: "
         f"selection={selected}, share={first_share}, "
         f"share_error={first_share_error}, exceptions={first_exceptions}, "
@@ -1099,7 +1122,7 @@ def _check_population_slice(report: Report) -> None:
     if not _check_wind_map_review_toggles(
         report,
         app,
-        expected_share=84.2,
+        expected_share=70.7,
         group_id="population",
         group_label="population",
     ):
@@ -1117,8 +1140,8 @@ def _check_population_slice(report: Report) -> None:
         not second_exceptions
         and not second_errors
         and second_share is not None
-        and abs(second_share - 55.6) <= 0.05,
-        "trondelag: population_points visibly reacts at 1000 m (55.6%).",
+        and abs(second_share - 63.2) <= 0.05,
+        "trondelag: population_points visibly reacts at 1000 m (63.2%).",
         "trondelag: population_points R7/1000 m drifted: "
         f"share={second_share}, share_error={second_share_error}, "
         f"exceptions={second_exceptions}, errors={second_errors}.",
@@ -1157,9 +1180,9 @@ def _check_population_slice(report: Report) -> None:
         and combined_selected.get("population")
         == ["population_points", "built_centre", "built_low_selection"]
         and combined_share is not None
-        and abs(combined_share - 36.3) <= 0.05,
+        and abs(combined_share - 47.2) <= 0.05,
         "trondelag: the grid, polygon, and point population sources combine "
-        "canonically in the real R7 app at 500 m (36.3%).",
+        "canonically in the real R7 app at 500 m (47.2%).",
         "trondelag: combined population source behavior drifted: "
         f"selection={combined_selected}, share={combined_share}, "
         f"share_error={combined_share_error}, exceptions="

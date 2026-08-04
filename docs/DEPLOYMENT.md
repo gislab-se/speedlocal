@@ -106,7 +106,7 @@ The previous cloud error proved that this source connection and auto-deploy
 path were active, but also proved that a Windows archive path was not a cloud
 provider. V2 Final now resolves that gap before importing the monolith.
 
-The cloud runtime contract is:
+The currently published `main` cloud runtime contract is:
 
 - tracked manifest:
   `data/runtime/manifests/trondelag/v2-final-runtime-r7-2026-07-30.1.json`;
@@ -119,6 +119,22 @@ The cloud runtime contract is:
   `43e6ccc8cae99c7a7e15f85d92a8e3e9c15a077abfb9b28bd4c12a92fc63202c`;
 - content-inventory SHA-256:
   `f05045ac0a91fd0f83629d7507157ed62c504f1a95034339200c4e784d4212c2`.
+
+The locally promoted but unpublished `v2-final-dev` direct-R7 population
+checkpoint instead pins
+`data/runtime/manifests/trondelag/v2-final-runtime-r7-2026-08-04.1.json`:
+
+- 48 files and 103,563,758 expanded bytes;
+- archive name `speedlocal-v2-final-runtime-trondelag-r7-2026-08-04.1.zip`;
+- 16,259,464 archive bytes;
+- archive SHA-256
+  `797eb8fda675718251850deac23cd7e2129ea25be835997d4d37043d7b0b3781`.
+
+It adds three generated direct-R7 population distance tables. Two local builds
+were byte-identical, the release-archive validator passed 25/25, and localhost
+review was approved on 2026-08-04. The package has not been uploaded or
+externally verified. The current public
+45-file Release remains authoritative until a publication window.
 
 With `SPEEDLOCAL_V2_SOURCE_ROOT` unset, `app.py` downloads that public Release
 asset over HTTPS, verifies its exact byte count and outer checksum, safely

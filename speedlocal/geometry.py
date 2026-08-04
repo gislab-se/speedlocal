@@ -12,9 +12,11 @@ from shapely import make_valid
 from shapely.geometry import Polygon, mapping, shape
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import transform, unary_union
+from shapely.strtree import STRtree
 from shapely.validation import explain_validity
 
-from .contracts import LayerContract
+from .contracts import AnalysisDomainContract, LayerContract
+from .paths import resolve_source_path
 from .validation import validate_layer
 
 
@@ -56,6 +58,28 @@ class VectorBufferPreview:
     source_feature_count: int
     declared_feature_count: int
     area_m2: float
+
+
+@dataclass(frozen=True)
+class DirectDistanceRow:
+    """One source-to-analysis-cell observation in a projected metre CRS."""
+
+    cell_id: str
+    distance_m: float
+    intersects: bool
+
+
+@dataclass(frozen=True)
+class DirectDistanceArtifact:
+    """Complete direct-distance observations for one canonical layer."""
+
+    layer_id: str
+    resolution: int
+    native_crs: str
+    source_geometry_count: int
+    source_part_count: int
+    declared_feature_count: int
+    rows: tuple[DirectDistanceRow, ...]
 
 
 def _preview_error(code: str, message: str, error: Exception | None = None) -> GeometryPreviewError:
@@ -373,6 +397,247 @@ def _repair_result_if_declared(
             "manifest-declared repair.",
         )
     return repaired
+
+
+def _atomic_geometry_parts(
+    geometry: BaseGeometry,
+    expected_family: str,
+) -> list[BaseGeometry]:
+    """Explode multipart source geometry for indexed nearest-neighbour work."""
+
+    family = _geometry_family(geometry)
+    if family != expected_family:
+        raise GeometryPreviewError(
+            "source_geometry_family_mismatch",
+            f"Direct-distance source is {family}; expected {expected_family}.",
+        )
+    parts = getattr(geometry, "geoms", None)
+    if parts is None:
+        return [geometry]
+    atomic: list[BaseGeometry] = []
+    for part in parts:
+        atomic.extend(_atomic_geometry_parts(part, expected_family))
+    return atomic
+
+
+def _direct_distance_domain_geometries(
+    domain: AnalysisDomainContract,
+    target_crs: CRS,
+) -> dict[str, BaseGeometry]:
+    """Load the exact manifest-declared source-resolution analysis geometry."""
+
+    try:
+        domain_path = resolve_source_path(domain.provider, domain.path)
+        with domain_path.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        raise _preview_error(
+            "analysis_domain_unreadable",
+            "The direct-distance analysis domain cannot be read.",
+            exc,
+        )
+    if not isinstance(payload, dict) or payload.get("type") != "FeatureCollection":
+        raise GeometryPreviewError(
+            "analysis_domain_invalid",
+            "The direct-distance analysis domain must be a GeoJSON FeatureCollection.",
+        )
+    source_crs = _source_crs(payload, "analysis_domain")
+    try:
+        to_native = Transformer.from_crs(source_crs, target_crs, always_xy=True)
+    except Exception as exc:
+        raise _preview_error(
+            "analysis_domain_transform_failed",
+            "The direct-distance analysis domain CRS cannot be transformed.",
+            exc,
+        )
+
+    cells: dict[str, BaseGeometry] = {}
+    features = payload.get("features")
+    if not isinstance(features, list):
+        raise GeometryPreviewError(
+            "analysis_domain_invalid",
+            "The direct-distance analysis domain has no feature list.",
+        )
+    for index, feature in enumerate(features):
+        if not isinstance(feature, dict) or feature.get("type") != "Feature":
+            raise GeometryPreviewError(
+                "analysis_domain_feature_invalid",
+                f"Analysis-domain feature {index} is invalid.",
+            )
+        properties = feature.get("properties")
+        cell_id = (
+            str(properties.get(domain.id_field) or "").strip()
+            if isinstance(properties, dict)
+            else ""
+        )
+        if not cell_id:
+            raise GeometryPreviewError(
+                "analysis_domain_id_missing",
+                f"Analysis-domain feature {index} has no {domain.id_field!r}.",
+            )
+        if cell_id in cells:
+            raise GeometryPreviewError(
+                "analysis_domain_id_duplicate",
+                f"Analysis-domain cell {cell_id!r} is duplicated.",
+            )
+        try:
+            if not h3.is_valid_cell(cell_id):
+                raise ValueError("invalid H3 cell")
+            actual_resolution = int(h3.get_resolution(cell_id))
+        except Exception as exc:
+            raise _preview_error(
+                "analysis_domain_id_invalid",
+                f"Analysis-domain id {cell_id!r} is not a valid H3 cell.",
+                exc,
+            )
+        if actual_resolution != domain.resolution:
+            raise GeometryPreviewError(
+                "analysis_domain_resolution_mismatch",
+                f"Analysis-domain cell {cell_id!r} is R{actual_resolution}; "
+                f"expected R{domain.resolution}.",
+            )
+        raw_geometry = feature.get("geometry")
+        if not isinstance(raw_geometry, dict):
+            raise GeometryPreviewError(
+                "analysis_domain_geometry_missing",
+                f"Analysis-domain cell {cell_id!r} has no geometry.",
+            )
+        try:
+            web_geometry = shape(raw_geometry)
+            if _geometry_family(web_geometry) != "polygon":
+                raise ValueError("analysis cell must be polygonal")
+            _ensure_usable_geometry(web_geometry, f"analysis-domain cell {cell_id!r}")
+            native_geometry = transform(to_native.transform, web_geometry)
+            _ensure_usable_geometry(native_geometry, f"transformed analysis-domain cell {cell_id!r}")
+        except GeometryPreviewError:
+            raise
+        except Exception as exc:
+            raise _preview_error(
+                "analysis_domain_geometry_invalid",
+                f"Analysis-domain cell {cell_id!r} has invalid geometry.",
+                exc,
+            )
+        cells[cell_id] = native_geometry
+    if len(cells) != domain.expected_cell_count:
+        raise GeometryPreviewError(
+            "analysis_domain_count_mismatch",
+            f"The direct-distance R{domain.resolution} domain has {len(cells)} "
+            f"cells; expected {domain.expected_cell_count}.",
+        )
+    return cells
+
+
+def build_direct_distance_artifact(
+    layer: LayerContract,
+    *,
+    analysis_domain: AnalysisDomainContract,
+    native_crs: str,
+) -> DirectDistanceArtifact:
+    """Measure one declared vector source directly against canonical cells.
+
+    Distance follows the established artifact-export contract: shortest
+    planar distance from each analysis cell's interior representative point to
+    the manifest-declared source, plus an independent full-cell intersection
+    flag. Multipart sources are indexed as atomic parts for bounded build time.
+    Product runtime should consume the resulting deterministic CSV rather than
+    repeating this geospatial build during Streamlit reruns.
+    """
+
+    if layer.operation not in {
+        "distance_exclusion",
+        "hard_exclusion",
+        "proximity_feasibility",
+    }:
+        raise GeometryPreviewError(
+            "layer_operation_unsupported",
+            f"Layer {layer.id!r} does not declare a distance-based operation.",
+        )
+    target_crs = _metric_crs(native_crs)
+    try:
+        validated = validate_layer(layer)
+    except Exception as exc:
+        raise _preview_error(
+            "layer_validation_failed",
+            f"Layer {layer.id!r} failed source-contract validation: {exc}",
+            exc,
+        )
+    if validated.geometry_family not in SUPPORTED_VECTOR_FAMILIES:
+        raise GeometryPreviewError(
+            "geometry_family_unsupported",
+            f"Layer {layer.id!r} uses unsupported direct-distance family "
+            f"{validated.geometry_family!r}.",
+        )
+    source_geometries, source_crs = _load_source_geometries(
+        validated.assets.geojson_path,
+        layer_id=layer.id,
+        expected_family=validated.geometry_family,
+        geometry_collection_policy=layer.source.geometry_collection_policy,
+        geometry_validity_policy=layer.source.geometry_validity_policy,
+    )
+    try:
+        to_native = Transformer.from_crs(source_crs, target_crs, always_xy=True)
+        native_sources = [
+            transform(to_native.transform, geometry)
+            for geometry in source_geometries
+        ]
+    except Exception as exc:
+        raise _preview_error(
+            "source_transform_failed",
+            f"Layer {layer.id!r} could not be transformed to {native_crs!r}.",
+            exc,
+        )
+    source_parts: list[BaseGeometry] = []
+    for geometry in native_sources:
+        _ensure_usable_geometry(geometry, f"transformed {layer.id!r} source")
+        source_parts.extend(
+            _atomic_geometry_parts(geometry, validated.geometry_family)
+        )
+    if not source_parts:
+        raise GeometryPreviewError(
+            "source_empty",
+            f"Layer {layer.id!r} has no source geometry parts.",
+        )
+    for part in source_parts:
+        _ensure_usable_geometry(part, f"atomic {layer.id!r} source")
+
+    cells = _direct_distance_domain_geometries(analysis_domain, target_crs)
+    try:
+        source_index = STRtree(source_parts)
+        rows: list[DirectDistanceRow] = []
+        for cell_id in sorted(cells):
+            cell_geometry = cells[cell_id]
+            representative_point = cell_geometry.representative_point()
+            nearest_index = int(source_index.nearest(representative_point))
+            distance = float(
+                representative_point.distance(source_parts[nearest_index])
+            )
+            if not math.isfinite(distance) or distance < 0:
+                raise ValueError(f"invalid distance {distance!r}")
+            intersects = bool(
+                len(source_index.query(cell_geometry, predicate="intersects"))
+            )
+            rows.append(
+                DirectDistanceRow(
+                    cell_id=cell_id,
+                    distance_m=distance,
+                    intersects=intersects,
+                )
+            )
+    except Exception as exc:
+        raise _preview_error(
+            "direct_distance_failed",
+            f"Direct distances could not be built for layer {layer.id!r}.",
+            exc,
+        )
+    return DirectDistanceArtifact(
+        layer_id=layer.id,
+        resolution=analysis_domain.resolution,
+        native_crs=target_crs.to_string(),
+        source_geometry_count=len(source_geometries),
+        source_part_count=len(source_parts),
+        declared_feature_count=validated.assets.feature_count,
+        rows=tuple(rows),
+    )
 
 
 def build_h3_proximity_preview(

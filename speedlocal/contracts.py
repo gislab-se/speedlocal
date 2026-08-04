@@ -120,12 +120,24 @@ class SourceContract:
     source_geometry_required: bool = True
     geometry_collection_policy: str = "reject_mixed"
     geometry_validity_policy: str = "reject_invalid"
+    distance_provider: str | None = None
+    distance_path: str | None = None
     distance_h3_resolution: int | None = None
     distance_coverage: DistanceCoverageContract = field(
         default_factory=DistanceCoverageContract
     )
 
     def __post_init__(self) -> None:
+        if (self.distance_provider is None) != (self.distance_path is None):
+            raise ValueError(
+                "distance_provider and distance_path must be declared together"
+            )
+        if self.distance_provider is not None and (
+            not self.distance_provider.strip() or not str(self.distance_path).strip()
+        ):
+            raise ValueError(
+                "distance_provider and distance_path must not be blank"
+            )
         if self.geometry_collection_policy not in {
             "reject_mixed",
             "highest_dimension",
@@ -251,6 +263,7 @@ class LayerUIContract:
     note: str
     source_color: str
     point_radius: int
+    quality_flag: str | None
 
 
 @dataclass(frozen=True)
@@ -334,6 +347,16 @@ def source_contract(raw: dict[str, Any]) -> SourceContract:
         geometry_validity_policy=str(
             raw.get("geometry_validity_policy") or "reject_invalid"
         ),
+        distance_provider=(
+            str(raw["distance_provider"])
+            if raw.get("distance_provider") is not None
+            else None
+        ),
+        distance_path=(
+            str(raw["distance_path"])
+            if raw.get("distance_path") is not None
+            else None
+        ),
         distance_h3_resolution=distance_h3_resolution,
         distance_coverage=distance_coverage_contract(raw.get("distance_coverage")),
     )
@@ -411,6 +434,11 @@ def layer_ui_contract(raw: dict[str, Any] | None) -> LayerUIContract | None:
         note=str(raw["note"]),
         source_color=str(raw["source_color"]),
         point_radius=int(raw.get("point_radius", 4)),
+        quality_flag=(
+            str(raw["quality_flag"])
+            if raw.get("quality_flag") is not None
+            else None
+        ),
     )
 
 

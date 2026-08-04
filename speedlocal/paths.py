@@ -5,6 +5,7 @@ from pathlib import Path
 
 
 V2_SOURCE_ROOT_ENV = "SPEEDLOCAL_V2_SOURCE_ROOT"
+GENERATED_RUNTIME_ROOT_ENV = "SPEEDLOCAL_GENERATED_ROOT"
 
 
 def repo_root() -> Path:
@@ -29,6 +30,18 @@ def provider_root(provider: str) -> Path:
         root = Path(configured).expanduser().resolve()
         if not root.is_dir():
             raise FileNotFoundError(f"V2 source root does not exist: {root}")
+        return root
+    if provider == "generated_runtime":
+        configured = os.environ.get(GENERATED_RUNTIME_ROOT_ENV, "").strip()
+        if not configured:
+            raise FileNotFoundError(
+                f"{GENERATED_RUNTIME_ROOT_ENV} is not configured"
+            )
+        root = Path(configured).expanduser().resolve()
+        if not root.is_dir():
+            raise FileNotFoundError(
+                f"Generated runtime root does not exist: {root}"
+            )
         return root
     raise ValueError(f"Unsupported source provider: {provider}")
 

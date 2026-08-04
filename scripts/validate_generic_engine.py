@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import sys
 import csv
+import hashlib
 import json
 import math
 import tempfile
@@ -24,6 +25,7 @@ from speedlocal.contracts import (
     DefaultRequestContract,
 )
 from speedlocal.engine import _distance_rows, _rollup_distance_rows
+from speedlocal.geometry import build_direct_distance_artifact
 from speedlocal.validation import select_processing_adapter, validate_contract, validate_layer
 from speedlocal.sources import (
     resolve_analysis_domain_cell_areas_km2,
@@ -82,39 +84,39 @@ ROAD_SELECTION_RAW_EXPECTATIONS = {
 }
 POPULATION_EXPECTATIONS = {
     7: {
-        100.0: (0.8422249588642156, 1_229, 1_485, 38_119.151592087590),
-        500.0: (0.6611716764470330, 3_792, 4_048, 29_960.271522643929),
-        1000.0: (0.5559792629777940, 4_947, 5_203, 25_213.340431058976),
-        3000.0: (0.2936284590947701, 8_004, 8_260, 13_350.050589430422),
+        100.0: (0.7073170731707317, 4_020, 4_020, 32_033.294765366558),
+        500.0: (0.7070320705559044, 4_020, 4_020, 32_020.544812344022),
+        1000.0: (0.6323414159520412, 4_083, 4_083, 28_655.258106115540),
+        3000.0: (0.3307196735844324, 7_588, 7_588, 15_028.059399211797),
     },
     6: {
-        100.0: (0.6316790337494221, 610, 636, 28_522.089594840058),
-        500.0: (0.4522473888118354, 1_099, 1_125, 20_357.789476729769),
-        1000.0: (0.3821757836338419, 1_218, 1_244, 17_125.905968613042),
-        3000.0: (0.2072386372322392, 1_527, 1_553, 9_041.916962610443),
+        100.0: (0.4785020804438280, 1_128, 1_128, 21_299.369535789352),
+        500.0: (0.4783465515504408, 1_128, 1_128, 21_293.754330461623),
+        1000.0: (0.4315900619940833, 1_136, 1_136, 19_183.049121041375),
+        3000.0: (0.2355616618057175, 1_483, 1_483, 10_181.075326368010),
     },
     5: {
-        100.0: (0.3502184931506849, 206, 213, 12_878.835458336256),
-        500.0: (0.2230698575342466, 271, 278, 6_930.123791379062),
-        1000.0: (0.1915868438356164, 282, 289, 5_866.145655584355),
-        3000.0: (0.1283255305936073, 302, 309, 3_363.591524290177),
+        100.0: (0.2438356164383562, 276, 276, 7_521.183269500072),
+        500.0: (0.2435574779369594, 276, 276, 7_504.290681082110),
+        1000.0: (0.2160813563563715, 277, 277, 6_453.775000831103),
+        3000.0: (0.1446149421386573, 302, 302, 3_669.016755527792),
     },
 }
 OPTIONAL_POPULATION_EXPECTATIONS = {
     ("built_centre",): {
-        7: (0.9545446698216236, 558, 43_176.566357676700),
-        6: (0.9218466657420250, 156, 42_016.643883458560),
-        5: (0.7930234630136988, 73, 35_483.860983314786),
+        7: (0.9793580709868845, 283, 44_282.970771188660),
+        6: (0.9398818476005033, 130, 42_412.804166986470),
+        5: (0.8245600996161335, 64, 36_217.147640343540),
     },
     ("built_low_selection",): {
-        7: (0.3971243303967965, 7_024, 17_997.612016472070),
-        6: (0.1507112732316228, 1_781, 6_084.743136532677),
-        5: (0.0637616383561644, 337, 790.380581158766),
+        7: (0.5390864250386150, 6_318, 24_400.317787201784),
+        6: (0.1901581210110947, 1_751, 7_580.237267448478),
+        5: (0.0819100927881540, 335, 953.603137445545),
     },
     ("population_points", "built_centre", "built_low_selection"): {
-        7: (0.3629949000364034, 7_711, 16_467.633804167090),
-        6: (0.1464671299121591, 1_794, 5_939.475401828971),
-        5: (0.0637616383561644, 337, 790.380581158766),
+        7: (0.4724434286333389, 7_237, 21_408.783172646607),
+        6: (0.1822993069821105, 1_768, 7_329.037424675471),
+        5: (0.0819100927881540, 335, 953.603137445545),
     },
 }
 NATURE_EXPECTATIONS = {
@@ -702,12 +704,14 @@ def main() -> int:
     assert population.geometry_family == "polygon"
     assert population.processing_adapter == "population_grid"
     assert population.assets.feature_count == 26_029
-    assert population.contract.source.distance_h3_resolution == 8
+    assert population.contract.source.distance_h3_resolution == 7
     population_coverage = population.contract.source.distance_coverage
-    assert population_coverage.mode == "declared_sparse"
-    assert population_coverage.missing_policy == "zero_acceptance"
-    assert population_coverage.expected_source_row_count == 89_312
-    assert set(population_coverage.targets) == {7, 6, 5}
+    assert population_coverage.mode == "complete"
+    assert population_coverage.missing_policy == "error"
+    assert population_coverage.expected_source_row_count == 13_735
+    assert population_coverage.source_ids_sha256 == (
+        "fdea5973b898319643b7c94ad43b3480c98e639a8f378cbc23e8bc56751fcbba"
+    )
     assert (
         population_buffer.default,
         population_buffer.minimum,
@@ -727,11 +731,60 @@ def main() -> int:
     assert built_low.processing_adapter == "population_points"
     assert built_low.assets.feature_count == 10_966
     assert all(
-        layer.contract.source.distance_h3_resolution == 8
+        layer.contract.source.distance_h3_resolution == 7
         and layer.contract.source.distance_coverage == population_coverage
         for layer in (built_centre, built_low)
     )
     checks += 9
+
+    direct_population_evidence = {
+        "population_points": (
+            population,
+            7_057,
+            4_020,
+            "82bab4e1e3e2506244f402a9f098b60bdde6a56848a183ac1384dbca076a2ebe",
+        ),
+        "built_centre": (
+            built_centre,
+            85,
+            283,
+            "0d83c8230dc42c29c4be0a92af6e1fb0d6a948cd465da28646161426040d1656",
+        ),
+        "built_low_selection": (
+            built_low,
+            10_966,
+            6_318,
+            "143711984e8a25fac4773495302c4d699b33e6b32312550d54b0d52bfa2c665d",
+        ),
+    }
+    for layer_id, (
+        validated_layer,
+        expected_parts,
+        expected_intersections,
+        expected_sha256,
+    ) in direct_population_evidence.items():
+        artifact = build_direct_distance_artifact(
+            validated_layer.contract,
+            analysis_domain=trondelag.analysis_domain,
+            native_crs="EPSG:25832",
+        )
+        generated_rows = _distance_rows(validated_layer)
+        digest = hashlib.sha256(
+            validated_layer.assets.distance_path.read_bytes()
+        ).hexdigest()
+        assert artifact.layer_id == layer_id
+        assert artifact.resolution == 7
+        assert len(artifact.rows) == 13_735
+        assert artifact.source_part_count == expected_parts
+        assert sum(row.intersects for row in artifact.rows) == expected_intersections
+        assert digest == expected_sha256
+        assert all(
+            row.cell_id in generated_rows
+            and abs(generated_rows[row.cell_id][0] - row.distance_m) < 1e-9
+            and generated_rows[row.cell_id][1] is row.intersects
+            for row in artifact.rows
+        )
+        checks += 7
 
     nature = validate_layer(trondelag.layers["protected_areas"])
     nature_buffer = nature.contract.parameters["buffer_m"]
@@ -899,57 +952,29 @@ def main() -> int:
             },
         )
 
-    missing_target_coverage = replace(
-        population_coverage,
-        targets={
-            resolution: target
-            for resolution, target in population_coverage.targets.items()
-            if resolution != 5
-        },
-    )
     try:
-        validate_contract(
-            population_contract_with_source(
-                replace(
-                    population.contract.source,
-                    distance_coverage=missing_target_coverage,
-                )
-            )
+        replace(
+            population.contract.source,
+            distance_path=None,
         )
     except ValueError as exc:
-        assert "must exactly match" in str(exc)
+        assert "must be declared together" in str(exc)
     else:
         raise AssertionError(
-            "Sparse population coverage accepted a missing R5 target"
+            "Population distance override accepted a missing path"
         )
     checks += 1
 
-    r7_coverage = population_coverage.targets[7]
-    wrong_r7_count = replace(
-        r7_coverage,
-        target_cell_count=r7_coverage.target_cell_count + 1,
-        covered_cell_count=r7_coverage.covered_cell_count + 1,
-    )
     try:
-        validate_contract(
-            population_contract_with_source(
-                replace(
-                    population.contract.source,
-                    distance_coverage=replace(
-                        population_coverage,
-                        targets={
-                            **population_coverage.targets,
-                            7: wrong_r7_count,
-                        },
-                    ),
-                )
-            )
+        replace(
+            population.contract.source,
+            distance_provider=None,
         )
     except ValueError as exc:
-        assert "target count does not match" in str(exc)
+        assert "must be declared together" in str(exc)
     else:
         raise AssertionError(
-            "Sparse population coverage accepted the wrong R7 target count"
+            "Population distance override accepted a missing provider"
         )
     checks += 1
 
@@ -966,7 +991,7 @@ def main() -> int:
         assert "finer than its R6 distance source" in str(exc)
     else:
         raise AssertionError(
-            "Sparse population coverage accepted a coarser distance source"
+            "Population coverage accepted a coarser distance source"
         )
     checks += 1
 
@@ -1017,10 +1042,10 @@ def main() -> int:
             analysis_cell_ids=["not-an-h3-cell"],
         )
     except ValueError as exc:
-        assert "target_resolution" in str(exc)
+        assert "missing requested analysis cells" in str(exc)
     else:
         raise AssertionError(
-            "Sparse population coverage bypassed its signed target domain"
+            "Population coverage bypassed its signed target domain"
         )
     checks += 1
 
@@ -1058,35 +1083,32 @@ def main() -> int:
     checks += 2
 
     population_rows = _distance_rows(population)
-    for drifted_r7_target in (
-        replace(r7_coverage, missing_ids_sha256="0" * 64),
-        replace(
-            r7_coverage,
-            outside_cell_count=r7_coverage.outside_cell_count + 1,
-        ),
-    ):
-        drifted_coverage = replace(
+    direct_r7_rows = _rollup_distance_rows(
+        population_rows,
+        7,
+        7,
+        frozenset(display_cell_ids_by_resolution[7]),
+        population_coverage,
+    )
+    assert direct_r7_rows == population_rows
+    checks += 1
+    missing_population_rows = dict(population_rows)
+    missing_population_rows.pop(next(iter(missing_population_rows)))
+    try:
+        _rollup_distance_rows(
+            missing_population_rows,
+            7,
+            7,
+            frozenset(display_cell_ids_by_resolution[7]),
             population_coverage,
-            targets={
-                **population_coverage.targets,
-                7: drifted_r7_target,
-            },
         )
-        try:
-            _rollup_distance_rows(
-                population_rows,
-                8,
-                7,
-                frozenset(display_cell_ids_by_resolution[7]),
-                drifted_coverage,
-            )
-        except ValueError as exc:
-            assert "does not match its manifest signature" in str(exc)
-        else:
-            raise AssertionError(
-                "Population target coverage signature drift did not fail closed"
-            )
-        checks += 1
+    except ValueError as exc:
+        assert "missing R7 analysis cells" in str(exc)
+    else:
+        raise AssertionError(
+            "Direct R7 population coverage accepted a missing analysis cell"
+        )
+    checks += 1
 
     area_by_resolution: dict[int, dict[str, float]] = {}
     for resolution, target_cell_ids in display_cell_ids_by_resolution.items():
@@ -1255,18 +1277,16 @@ def main() -> int:
             assert sum(
                 cell.acceptance == 0.0 for cell in group.cells
             ) == expected_zero_acceptance
-            assert sum(
-                cell.coverage_missing for cell in group.cells
-            ) == population_coverage.targets[resolution].missing_cell_count
+            assert not any(cell.coverage_missing for cell in group.cells)
 
             oracle = _v2_distance_selection_rollup_oracle(
                 trondelag,
                 ("population_points",),
                 threshold,
-                8,
+                7,
                 resolution,
                 target_cell_ids,
-                "zero_acceptance",
+                "error",
             )
             actual = {cell.cell_id: cell for cell in group.cells}
             assert actual.keys() == oracle.keys()
@@ -1338,10 +1358,10 @@ def main() -> int:
                 trondelag,
                 layer_ids,
                 500.0,
-                8,
+                7,
                 resolution,
                 target_cell_ids,
-                "zero_acceptance",
+                "error",
             )
             actual = {cell.cell_id: cell for cell in group.cells}
             assert actual.keys() == oracle.keys()

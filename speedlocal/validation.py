@@ -159,13 +159,22 @@ def validate_contract(contract: AnalysisContract) -> None:
         if unknown_families:
             raise ValueError(f"Unsupported geometry families for {layer.id}: {sorted(unknown_families)}")
         coverage = layer.source.distance_coverage
+        source_resolution = layer.source.distance_h3_resolution
+        if (
+            domain is not None
+            and source_resolution is not None
+            and domain.resolution > source_resolution
+        ):
+            raise ValueError(
+                f"Layer {layer.id} analysis domain R{domain.resolution} is "
+                f"finer than its R{source_resolution} distance source"
+            )
         if coverage.mode == "declared_sparse":
             if domain is None:
                 raise ValueError(
                     f"Layer {layer.id} declares sparse distance coverage "
                     "without an analysis domain"
                 )
-            source_resolution = layer.source.distance_h3_resolution
             if source_resolution is None:
                 raise ValueError(
                     f"Layer {layer.id} declares sparse distance coverage "
@@ -207,6 +216,10 @@ def validate_contract(contract: AnalysisContract) -> None:
                 raise ValueError(f"Layer {layer.id} has invalid ui source_color")
             if layer.ui.point_radius <= 0:
                 raise ValueError(f"Layer {layer.id} ui point_radius must be positive")
+            if layer.ui.quality_flag not in {None, "caution"}:
+                raise ValueError(
+                    f"Layer {layer.id} ui quality_flag must be 'caution' or null"
+                )
 
 
 def validate_layer(layer: LayerContract) -> ValidatedLayer:

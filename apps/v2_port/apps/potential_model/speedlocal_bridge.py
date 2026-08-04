@@ -44,6 +44,7 @@ class WindLayerControlContract:
     note: str
     source_color: tuple[int, int, int]
     point_radius: int
+    quality_flag: str | None
     ready: bool
     message: str
 
@@ -375,6 +376,7 @@ def wind_group_control_contract(
                 note=layer.ui.note,
                 source_color=_hex_color_to_rgb(layer.ui.source_color),
                 point_radius=layer.ui.point_radius,
+                quality_flag=layer.ui.quality_flag,
                 ready=ready,
                 message=message,
             )

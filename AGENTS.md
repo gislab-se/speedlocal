@@ -82,14 +82,14 @@
   frozen-reference, preview, and real-app gates pass on 2026-08-04. The legacy
   wind `electrical` path is removed for Trøndelag. Clean-process localhost
   review was approved on 2026-08-04, so the slice is locally promoted.
-- The promoted population parity path currently aggregates frozen-V2 R8
-  distance observations to R7/R6/R5. Treat the use of R8 as a known potential
-  modeling problem: before the combined-result slice is locally promoted,
-  evaluate and replace it with a direct calculation against the declared R7
-  analysis domain, derive R6/R5 from R7, quantify any intentional frozen-V2
-  drift, and secure new accepted-reference evidence.
-- The population R8-to-direct-R7 correction is the next planned increment.
-  The combined-result slice follows only after that corrective gate passes.
+- The population R8-to-direct-R7 correction is locally promoted on 2026-08-04.
+  All three canonical population sources calculate against the declared R7
+  analysis domain and derive R6/R5 from R7. Complete drift evidence, the
+  independent geometry oracle, five-group regressions, the reproducible
+  48-file runtime-package gate, and clean-process localhost review pass. The
+  `built_low_selection` source is a known coarse SSB 1 km-grid centroid proxy;
+  its manifest-driven caution flag must remain until its data model is revised.
+- The combined-result slice is the next planned slice.
 - Bornholm source and engine contracts may validate in parallel as onboarding
   diagnostics, but they do not block Trøndelag slice promotion.
 - Do not implement regional exceptions yet.

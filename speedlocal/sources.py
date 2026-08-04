@@ -242,9 +242,17 @@ def resolve_layer_assets(layer: LayerContract) -> LayerAssets:
     row = next((item for item in rows if item.get("layer_id") == source.layer_id), None)
     if row is None:
         raise KeyError(f"{source.layer_id} is missing from {manifest_path}")
+    distance_path = (
+        resolve_source_path(source.distance_provider, source.distance_path)
+        if source.distance_provider is not None and source.distance_path is not None
+        else resolve_source_path(
+            source.provider,
+            _clean_relative(row.get("distance_path"), "distance_path"),
+        )
+    )
     return LayerAssets(
         geojson_path=resolve_source_path(source.provider, _clean_relative(row.get("geojson_path"), "geojson_path")),
-        distance_path=resolve_source_path(source.provider, _clean_relative(row.get("distance_path"), "distance_path")),
+        distance_path=distance_path,
         manifest_status=str(row.get("status") or ""),
         declared_geometry_family=_declared_geometry_family(
             row.get("geometry_family")

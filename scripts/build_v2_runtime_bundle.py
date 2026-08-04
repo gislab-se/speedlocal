@@ -19,9 +19,10 @@ DEFAULT_CONTRACT = (
     / "runtime"
     / "manifests"
     / "trondelag"
-    / "v2-final-runtime-r7-2026-07-30.1.json"
+    / "v2-final-runtime-r7-2026-08-04.1.json"
 )
 SOURCE_ROOT_ENV = "SPEEDLOCAL_V2_SOURCE_ROOT"
+OVERLAY_ROOT_ENV = "SPEEDLOCAL_GENERATED_ROOT"
 CHUNK_BYTES = 1024 * 1024
 ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 
@@ -82,6 +83,8 @@ def _asset_name(value: Any) -> str:
 def _verify_source(
     source_root: Path,
     contract: dict[str, Any],
+    *,
+    overlay_root: Path | None = None,
 ) -> list[dict[str, Any]]:
     files = contract.get("files")
     if not isinstance(files, list):
@@ -100,13 +103,23 @@ def _verify_source(
             raise ValueError(f"Duplicate or case-colliding path: {relative}")
         seen.add(relative)
         seen_casefold.add(folded)
-        unresolved = source_root
+        unresolved = overlay_root or source_root
         for part in PurePosixPath(relative).parts:
             unresolved /= part
             if _is_linklike(unresolved):
                 raise ValueError(f"Runtime source traverses a link: {relative}")
         candidate = unresolved.resolve()
-        candidate.relative_to(source_root)
+        candidate.relative_to(overlay_root or source_root)
+        if overlay_root is not None and not candidate.is_file():
+            unresolved = source_root
+            for part in PurePosixPath(relative).parts:
+                unresolved /= part
+                if _is_linklike(unresolved):
+                    raise ValueError(
+                        f"Runtime source traverses a link: {relative}"
+                    )
+            candidate = unresolved.resolve()
+            candidate.relative_to(source_root)
         if not candidate.is_file():
             raise FileNotFoundError(f"Runtime source is missing: {relative}")
         expected_bytes = int(item["bytes"])
@@ -242,6 +255,15 @@ def main() -> int:
         default=Path(tempfile.gettempdir()) / "speedlocal-runtime-release",
         help="Untracked output directory for release assets.",
     )
+    parser.add_argument(
+        "--overlay-root",
+        type=Path,
+        default=None,
+        help=(
+            "Optional generated-file overlay; defaults to "
+            f"{OVERLAY_ROOT_ENV}. Files present here take precedence."
+        ),
+    )
     args = parser.parse_args()
 
     contract_path = args.contract.expanduser().resolve()
@@ -261,6 +283,23 @@ def main() -> int:
     if not source_root.is_dir():
         raise SystemExit(f"Runtime source root does not exist: {source_root}")
 
+    configured_overlay = str(
+        os.environ.get(OVERLAY_ROOT_ENV, "") or ""
+    ).strip()
+    overlay_root_value = args.overlay_root or (
+        Path(configured_overlay) if configured_overlay else None
+    )
+    overlay_root: Path | None = None
+    if overlay_root_value is not None:
+        overlay_input = overlay_root_value.expanduser()
+        if _is_linklike(overlay_input):
+            raise SystemExit("Runtime overlay root must not be a link or junction.")
+        overlay_root = overlay_input.resolve()
+        if not overlay_root.is_dir():
+            raise SystemExit(
+                f"Runtime overlay root does not exist: {overlay_root}"
+            )
+
     release = contract.get("release") or {}
     assets = release.get("assets") or {}
     archive_contract = contract.get("archive") or {}
@@ -271,7 +310,11 @@ def main() -> int:
     if "/" in root_prefix:
         raise SystemExit("Release asset contract is incomplete.")
 
-    files = _verify_source(source_root, contract)
+    files = _verify_source(
+        source_root,
+        contract,
+        overlay_root=overlay_root,
+    )
     output_dir = args.output_dir.expanduser().resolve()
     overlaps_source = False
     try:
@@ -284,6 +327,17 @@ def main() -> int:
         overlaps_source = True
     except ValueError:
         pass
+    if overlay_root is not None:
+        try:
+            output_dir.relative_to(overlay_root)
+            overlaps_source = True
+        except ValueError:
+            pass
+        try:
+            overlay_root.relative_to(output_dir)
+            overlaps_source = True
+        except ValueError:
+            pass
     if overlaps_source:
         raise SystemExit("Output directory must not overlap the runtime source.")
     output_dir.mkdir(parents=True, exist_ok=True)

@@ -9201,10 +9201,20 @@ def _wind_group_controls(
                         or layer_note(layer, language, layer.note)
                         or ""
                     )
-                    checked = st.checkbox(
+                    checkbox_label = (
                         str(layer.label)
                         if is_manifest_layer
-                        else layer_label(layer, language, layer.label),
+                        else layer_label(layer, language, layer.label)
+                    )
+                    if (
+                        is_manifest_layer
+                        and layer.quality_flag == "caution"
+                    ):
+                        checkbox_label = (
+                            f"{checkbox_label} :orange[:material/warning:]"
+                        )
+                    checked = st.checkbox(
+                        checkbox_label,
                         key=_wind_control_key("layer", layer.id),
                         disabled=(not group_available) or (not ready),
                         help=message,

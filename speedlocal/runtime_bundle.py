@@ -15,6 +15,8 @@ from typing import Any
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
+from .paths import GENERATED_RUNTIME_ROOT_ENV
+
 
 V2_SOURCE_ROOT_ENV = "SPEEDLOCAL_V2_SOURCE_ROOT"
 RUNTIME_BUNDLE_URL_ENV = "SPEEDLOCAL_RUNTIME_BUNDLE_URL"
@@ -26,7 +28,7 @@ DEFAULT_CONTRACT_PATH = (
     / "runtime"
     / "manifests"
     / "trondelag"
-    / "v2-final-runtime-r7-2026-07-30.1.json"
+    / "v2-final-runtime-r7-2026-08-04.1.json"
 )
 
 MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
@@ -38,6 +40,18 @@ DOWNLOAD_CHUNK_BYTES = 1024 * 1024
 Downloader = Callable[[str, Path, int, str], None]
 
 _MATERIALIZE_LOCK = threading.Lock()
+
+
+def _configure_runtime_roots(
+    environment: MutableMapping[str, str],
+    root: Path,
+    archive_sha256: str | None = None,
+) -> None:
+    environment[V2_SOURCE_ROOT_ENV] = str(root)
+    if not str(environment.get(GENERATED_RUNTIME_ROOT_ENV, "") or "").strip():
+        environment[GENERATED_RUNTIME_ROOT_ENV] = str(root)
+    if archive_sha256 is not None:
+        environment[RUNTIME_BUNDLE_SHA_ENV] = str(archive_sha256)
 
 
 class RuntimeBundleError(RuntimeError):
@@ -487,6 +501,7 @@ def ensure_v2_source_root(
         if not configured_bundle_sha:
             contract = _load_contract(Path(contract_path))
             _validate_explicit_root(root, contract)
+            _configure_runtime_roots(environment, root)
             return root
 
         if contract is None:
@@ -497,6 +512,11 @@ def ensure_v2_source_root(
             except RuntimeBundleError:
                 pass
             else:
+                _configure_runtime_roots(
+                    environment,
+                    root,
+                    str(contract["archive"]["sha256"]),
+                )
                 return root
         environment.pop(V2_SOURCE_ROOT_ENV, None)
         environment.pop(RUNTIME_BUNDLE_SHA_ENV, None)
@@ -522,8 +542,11 @@ def ensure_v2_source_root(
     with _MATERIALIZE_LOCK:
         existing = _existing_cache_root(final_dir, contract)
         if existing is not None:
-            environment[V2_SOURCE_ROOT_ENV] = str(existing)
-            environment[RUNTIME_BUNDLE_SHA_ENV] = str(archive["sha256"])
+            _configure_runtime_roots(
+                environment,
+                existing,
+                str(archive["sha256"]),
+            )
             return existing
         try:
             if final_dir.exists():
@@ -562,8 +585,11 @@ def ensure_v2_source_root(
 
             concurrent = _existing_cache_root(final_dir, contract)
             if concurrent is not None:
-                environment[V2_SOURCE_ROOT_ENV] = str(concurrent)
-                environment[RUNTIME_BUNDLE_SHA_ENV] = str(archive["sha256"])
+                _configure_runtime_roots(
+                    environment,
+                    concurrent,
+                    str(archive["sha256"]),
+                )
                 return concurrent
             try:
                 # os.replace() rejects directory promotion on some Windows
@@ -575,14 +601,20 @@ def ensure_v2_source_root(
                 concurrent = _existing_cache_root(final_dir, contract)
                 if concurrent is None:
                     raise RuntimeBundleError("cache_promotion_failed")
-                environment[V2_SOURCE_ROOT_ENV] = str(concurrent)
-                environment[RUNTIME_BUNDLE_SHA_ENV] = str(archive["sha256"])
+                _configure_runtime_roots(
+                    environment,
+                    concurrent,
+                    str(archive["sha256"]),
+                )
                 return concurrent
             installed = _existing_cache_root(final_dir, contract)
             if installed is None:
                 raise RuntimeBundleError("runtime_cache_invalid")
-            environment[V2_SOURCE_ROOT_ENV] = str(installed)
-            environment[RUNTIME_BUNDLE_SHA_ENV] = str(archive["sha256"])
+            _configure_runtime_roots(
+                environment,
+                installed,
+                str(archive["sha256"]),
+            )
             return installed
         except RuntimeBundleError:
             raise

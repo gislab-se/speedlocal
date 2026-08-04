@@ -14,16 +14,16 @@ PORT_APPS = PORT_ROOT / "apps"
 V2_SOURCE_ROOT_ENV = "SPEEDLOCAL_V2_SOURCE_ROOT"
 FULL_DEFAULT_EXPECTATIONS = {
     7: {
-        300.0: 6.734336366945759,
-        1000.0: 6.235573178012377,
+        300.0: 8.269008817248,
+        1000.0: 7.311471382817,
     },
     6: {
-        300.0: 2.3102432732316234,
-        1000.0: 2.2271300046232083,
+        300.0: 2.958853444290,
+        1000.0: 2.754974572353,
     },
     5: {
-        300.0: 0.6860021917808219,
-        1000.0: 0.6860021917808219,
+        300.0: 1.643835616438,
+        1000.0: 1.643835616438,
     },
 }
 ROADS_LARGE_EXPECTATIONS = {
@@ -104,22 +104,22 @@ TRONDELAG_MODEL_DOMAIN_AREA_KM2 = 45_213.18864360976
 DISPLAY_COUNTS = {7: 13_735, 6: 2_163, 5: 365}
 POPULATION_EXPECTATIONS = {
     7: {
-        100.0: (84.22249588642156, 1_485, 38_119.151592087590),
-        500.0: (66.11716764470330, 4_048, 29_960.271522643929),
-        1000.0: (55.59792629777940, 5_203, 25_213.340431058976),
-        3000.0: (29.36284590947701, 8_260, 13_350.050589430422),
+        100.0: (70.73170731707317, 4_020, 32_033.294765366558),
+        500.0: (70.70320705559044, 4_020, 32_020.544812344022),
+        1000.0: (63.23414159520412, 4_083, 28_655.258106115540),
+        3000.0: (33.07196735844324, 7_588, 15_028.059399211797),
     },
     6: {
-        100.0: (63.16790337494221, 636, 28_522.089594840058),
-        500.0: (45.22473888118354, 1_125, 20_357.789476729769),
-        1000.0: (38.21757836338419, 1_244, 17_125.905968613042),
-        3000.0: (20.72386372322392, 1_553, 9_041.916962610443),
+        100.0: (47.85020804438280, 1_128, 21_299.369535789352),
+        500.0: (47.83465515504408, 1_128, 21_293.754330461623),
+        1000.0: (43.15900619940833, 1_136, 19_183.049121041375),
+        3000.0: (23.55616618057175, 1_483, 10_181.075326368010),
     },
     5: {
-        100.0: (35.02184931506849, 213, 12_878.835458336256),
-        500.0: (22.30698575342466, 278, 6_930.123791379062),
-        1000.0: (19.15868438356164, 289, 5_866.145655584355),
-        3000.0: (12.83255305936073, 309, 3_363.591524290177),
+        100.0: (24.38356164383562, 276, 7_521.183269500072),
+        500.0: (24.35574779369594, 276, 7_504.290681082110),
+        1000.0: (21.60813563563715, 277, 6_453.775000831103),
+        3000.0: (14.46149421386573, 302, 3_669.016755527792),
     },
 }
 NATURE_EXPECTATIONS = {
@@ -190,6 +190,8 @@ from acceptance_model.layers import (  # noqa: E402
     distance_table_for_layer,
     load_registry,
 )
+from speedlocal.catalogs import load_analysis  # noqa: E402
+from speedlocal.sources import resolve_layer_assets  # noqa: E402
 
 
 class Report:
@@ -286,17 +288,19 @@ def _roads_acceptance_oracle(
     return oracle
 
 
-def _population_acceptance_oracle(
+def _population_distance_oracle(
     registry: dict,
     layer_ids: tuple[str, ...],
-    threshold_m: float,
     target_resolution: int,
     target_cell_ids: set[str],
-) -> dict[str, float]:
-    """Reproduce frozen sparse population/settlement semantics."""
+) -> dict[str, tuple[float, bool]]:
+    """Independently roll accepted direct-R7 population observations."""
+    contract = load_analysis("trondelag", "wind")
     rolled: dict[str, tuple[float, bool]] = {}
     for layer_id in layer_ids:
-        distance = distance_table_for_layer(registry, layer_id)
+        distance = pd.read_csv(
+            resolve_layer_assets(contract.layers[layer_id]).distance_path
+        )
         if distance["hex_id"].astype(str).duplicated().any():
             raise ValueError(
                 f"Frozen {layer_id} distance table has duplicate hex ids"
@@ -328,14 +332,33 @@ def _population_acceptance_oracle(
                     previous[1] or value[1],
                 )
 
+    oracle: dict[str, tuple[float, bool]] = {}
+    for cell_id in target_cell_ids:
+        if cell_id not in rolled:
+            raise ValueError(
+                f"Direct-R7 population rollup is missing target cell {cell_id}"
+            )
+        oracle[cell_id] = rolled[cell_id]
+    return oracle
+
+
+def _population_acceptance_oracle(
+    registry: dict,
+    layer_ids: tuple[str, ...],
+    threshold_m: float,
+    target_resolution: int,
+    target_cell_ids: set[str],
+) -> dict[str, float]:
+    """Independently reproduce accepted direct-R7 population semantics."""
+    observations = _population_distance_oracle(
+        registry,
+        layer_ids,
+        target_resolution,
+        target_cell_ids,
+    )
     ramp_end = max(threshold_m * 2.0, threshold_m + 1.0)
     oracle: dict[str, float] = {}
-    for cell_id in target_cell_ids:
-        observation = rolled.get(cell_id)
-        if observation is None:
-            oracle[cell_id] = 0.0
-            continue
-        distance_m, intersects = observation
+    for cell_id, (distance_m, intersects) in observations.items():
         oracle[cell_id] = (
             0.0
             if intersects
@@ -537,7 +560,8 @@ def main() -> int:
                 ]
                 and abs(actual_share - expected_share) <= 1e-12,
                 f"Trøndelag R{resolution} at {road_distance:.0f} m preserves "
-                f"frozen full-flow output ({expected_share:.12f}%).",
+                f"the accepted direct-R7 full-flow output "
+                f"({expected_share:.12f}%).",
                 f"Trøndelag R{resolution} at {road_distance:.0f} m drifted: "
                 f"expected {expected_share:.12f}%, got {actual_share:.12f}%, "
                 f"canonical={((result or {}).get('canonical_layer_ids') or [])}.",
@@ -628,7 +652,7 @@ def main() -> int:
                 and abs(actual_area - expected_area) <= 1e-9
                 and max_cell_error <= 1e-12,
                 f"Trøndelag population_points R{resolution} uses the "
-                f"canonical sparse contract at {distance_m:.0f} m "
+                f"canonical direct-R7 contract at {distance_m:.0f} m "
                 f"({expected_share:.12f}%, {expected_zero_acceptance} "
                 "zero-acceptance cells).",
                 f"Trøndelag population_points R{resolution} drifted at "
@@ -1672,13 +1696,6 @@ def main() -> int:
             str(layer_id)
             for layer_id in canonical_spec.get("canonical_layer_ids", [])
         ]
-        legacy_spec = dict(canonical_spec)
-        legacy_spec["layer_ids"] = canonical_ids + [
-            str(layer_id)
-            for layer_id in canonical_spec.get("layer_ids", [])
-        ]
-        legacy_spec["canonical_group_id"] = None
-        legacy_spec["canonical_layer_ids"] = []
 
         def _priority_population_guard(registry_meta, layer_id):
             normalized_layer_id = str(layer_id)
@@ -1704,16 +1721,6 @@ def main() -> int:
                 }
             )
             app._allocation_priority_layer_groups = (
-                lambda _region_id, _technology, spec=legacy_spec: [spec]
-            )
-            legacy_priority = app._apply_landscape_priority_to_allocation_frame(
-                priority_source,
-                trondelag_region,
-                "wind",
-                resolution,
-            ).sort_values("hex_id")
-
-            app._allocation_priority_layer_groups = (
                 lambda _region_id, _technology, spec=canonical_spec: [spec]
             )
             app.distance_table_for_layer = _priority_population_guard
@@ -1723,22 +1730,61 @@ def main() -> int:
                 "wind",
                 resolution,
             ).sort_values("hex_id")
-            error_columns = (
-                "landscape_priority_score",
-                "allocation_priority_score",
-                "technical_priority_score",
-                "core_score",
+            observations = _population_distance_oracle(
+                trondelag_registry,
+                tuple(canonical_ids),
+                resolution,
+                set(domain_ids),
             )
+            expected_landscape = canonical_priority["hex_id"].map(
+                lambda cell_id: (
+                    0.0
+                    if observations[str(cell_id)][1]
+                    else max(
+                        0.0,
+                        min(1.0, observations[str(cell_id)][0] / 3000.0),
+                    )
+                )
+            )
+            expected_priority = (0.65 * expected_landscape) + 0.175
             priority_max_errors[resolution] = max(
                 float(
                     (
-                        pd.to_numeric(canonical_priority[column], errors="coerce")
-                        - pd.to_numeric(legacy_priority[column], errors="coerce")
+                        pd.to_numeric(
+                            canonical_priority["landscape_priority_score"],
+                            errors="coerce",
+                        )
+                        - expected_landscape
+                    ).abs().max()
+                ),
+                *(
+                    float(
+                        (
+                            pd.to_numeric(
+                                canonical_priority[column],
+                                errors="coerce",
+                            )
+                            - expected_priority
+                        ).abs().max()
                     )
-                    .abs()
-                    .max()
-                )
-                for column in error_columns
+                    for column in (
+                        "allocation_priority_score",
+                        "technical_priority_score",
+                        "core_score",
+                    )
+                ),
+            )
+            priority_max_errors[resolution] = max(
+                priority_max_errors[resolution],
+                float(
+                    (
+                        pd.to_numeric(
+                            canonical_priority["core_score_before_allocation_priority"],
+                            errors="coerce",
+                        )
+                        - 0.5
+                    ).abs().max()
+                ),
             )
             app.distance_table_for_layer = original_priority_loader
     except Exception as exc:
@@ -1760,9 +1806,9 @@ def main() -> int:
         and priority_max_errors.keys() == {7, 6, 5}
         and max(priority_max_errors.values(), default=float("inf")) <= 1e-12,
         "Wind allocation ranking uses canonical population distances at "
-        "R7/R6/R5 without changing the accepted legacy ranking values.",
+        "R7/R6/R5 and matches the direct-R7 ranking oracle.",
         "Population allocation ranking still depends on a legacy population "
-        "loader or changed values: "
+        "loader or drifted from the direct-R7 oracle: "
         f"errors={priority_errors}, loader_calls={priority_loader_calls}, "
         f"max_errors={priority_max_errors}.",
     )

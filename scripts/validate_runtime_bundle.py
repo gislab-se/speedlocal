@@ -46,7 +46,7 @@ RELEASE_CONTRACT = (
     / "runtime"
     / "manifests"
     / "trondelag"
-    / "v2-final-runtime-r7-2026-07-30.1.json"
+    / "v2-final-runtime-r7-2026-08-04.1.json"
 )
 
 
@@ -236,9 +236,17 @@ def main() -> int:
             downloader=downloader,
         )
         report.check(
-            resolved == root.resolve() and downloader.calls == 0,
-            "A valid explicit local V2 root bypasses remote materialization.",
-            "A valid explicit local V2 root did not bypass the downloader.",
+            resolved == root.resolve()
+            and downloader.calls == 0
+            and environment.get("SPEEDLOCAL_GENERATED_ROOT") == str(resolved),
+            (
+                "A valid explicit local V2 root bypasses remote materialization "
+                "and configures generated runtime assets."
+            ),
+            (
+                "A valid explicit local V2 root did not bypass the downloader "
+                "or configure generated runtime assets."
+            ),
         )
 
         invalid_environment = {
@@ -648,13 +656,19 @@ def main() -> int:
                 }
                 release_valid = (
                     actual_paths == expected_paths
-                    and len(actual_paths) == 45
+                    and len(actual_paths) == 48
                     and environment.get("SPEEDLOCAL_V2_SOURCE_ROOT")
+                    == str(installed)
+                    and environment.get("SPEEDLOCAL_GENERATED_ROOT")
                     == str(installed)
                 )
                 previous_root = os.environ.get("SPEEDLOCAL_V2_SOURCE_ROOT")
+                previous_generated = os.environ.get(
+                    "SPEEDLOCAL_GENERATED_ROOT"
+                )
                 previous_sha = os.environ.get(RUNTIME_BUNDLE_SHA_ENV)
                 os.environ["SPEEDLOCAL_V2_SOURCE_ROOT"] = str(installed)
+                os.environ["SPEEDLOCAL_GENERATED_ROOT"] = str(installed)
                 os.environ[RUNTIME_BUNDLE_SHA_ENV] = str(
                     release_contract["archive"]["sha256"]
                 )
@@ -679,6 +693,12 @@ def main() -> int:
                         os.environ.pop("SPEEDLOCAL_V2_SOURCE_ROOT", None)
                     else:
                         os.environ["SPEEDLOCAL_V2_SOURCE_ROOT"] = previous_root
+                    if previous_generated is None:
+                        os.environ.pop("SPEEDLOCAL_GENERATED_ROOT", None)
+                    else:
+                        os.environ["SPEEDLOCAL_GENERATED_ROOT"] = (
+                            previous_generated
+                        )
                     if previous_sha is None:
                         os.environ.pop(RUNTIME_BUNDLE_SHA_ENV, None)
                     else:
@@ -688,7 +708,7 @@ def main() -> int:
                 root_app_valid = False
             report.check(
                 release_valid,
-                "The real 45-file release ZIP safely materializes from its tracked contract.",
+                "The real 48-file release ZIP safely materializes from its tracked contract.",
                 "The real release ZIP does not match or safely materialize from its contract.",
             )
             report.check(
@@ -699,6 +719,7 @@ def main() -> int:
             package_environment = os.environ.copy()
             if installed is not None:
                 package_environment["SPEEDLOCAL_V2_SOURCE_ROOT"] = str(installed)
+                package_environment["SPEEDLOCAL_GENERATED_ROOT"] = str(installed)
             package_environment.pop(RUNTIME_BUNDLE_SHA_ENV, None)
             for script_name, label in (
                 (

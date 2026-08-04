@@ -152,41 +152,14 @@
         "layer_id": "population_points",
         "expected_geometry_families": ["polygon"],
         "data_representation": "grid",
-        "distance_h3_resolution": 8,
+        "distance_provider": "generated_runtime",
+        "distance_path": "data/generated/population_r7/population_points.csv",
+        "distance_h3_resolution": 7,
         "distance_coverage": {
-          "mode": "declared_sparse",
-          "missing_policy": "zero_acceptance",
-          "expected_source_row_count": 89312,
-          "source_ids_sha256": "097b642c090af432fa1b2fa59a26f9cba4bc2b1fef1557e0d9fb5934e545d619",
-          "targets": [
-            {
-              "resolution": 7,
-              "target_cell_count": 13735,
-              "covered_cell_count": 13479,
-              "missing_cell_count": 256,
-              "outside_cell_count": 234,
-              "missing_ids_sha256": "c59d13995b67c5781815e62c4115ba04b29ef1b847e20f5a2502e0db2e21494c",
-              "outside_ids_sha256": "fc8e2c74727d694a36f78de09904c97bf0186798c97ae0e79b57e52390614099"
-            },
-            {
-              "resolution": 6,
-              "target_cell_count": 2163,
-              "covered_cell_count": 2137,
-              "missing_cell_count": 26,
-              "outside_cell_count": 50,
-              "missing_ids_sha256": "8a43bfd453e83a5f10b80e381eb1901af011d54056c3e069ba93666e38f13252",
-              "outside_ids_sha256": "a7b2063f0fa01ed901b82da20073daf139f70b16dcef458c663c471f62e229b9"
-            },
-            {
-              "resolution": 5,
-              "target_cell_count": 365,
-              "covered_cell_count": 358,
-              "missing_cell_count": 7,
-              "outside_cell_count": 7,
-              "missing_ids_sha256": "8a82aba02f7aa1b01eebf8b0315224ac2f04e797feccfc3060982dafa9a6243e",
-              "outside_ids_sha256": "2c8587ad0d33564ae0b095531f4709a6a102038af7569082c7bd52e236228924"
-            }
-          ]
+          "mode": "complete",
+          "missing_policy": "error",
+          "expected_source_row_count": 13735,
+          "source_ids_sha256": "fdea5973b898319643b7c94ad43b3480c98e639a8f378cbc23e8bc56751fcbba"
         }
       },
       "operation": "distance_exclusion",
@@ -201,7 +174,7 @@
         }
       },
       "ui": {
-        "note": "Upplöst polygonproxy för bebodda 250 m-rutor. Den accepterade avståndstabellen är centroidbaserad H3 R8.",
+        "note": "Upplöst polygonproxy för bebodda 250 m-rutor. Avstånd och intersektion beräknas direkt mot analysdomänens R7-hexagoner.",
         "source_color": "#b7532d",
         "point_radius": 70
       }
@@ -216,41 +189,14 @@
         "layer_id": "built_centre",
         "expected_geometry_families": ["polygon"],
         "data_representation": "features",
-        "distance_h3_resolution": 8,
+        "distance_provider": "generated_runtime",
+        "distance_path": "data/generated/population_r7/built_centre.csv",
+        "distance_h3_resolution": 7,
         "distance_coverage": {
-          "mode": "declared_sparse",
-          "missing_policy": "zero_acceptance",
-          "expected_source_row_count": 89312,
-          "source_ids_sha256": "097b642c090af432fa1b2fa59a26f9cba4bc2b1fef1557e0d9fb5934e545d619",
-          "targets": [
-            {
-              "resolution": 7,
-              "target_cell_count": 13735,
-              "covered_cell_count": 13479,
-              "missing_cell_count": 256,
-              "outside_cell_count": 234,
-              "missing_ids_sha256": "c59d13995b67c5781815e62c4115ba04b29ef1b847e20f5a2502e0db2e21494c",
-              "outside_ids_sha256": "fc8e2c74727d694a36f78de09904c97bf0186798c97ae0e79b57e52390614099"
-            },
-            {
-              "resolution": 6,
-              "target_cell_count": 2163,
-              "covered_cell_count": 2137,
-              "missing_cell_count": 26,
-              "outside_cell_count": 50,
-              "missing_ids_sha256": "8a43bfd453e83a5f10b80e381eb1901af011d54056c3e069ba93666e38f13252",
-              "outside_ids_sha256": "a7b2063f0fa01ed901b82da20073daf139f70b16dcef458c663c471f62e229b9"
-            },
-            {
-              "resolution": 5,
-              "target_cell_count": 365,
-              "covered_cell_count": 358,
-              "missing_cell_count": 7,
-              "outside_cell_count": 7,
-              "missing_ids_sha256": "8a82aba02f7aa1b01eebf8b0315224ac2f04e797feccfc3060982dafa9a6243e",
-              "outside_ids_sha256": "2c8587ad0d33564ae0b095531f4709a6a102038af7569082c7bd52e236228924"
-            }
-          ]
+          "mode": "complete",
+          "missing_policy": "error",
+          "expected_source_row_count": 13735,
+          "source_ids_sha256": "fdea5973b898319643b7c94ad43b3480c98e639a8f378cbc23e8bc56751fcbba"
         }
       },
       "operation": "distance_exclusion",
@@ -280,41 +226,14 @@
         "layer_id": "built_low_selection",
         "expected_geometry_families": ["point"],
         "data_representation": "features",
-        "distance_h3_resolution": 8,
+        "distance_provider": "generated_runtime",
+        "distance_path": "data/generated/population_r7/built_low_selection.csv",
+        "distance_h3_resolution": 7,
         "distance_coverage": {
-          "mode": "declared_sparse",
-          "missing_policy": "zero_acceptance",
-          "expected_source_row_count": 89312,
-          "source_ids_sha256": "097b642c090af432fa1b2fa59a26f9cba4bc2b1fef1557e0d9fb5934e545d619",
-          "targets": [
-            {
-              "resolution": 7,
-              "target_cell_count": 13735,
-              "covered_cell_count": 13479,
-              "missing_cell_count": 256,
-              "outside_cell_count": 234,
-              "missing_ids_sha256": "c59d13995b67c5781815e62c4115ba04b29ef1b847e20f5a2502e0db2e21494c",
-              "outside_ids_sha256": "fc8e2c74727d694a36f78de09904c97bf0186798c97ae0e79b57e52390614099"
-            },
-            {
-              "resolution": 6,
-              "target_cell_count": 2163,
-              "covered_cell_count": 2137,
-              "missing_cell_count": 26,
-              "outside_cell_count": 50,
-              "missing_ids_sha256": "8a43bfd453e83a5f10b80e381eb1901af011d54056c3e069ba93666e38f13252",
-              "outside_ids_sha256": "a7b2063f0fa01ed901b82da20073daf139f70b16dcef458c663c471f62e229b9"
-            },
-            {
-              "resolution": 5,
-              "target_cell_count": 365,
-              "covered_cell_count": 358,
-              "missing_cell_count": 7,
-              "outside_cell_count": 7,
-              "missing_ids_sha256": "8a82aba02f7aa1b01eebf8b0315224ac2f04e797feccfc3060982dafa9a6243e",
-              "outside_ids_sha256": "2c8587ad0d33564ae0b095531f4709a6a102038af7569082c7bd52e236228924"
-            }
-          ]
+          "mode": "complete",
+          "missing_policy": "error",
+          "expected_source_row_count": 13735,
+          "source_ids_sha256": "fdea5973b898319643b7c94ad43b3480c98e639a8f378cbc23e8bc56751fcbba"
         }
       },
       "operation": "distance_exclusion",
@@ -329,9 +248,10 @@
         }
       },
       "ui": {
-        "note": "Punktproxy baserad på fritidshuscentroider.",
+        "note": "Grov 1 km-gridproxy. Varje punkt är centrum för en SSB-ruta och representerar antalet fritidshus i rutan; läget för enskilda fritidshus är inte känt.",
         "source_color": "#eca074",
-        "point_radius": 45
+        "point_radius": 4,
+        "quality_flag": "caution"
       }
     },
     {
