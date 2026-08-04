@@ -167,6 +167,34 @@ def build_layered_hex_map_html(
     .map-legend-row {{ display: flex; align-items: center; gap: 6px; margin: 4px 0; }}
     .map-legend-swatch {{ width: 14px; height: 14px; border: 1px solid rgba(0,0,0,0.22); flex: 0 0 auto; }}
     .map-legend-swatch.circle {{ width: 10px; height: 10px; border-radius: 999px; margin: 2px; }}
+    .map-interaction-control a {{
+      align-items: center;
+      color: #333;
+      display: flex;
+      height: 30px;
+      justify-content: center;
+      line-height: 30px;
+      width: 30px;
+    }}
+    .map-interaction-control a.is-active {{
+      background: #e8f0fe;
+      box-shadow: inset 3px 0 0 #2563eb;
+      color: #1d4ed8;
+    }}
+    .map-interaction-control svg {{
+      fill: none;
+      height: 18px;
+      pointer-events: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.8;
+      width: 18px;
+    }}
+    #map.map-pan-mode .leaflet-pane canvas,
+    #map.map-pan-mode .leaflet-pane svg {{ pointer-events: none !important; }}
+    #map.map-inspect-mode,
+    #map.map-inspect-mode .leaflet-interactive {{ cursor: crosshair; }}
   </style>
 </head>
 <body>
@@ -259,6 +287,14 @@ def build_layered_hex_map_html(
       return null;
     }}
 
+    function readSavedInteractionMode() {{
+      if (!viewStorage || !mapStateKey) {{
+        return 'pan';
+      }}
+      const storedMode = viewStorage.getItem(storageKey('interaction-mode'));
+      return storedMode === 'inspect' ? 'inspect' : 'pan';
+    }}
+
     function storeMapView() {{
       if (!viewStorage || !mapStateKey) {{
         return;
@@ -279,6 +315,40 @@ def build_layered_hex_map_html(
     const mapStartCenter = savedView ? [savedView.lat, savedView.lng] : defaultCenter;
     const mapStartZoom = savedView ? savedView.zoom : {int(zoom)};
     const map = L.map('map', {{ preferCanvas: true }}).setView(mapStartCenter, mapStartZoom);
+    let interactionMode = readSavedInteractionMode();
+    let panModeButton = null;
+    let inspectModeButton = null;
+
+    function storeInteractionMode() {{
+      if (viewStorage && mapStateKey) {{
+        viewStorage.setItem(storageKey('interaction-mode'), interactionMode);
+      }}
+    }}
+
+    function setInteractionMode(nextMode) {{
+      interactionMode = nextMode === 'inspect' ? 'inspect' : 'pan';
+      const inspectEnabled = interactionMode === 'inspect';
+      const mapContainer = map.getContainer();
+      mapContainer.classList.toggle('map-pan-mode', !inspectEnabled);
+      mapContainer.classList.toggle('map-inspect-mode', inspectEnabled);
+      if (inspectEnabled) {{
+        map.dragging.disable();
+      }} else {{
+        map.dragging.enable();
+        map.closeTooltip();
+        map.closePopup();
+      }}
+      if (panModeButton) {{
+        panModeButton.classList.toggle('is-active', !inspectEnabled);
+        panModeButton.setAttribute('aria-pressed', String(!inspectEnabled));
+      }}
+      if (inspectModeButton) {{
+        inspectModeButton.classList.toggle('is-active', inspectEnabled);
+        inspectModeButton.setAttribute('aria-pressed', String(inspectEnabled));
+      }}
+      storeInteractionMode();
+      return interactionMode;
+    }}
 
     const osm = L.tileLayer('https://{{s}}.tile.openstreetmap.org/{{z}}/{{x}}/{{y}}.png', {{
       maxZoom: 20,
@@ -619,6 +689,49 @@ def build_layered_hex_map_html(
     L.control.layers({{ 'OSM': osm, 'Satellite': satellite }}, overlays, {{ collapsed: true }}).addTo(map);
     L.control.scale({{ metric: true, imperial: false, maxWidth: 160 }}).addTo(map);
 
+    function createInteractionButton(container, modeValue, label, iconHtml) {{
+      const button = L.DomUtil.create('a', 'map-interaction-button', container);
+      button.href = '#';
+      button.innerHTML = iconHtml;
+      button.title = label;
+      button.setAttribute('aria-label', label);
+      button.setAttribute('aria-pressed', 'false');
+      button.setAttribute('role', 'button');
+      L.DomEvent.on(button, 'click', function(event) {{
+        L.DomEvent.stop(event);
+        setInteractionMode(modeValue);
+      }});
+      L.DomEvent.on(button, 'keydown', function(event) {{
+        if (event.key === ' ' || event.key === 'Enter') {{
+          L.DomEvent.stop(event);
+          setInteractionMode(modeValue);
+        }}
+      }});
+      return button;
+    }}
+
+    const interactionControl = L.control({{ position: 'topleft' }});
+    interactionControl.onAdd = function() {{
+      const container = L.DomUtil.create('div', 'leaflet-bar map-interaction-control');
+      panModeButton = createInteractionButton(
+        container,
+        'pan',
+        'Panorera kartan',
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 11V7a1.5 1.5 0 0 1 3 0v3M10.5 10V5.5a1.5 1.5 0 0 1 3 0V10M13.5 10V7a1.5 1.5 0 0 1 3 0v4M7.5 10.5 6 9.5a1.6 1.6 0 0 0-2.1 2.4l4.5 6.2A4.5 4.5 0 0 0 12 20h1.5a5 5 0 0 0 5-5v-4.5a1.5 1.5 0 0 0-3 0V12"/></svg>'
+      );
+      inspectModeButton = createInteractionButton(
+        container,
+        'inspect',
+        'Granska kartobjekt',
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 10.5V16M12 7.5h.01"/></svg>'
+      );
+      L.DomEvent.disableClickPropagation(container);
+      L.DomEvent.disableScrollPropagation(container);
+      return container;
+    }};
+    interactionControl.addTo(map);
+    setInteractionMode(interactionMode);
+
     function storeOverlayVisibility() {{
       if (!viewStorage || !mapStateKey) {{
         return;
@@ -710,6 +823,8 @@ def build_layered_hex_map_html(
       const record = layerRecords.find(function(item) {{ return item.name === wanted; }});
       return record ? recordLayerFeatureCount(record.layer) : 0;
     }};
+    window.__potentialMapSetInteractionMode = setInteractionMode;
+    window.__potentialMapInteractionMode = function() {{ return interactionMode; }};
 
     const note = L.control({{ position: 'topright' }});
     note.onAdd = function() {{

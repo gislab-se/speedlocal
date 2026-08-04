@@ -37,6 +37,7 @@ from acceptance_model.layers import (  # noqa: E402
     layer_status_table,
     load_registry,
 )
+from potential_model.map_rendering import build_layered_hex_map_html  # noqa: E402
 from potential_model.manifests import load_region, v2_source_root  # noqa: E402
 from potential_model.speedlocal_bridge import (  # noqa: E402
     culture_control_contract,
@@ -144,6 +145,43 @@ def _app_failures(app: AppTest) -> tuple[list[str], list[str]]:
     return (
         [str(item.value) for item in app.exception],
         [str(item.value) for item in app.error],
+    )
+
+
+def _check_map_interaction_control(report: Report) -> None:
+    map_html = build_layered_hex_map_html(
+        [
+            {
+                "name": "Testlager",
+                "feature_collection": {
+                    "type": "FeatureCollection",
+                    "features": [],
+                },
+            }
+        ],
+        center=[63.4, 10.4],
+        zoom=7,
+        map_state_key="interaction-control-test",
+    )
+    required_contract = (
+        "map-interaction-control",
+        "Panorera kartan",
+        "Granska kartobjekt",
+        "setInteractionMode(modeValue)",
+        "map.dragging.enable()",
+        "map.dragging.disable()",
+        "setInteractionMode(interactionMode)",
+        "storageKey('interaction-mode')",
+        "__potentialMapSetInteractionMode",
+        "map-pan-mode .leaflet-pane canvas",
+        "map.closeTooltip()",
+    )
+    report.check(
+        all(marker in map_html for marker in required_contract),
+        "The map exposes a local QGIS-style pan/inspect control below zoom "
+        "without a Streamlit rerun.",
+        "The map pan/inspect control contract is incomplete: "
+        + ", ".join(marker for marker in required_contract if marker not in map_html),
     )
 
 
@@ -1617,6 +1655,7 @@ def _check_missing_source_root(report: Report) -> None:
 
 def main() -> int:
     report = Report()
+    _check_map_interaction_control(report)
     _check_missing_source_root(report)
     source_root = v2_source_root()
     report.note(f"{V2_SOURCE_ROOT_ENV}: {os.environ.get(V2_SOURCE_ROOT_ENV, '<not set>')}")
