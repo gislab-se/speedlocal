@@ -40,6 +40,15 @@
         "expanded_by_default": false,
         "blend_default": 60,
         "group_color": "#844e94"
+      },
+      {
+        "id": "grid_infrastructure",
+        "label": "Elinfrastruktur / nätanslutning",
+        "analysis_label": "Största anslutningsavstånd",
+        "interpretation": "För långt bort är dåligt. Valda lednings-, kabel- och punktkällor kombineras till en gemensam närhetsbaserad genomförbarhet.",
+        "expanded_by_default": true,
+        "blend_default": 50,
+        "group_color": "#227371"
       }
     ]
   },
@@ -412,6 +421,93 @@
         "note": "Värdefulla kulturlandskap från norska Miljødirektoratet.",
         "source_color": "#9c65ab",
         "point_radius": 45
+      }
+    },
+    {
+      "id": "high_voltage_lines",
+      "label": "Högspänningsledningar",
+      "group_id": "grid_infrastructure",
+      "source": {
+        "provider": "v2_archive",
+        "asset_manifest": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/asset_manifest.csv",
+        "layer_id": "high_voltage_lines",
+        "expected_geometry_families": ["line"],
+        "data_representation": "network",
+        "distance_h3_resolution": 7
+      },
+      "operation": "proximity_feasibility",
+      "parameters": {
+        "buffer_m": {
+          "type": "number",
+          "unit": "m",
+          "default": 2000,
+          "minimum": 500,
+          "maximum": 15000,
+          "step": 250
+        }
+      },
+      "ui": {
+        "note": "NVE:s transmissionsnät från den verifierade källan i UTM 32.",
+        "source_color": "#116c6a",
+        "point_radius": 40
+      }
+    },
+    {
+      "id": "underground_cables",
+      "label": "Markkablar",
+      "group_id": "grid_infrastructure",
+      "source": {
+        "provider": "v2_archive",
+        "asset_manifest": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/asset_manifest.csv",
+        "layer_id": "underground_cables",
+        "expected_geometry_families": ["line"],
+        "data_representation": "network",
+        "distance_h3_resolution": 7
+      },
+      "operation": "proximity_feasibility",
+      "parameters": {
+        "buffer_m": {
+          "type": "number",
+          "unit": "m",
+          "default": 2000,
+          "minimum": 500,
+          "maximum": 15000,
+          "step": 250
+        }
+      },
+      "ui": {
+        "note": "Den verifierade Trøndelag-källan innehåller NVE:s sjö- och undervattenskablar.",
+        "source_color": "#399896",
+        "point_radius": 40
+      }
+    },
+    {
+      "id": "existing_wind_turbines",
+      "label": "Befintliga vindkraftverk",
+      "group_id": "grid_infrastructure",
+      "source": {
+        "provider": "v2_archive",
+        "asset_manifest": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/asset_manifest.csv",
+        "layer_id": "existing_wind_turbines",
+        "expected_geometry_families": ["point"],
+        "data_representation": "features",
+        "distance_h3_resolution": 7
+      },
+      "operation": "proximity_feasibility",
+      "parameters": {
+        "buffer_m": {
+          "type": "number",
+          "unit": "m",
+          "default": 2000,
+          "minimum": 500,
+          "maximum": 15000,
+          "step": 250
+        }
+      },
+      "ui": {
+        "note": "NVE:s punktlager med befintliga vindkraftverk som möjlig anslutningsproxy.",
+        "source_color": "#1eaa96",
+        "point_radius": 4
       }
     }
   ]

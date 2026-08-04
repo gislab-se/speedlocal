@@ -60,10 +60,10 @@
 
 - Implement the five standard groups in this order: roads, population, nature,
   culture, grid infrastructure.
-- The complete public roads, population, nature, and culture behaviors are
-  locally promoted but unpublished. Their canonical Trøndelag R7/R6/R5 controls,
-  calculations, source/buffer previews, and regression gates must remain
-  unchanged.
+- The complete public roads, population, nature, culture, and grid-
+  infrastructure behaviors are locally promoted but unpublished. Their
+  canonical Trøndelag R7/R6/R5 controls, calculations, source/buffer previews,
+  and regression gates must remain unchanged.
 - The complete current Trøndelag `protected_areas` source is manifest-declared
   under canonical `nature`, and its generic binary hard-exclusion behavior is
   locally promoted after approved localhost review on 2026-08-03. The public
@@ -75,15 +75,21 @@
   hard-exclusion automated gates pass at R7/R6/R5. The redundant wind culture
   group toggle, advanced-source adapter, and legacy distance paths are removed
   for Trøndelag. Localhost visual review was approved on 2026-08-03, so the
-  slice is locally promoted. Grid infrastructure is the next planned slice;
-  begin it only from a new dated daily plan and preserve all four promoted
-  groups' regression gates.
+  slice is locally promoted.
+- The complete current Trøndelag grid-infrastructure slice is
+  manifest-declared under canonical `grid_infrastructure` with three sources
+  and generic `proximity_feasibility` at R7/R6/R5. Its automated engine,
+  frozen-reference, preview, and real-app gates pass on 2026-08-04. The legacy
+  wind `electrical` path is removed for Trøndelag. Clean-process localhost
+  review was approved on 2026-08-04, so the slice is locally promoted.
 - The promoted population parity path currently aggregates frozen-V2 R8
   distance observations to R7/R6/R5. Treat the use of R8 as a known potential
   modeling problem: before the combined-result slice is locally promoted,
   evaluate and replace it with a direct calculation against the declared R7
   analysis domain, derive R6/R5 from R7, quantify any intentional frozen-V2
   drift, and secure new accepted-reference evidence.
+- The population R8-to-direct-R7 correction is the next planned increment.
+  The combined-result slice follows only after that corrective gate passes.
 - Bornholm source and engine contracts may validate in parallel as onboarding
   diagnostics, but they do not block Trøndelag slice promotion.
 - Do not implement regional exceptions yet.

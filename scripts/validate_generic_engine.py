@@ -154,6 +154,21 @@ CULTURE_SELECTION_EXPECTATIONS = {
         5: {0.0: (212 / 365, 153), 250.0: (212 / 365, 153), 1000.0: (212 / 365, 153), 1500.0: (205 / 365, 160)},
     },
 }
+GRID_LAYER_IDS = (
+    "high_voltage_lines",
+    "underground_cables",
+    "existing_wind_turbines",
+)
+GRID_FIXED_ANCHORS = {
+    (("high_voltage_lines",), 7, 500.0): (0.34692391700036, 8_970, 15_626.037306365233),
+    (("high_voltage_lines",), 7, 2000.0): (0.38929144521296, 6_732, 17_534.576905796115),
+    (("high_voltage_lines",), 7, 15000.0): (0.78842961970635, 364, 35_596.448814965464),
+    (("high_voltage_lines",), 6, 2000.0): (0.60600873786408, 711, 28_150.881843896183),
+    (("high_voltage_lines",), 5, 2000.0): (0.79991726027397, 61, 39_981.102141200048),
+    (GRID_LAYER_IDS, 7, 2000.0): (0.39481352384419, 6_673, 17_780.848461686470),
+    (GRID_LAYER_IDS, 6, 2000.0): (0.61125457697642, 702, 28_295.255871122208),
+    (GRID_LAYER_IDS, 5, 2000.0): (0.80542534246575, 59, 40_000.610596470484),
+}
 
 
 def _v2_roads_oracle(contract, threshold: float) -> tuple[int, int, float]:
@@ -211,8 +226,9 @@ def _v2_distance_selection_rollup_oracle(
     target_resolution: int,
     target_cell_ids: tuple[str, ...],
     missing_distance_policy: str = "error",
+    analysis_kind: str = "distance_conflict",
 ) -> dict[str, tuple[float | None, bool, bool, float]]:
-    """Independently reproduce frozen raw-distance rollup and soft acceptance."""
+    """Independently reproduce frozen raw-distance rollup and acceptance."""
     rolled: dict[str, tuple[float, bool]] = {}
     for layer_id in layer_ids:
         path = resolve_layer_assets(contract.layers[layer_id]).distance_path
@@ -259,20 +275,34 @@ def _v2_distance_selection_rollup_oracle(
                 raise ValueError(f"Oracle is missing analysis cell: {cell_id}")
         else:
             distance, intersects = rolled[cell_id]
-        blocked = intersects or (
-            distance is not None and distance <= threshold
-        )
-        if intersects:
-            acceptance = 0.0
-        elif distance is None:
-            acceptance = 0.0
-        elif threshold <= 0:
-            acceptance = 1.0
-        else:
-            acceptance = max(
-                0.0,
-                min(1.0, (distance - threshold) / (ramp_end - threshold)),
+        if analysis_kind == "proximity_feasibility":
+            blocked = (distance is None and not intersects) or (
+                not intersects and distance > threshold
             )
+            if intersects:
+                acceptance = 1.0
+            elif distance is None:
+                acceptance = 0.0
+            else:
+                acceptance = max(
+                    0.0,
+                    min(1.0, 1.0 - (distance / max(threshold, 1.0))),
+                )
+        else:
+            blocked = intersects or (
+                distance is not None and distance <= threshold
+            )
+            if intersects:
+                acceptance = 0.0
+            elif distance is None:
+                acceptance = 0.0
+            elif threshold <= 0:
+                acceptance = 1.0
+            else:
+                acceptance = max(
+                    0.0,
+                    min(1.0, (distance - threshold) / (ramp_end - threshold)),
+                )
         oracle[cell_id] = (distance, intersects, blocked, acceptance)
     return oracle
 
@@ -767,6 +797,43 @@ def main() -> int:
             "Unknown geometry-validity policy did not fail closed"
         )
     checks += 1
+
+    grid_layers = tuple(
+        validate_layer(trondelag.layers[layer_id])
+        for layer_id in GRID_LAYER_IDS
+    )
+    assert all(
+        layer.contract.group_id == "grid_infrastructure"
+        and layer.contract.operation == "proximity_feasibility"
+        and layer.contract.source.distance_h3_resolution == 7
+        for layer in grid_layers
+    )
+    assert [layer.geometry_family for layer in grid_layers] == [
+        "line",
+        "line",
+        "point",
+    ]
+    assert [layer.processing_adapter for layer in grid_layers] == [
+        "line_generic",
+        "line_generic",
+        "point_generic",
+    ]
+    assert [layer.assets.feature_count for layer in grid_layers] == [
+        16_932,
+        330,
+        470,
+    ]
+    assert all(
+        (
+            layer.contract.parameters["buffer_m"].default,
+            layer.contract.parameters["buffer_m"].minimum,
+            layer.contract.parameters["buffer_m"].maximum,
+            layer.contract.parameters["buffer_m"].step,
+        )
+        == (2000.0, 500.0, 15000.0, 250.0)
+        for layer in grid_layers
+    )
+    checks += 5
 
     try:
         validate_layer(
@@ -1365,6 +1432,98 @@ def main() -> int:
                     f"PASS trondelag {'+'.join(layer_ids)} R{resolution} "
                     f"{threshold:g} m: {group.cell_count} cells, "
                     f"{group.blocked_cell_count} blocked, "
+                    f"{group.mean_acceptance:.15f} mean acceptance"
+                )
+
+    grid_selections = tuple((layer_id,) for layer_id in GRID_LAYER_IDS) + (
+        GRID_LAYER_IDS,
+    )
+    for layer_ids in grid_selections:
+        for resolution in (7, 6, 5):
+            target_cell_ids = display_cell_ids_by_resolution[resolution]
+            for threshold in (500.0, 2000.0, 15000.0):
+                oracle = _v2_distance_selection_rollup_oracle(
+                    trondelag,
+                    layer_ids,
+                    threshold,
+                    7,
+                    resolution,
+                    target_cell_ids,
+                    analysis_kind="proximity_feasibility",
+                )
+                result = run_analysis(
+                    "trondelag",
+                    "wind",
+                    list(layer_ids),
+                    {
+                        layer_id: {"buffer_m": threshold}
+                        for layer_id in layer_ids
+                    },
+                    target_resolution=resolution,
+                )
+                group = result.groups[0]
+                actual = {
+                    cell.cell_id: (
+                        cell.min_distance_m,
+                        cell.any_intersection,
+                        cell.blocked,
+                        cell.acceptance,
+                    )
+                    for cell in group.cells
+                }
+                assert all(
+                    layer.operation == "proximity_feasibility"
+                    for layer in result.layers
+                )
+                assert group.group_id == "grid_infrastructure"
+                assert group.layer_ids == layer_ids
+                assert group.cell_count == TRONDELAG_DISPLAY_COUNTS[resolution]
+                assert actual.keys() == oracle.keys()
+                assert all(
+                    actual[cell_id][:3] == values[:3]
+                    and abs(actual[cell_id][3] - values[3]) < 1e-12
+                    for cell_id, values in oracle.items()
+                )
+                expected_blocked = sum(values[2] for values in oracle.values())
+                expected_mean = math.fsum(
+                    values[3] for values in oracle.values()
+                ) / len(oracle)
+                model_area_km2 = math.fsum(
+                    values[3] * area_by_resolution[resolution][cell_id]
+                    for cell_id, values in oracle.items()
+                )
+                assert group.blocked_cell_count == expected_blocked
+                assert math.isclose(
+                    group.mean_acceptance,
+                    expected_mean,
+                    rel_tol=0.0,
+                    abs_tol=1e-12,
+                )
+                fixed = GRID_FIXED_ANCHORS.get(
+                    (layer_ids, resolution, threshold)
+                )
+                if fixed is not None:
+                    fixed_mean, fixed_zero, fixed_area = fixed
+                    assert math.isclose(
+                        group.mean_acceptance,
+                        fixed_mean,
+                        rel_tol=0.0,
+                        abs_tol=1e-12,
+                    )
+                    assert sum(
+                        values[3] == 0.0 for values in oracle.values()
+                    ) == fixed_zero
+                    assert math.isclose(
+                        model_area_km2,
+                        fixed_area,
+                        rel_tol=1e-12,
+                        abs_tol=1e-8,
+                    )
+                checks += 10 + (3 if fixed is not None else 0)
+                print(
+                    f"PASS trondelag {'+'.join(layer_ids)} R{resolution} "
+                    f"{threshold:g} m: {group.cell_count} cells, "
+                    f"{group.blocked_cell_count} infeasible, "
                     f"{group.mean_acceptance:.15f} mean acceptance"
                 )
 

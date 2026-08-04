@@ -41,6 +41,7 @@ from potential_model.manifests import load_region, v2_source_root  # noqa: E402
 from potential_model.speedlocal_bridge import (  # noqa: E402
     culture_control_contract,
     default_wind_layer_selection,
+    grid_control_contract,
     nature_control_contract,
     population_control_contract,
     public_wind_group_ids,
@@ -159,15 +160,28 @@ def _ready_public_ui_contract(
 ) -> tuple[set[str], set[str], set[str], set[str]]:
     registry_groups, registry_layers, registry_meta = load_registry(region_id)
     public_group_ids = set(public_wind_group_ids(region_id))
-    manifest_public_group_ids = {"roads", "population", "nature", "culture"}
+    manifest_public_group_ids = {
+        "roads",
+        "population",
+        "nature",
+        "culture",
+        "grid_infrastructure",
+    }
     legacy_public_group_ids = public_group_ids - manifest_public_group_ids
     roads_group = roads_control_contract(region_id)
     population_group = population_control_contract(region_id)
     nature_group = nature_control_contract(region_id)
     culture_group = culture_control_contract(region_id)
+    grid_group = grid_control_contract(region_id)
     manifest_layer_ids = {
         layer.id
-        for group in (roads_group, population_group, nature_group, culture_group)
+        for group in (
+            roads_group,
+            population_group,
+            nature_group,
+            culture_group,
+            grid_group,
+        )
         for layer in group.layers
     }
     status_frame = layer_status_table(registry_meta)
@@ -195,7 +209,13 @@ def _ready_public_ui_contract(
     }
     ready_layer_ids.update(
         layer.id
-        for group in (roads_group, population_group, nature_group, culture_group)
+        for group in (
+            roads_group,
+            population_group,
+            nature_group,
+            culture_group,
+            grid_group,
+        )
         for layer in group.layers
         if layer.ready
     )
@@ -213,6 +233,8 @@ def _ready_public_ui_contract(
         ready_group_ids.add("nature")
     if any(layer.ready for layer in culture_group.layers):
         ready_group_ids.add("culture")
+    if any(layer.ready for layer in grid_group.layers):
+        ready_group_ids.add("grid_infrastructure")
     public_layer_ids = {
         str(layer_id)
         for layer_id, layer in registry_layers.items()
@@ -446,6 +468,44 @@ def _check_manifest_empty_start_and_public_controls(
             f"max={culture_slider.max}, step={culture_slider.step}.",
         )
 
+    try:
+        grid_slider = _by_key(
+            app.slider,
+            f"{WIND_ANALYSIS_KEY_PREFIX}grid_infrastructure",
+        )
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            f"{region_id}: manifest-backed grid slider is unavailable: {exc}",
+        )
+    else:
+        report.check(
+            not grid_slider.disabled
+            and int(grid_slider.value) == 2000
+            and int(grid_slider.min) == 500
+            and int(grid_slider.max) == 15000
+            and int(grid_slider.step) == 250,
+            f"{region_id}: grid infrastructure uses the manifest-backed "
+            "500/15000/250 proximity-feasibility contract.",
+            f"{region_id}: grid parameter contract drifted: "
+            f"disabled={grid_slider.disabled}, value={grid_slider.value}, "
+            f"min={grid_slider.min}, max={grid_slider.max}, "
+            f"step={grid_slider.step}.",
+        )
+
+    grid_layers = {
+        layer.id: layer for layer in grid_control_contract(region_id).layers
+    }
+    turbine_layer = grid_layers.get("existing_wind_turbines")
+    report.check(
+        turbine_layer is not None and int(turbine_layer.point_radius) == 4,
+        f"{region_id}: the manifest renders existing wind turbines as compact "
+        "4 px source markers, not map-scale discs.",
+        f"{region_id}: the existing-wind-turbine source marker radius drifted: "
+        f"{None if turbine_layer is None else turbine_layer.point_radius}.",
+    )
+
     visual_ids = (
         _element_ids(app.toggle, WIND_VISUAL_SOURCE_KEY_PREFIX)
         | _element_ids(app.toggle, WIND_VISUAL_BUFFER_KEY_PREFIX)
@@ -513,7 +573,7 @@ def _check_manifest_empty_start_and_public_controls(
             app,
             "potential_start_default_version_trondelag",
         )
-        == "manifest_culture_group_v1"
+        == "manifest_grid_group_v1"
         and not any(
             item.key == "wind_control__group__settlement"
             for item in app.checkbox
@@ -1360,6 +1420,145 @@ def _check_culture_slice(report: Report) -> None:
     )
 
 
+def _check_grid_infrastructure_slice(report: Report) -> None:
+    app = AppTest.from_file(str(APP_PATH), default_timeout=120)
+    app.query_params["region"] = TRONDELAG_REGION_ID
+    app.run(timeout=120)
+    initial_exceptions, initial_errors = _app_failures(app)
+    if initial_exceptions or initial_errors:
+        report.check(
+            False,
+            "",
+            "trondelag: grid-infrastructure slice setup failed: "
+            f"exceptions={initial_exceptions}, errors={initial_errors}",
+        )
+        return
+
+    checkbox_by_key = {
+        str(item.key or ""): str(item.label)
+        for item in app.checkbox
+    }
+    grid_layer_ids = (
+        "high_voltage_lines",
+        "underground_cables",
+        "existing_wind_turbines",
+    )
+    report.check(
+        checkbox_by_key.get("wind_control__layer__high_voltage_lines")
+        == "Högspänningsledningar"
+        and checkbox_by_key.get("wind_control__layer__underground_cables")
+        == "Markkablar"
+        and checkbox_by_key.get("wind_control__layer__existing_wind_turbines")
+        == "Befintliga vindkraftverk"
+        and "wind_control__group__grid_infrastructure" not in checkbox_by_key
+        and "wind_control__group__electrical" not in checkbox_by_key,
+        "trondelag: grid infrastructure exposes all three manifest sources "
+        "directly without a legacy or redundant group checkbox.",
+        "trondelag: simplified grid control drifted: "
+        f"checkboxes={checkbox_by_key}.",
+    )
+
+    try:
+        _select_wind_group_layers(
+            app,
+            "grid_infrastructure",
+            grid_layer_ids,
+        )
+        grid_slider = _by_key(
+            app.slider,
+            "wind_control__analysis__grid_infrastructure",
+        )
+        grid_slider.set_value(2000)
+        _wind_apply_button(app).click().run(timeout=120)
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            f"trondelag: grid-infrastructure controls failed: {exc}",
+        )
+        return
+
+    first_exceptions, first_errors = _app_failures(app)
+    selected = _session_state_value(app, WIND_SELECTION_STATE_KEY)
+    first_share, first_share_error = _safe_wind_share_pct(app)
+    report.check(
+        not first_exceptions
+        and not first_errors
+        and isinstance(selected, dict)
+        and selected.get("grid_infrastructure") == list(grid_layer_ids)
+        and not any(
+            layer_ids
+            for group_id, layer_ids in selected.items()
+            if group_id != "grid_infrastructure"
+        )
+        and first_share is not None
+        and abs(first_share - 39.5) <= 0.05,
+        "trondelag: all three grid sources render canonical R7 proximity "
+        "feasibility at 2000 m (39.5%).",
+        "trondelag: combined grid R7/2000 m drifted: "
+        f"selection={selected}, share={first_share}, "
+        f"share_error={first_share_error}, exceptions={first_exceptions}, "
+        f"errors={first_errors}.",
+    )
+    if first_share is None or first_exceptions or first_errors:
+        return
+
+    if not _check_wind_map_review_toggles(
+        report,
+        app,
+        expected_share=39.5,
+        group_id="grid_infrastructure",
+        group_label="grid infrastructure",
+    ):
+        return
+
+    grid_slider = _by_key(
+        app.slider,
+        "wind_control__analysis__grid_infrastructure",
+    )
+    grid_slider.set_value(15000)
+    _wind_apply_button(app).click().run(timeout=120)
+    try:
+        _by_key(
+            app.radio,
+            "combined_h3_display_mode",
+        ).set_value("selected").run(timeout=120)
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            f"trondelag: grid resolution mode failed: {exc}",
+        )
+        return
+    expected_by_resolution = {7: 79.0, 6: 85.4, 5: 90.5}
+    observed: dict[int, float | None] = {}
+    resolution_errors: list[str] = []
+    for resolution, expected_share in expected_by_resolution.items():
+        _by_key(app.radio, "combined_h3_resolution").set_value(
+            resolution
+        ).run(timeout=120)
+        exceptions, errors = _app_failures(app)
+        share, share_error = _safe_wind_share_pct(app)
+        observed[resolution] = share
+        if (
+            exceptions
+            or errors
+            or share is None
+            or abs(share - expected_share) > 0.05
+        ):
+            resolution_errors.append(
+                f"R{resolution}: share={share}, share_error={share_error}, "
+                f"exceptions={exceptions}, errors={errors}"
+            )
+    report.check(
+        not resolution_errors,
+        "trondelag: the 15000 m grid proximity operation uses canonical "
+        "R7/R6/R5 behavior (79.0/85.4/90.5%).",
+        "trondelag: grid R7/R6/R5 behavior drifted: "
+        f"observed={observed}, errors={resolution_errors}.",
+    )
+
+
 def _check_missing_source_root(report: Report) -> None:
     configured = os.environ.pop(V2_SOURCE_ROOT_ENV, None)
     app = None
@@ -1439,6 +1638,7 @@ def main() -> int:
     _check_population_slice(report)
     _check_nature_slice(report)
     _check_culture_slice(report)
+    _check_grid_infrastructure_slice(report)
     return report.emit()
 
 

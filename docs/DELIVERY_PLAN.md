@@ -46,8 +46,11 @@ gate later the same day, so a bounded primary-population increment began on
 31 July. The complete population slice passed its local-promotion gate early
 on 3 August, so the first bounded nature increment began the same day. The
 complete nature slice passed its local-promotion gate later on 3 August, so
-the complete-current-group culture candidate began the same day, ahead of its
-original 11 August start. The later slice order and final culture target date
+the complete-current-group culture candidate began and passed local promotion
+the same day. The complete grid-infrastructure candidate then began on
+4 August and passed local promotion the same day, ahead of its original 13
+August start. The population R8-to-direct-R7 correction is the next increment
+before combined-result work. The later slice order and final delivery date
 remain unchanged.
 
 ## Branch and publication cadence
@@ -118,8 +121,8 @@ Current milestone status:
   final control uses manifest layer order for primary-versus-optional
   placement, and dead population cases in the legacy wind renderers are
   removed. Clean-process localhost review was approved on 2026-08-03, so the
-  complete population slice is locally promoted but unpublished. Nature is
-  now in progress.
+  complete population slice is locally promoted but unpublished. Subsequent
+  nature, culture, and grid-infrastructure slices are also locally promoted.
 - Nature first increment: the Trøndelag `protected_areas` polygon source is
   manifest-declared under canonical `nature` and runs through generic binary
   `hard_exclusion` at R7/R6/R5. The old public wind `protected` alias and
@@ -140,15 +143,26 @@ Current milestone status:
   vector-preview, real-Streamlit, runtime, guardrail, delivery, and frozen
   archive gates pass. Clean-process localhost review was approved on
   2026-08-03, so the complete current culture slice is locally promoted but
-  unpublished. Grid infrastructure is next.
+  unpublished.
+- Grid-infrastructure complete current slice: `high_voltage_lines`,
+  `underground_cables`, and `existing_wind_turbines` are manifest-declared
+  under canonical `grid_infrastructure` and run through generic
+  `proximity_feasibility` at R7/R6/R5. The legacy Trøndelag wind `electrical`
+  selection and calculation/preview/ranking fallthrough are removed. Exact
+  source vectors and a fast R7 analysis-cell feasibility review layer are
+  available in map review. Automated engine, frozen-reference, preview, and
+  real-Streamlit gates pass on 2026-08-04. The user approved the corrected
+  clean-process localhost review on the same date, so the complete current
+  slice is locally promoted but unpublished.
 - Population R7 correction: the locally promoted frozen-V2 parity path starts
   from R8 distance rows and rolls them up to R7/R6/R5. This is a known
   potential modeling problem rather than the desired final R7 contract.
   Before combined-result local promotion, calculate population directly
   against the manifest-declared R7 domain, derive R6/R5 from R7, quantify and
   explicitly accept any frozen-reference drift, and rerun the complete
-  regression gate. No population calculation changes in the culture
-  promotion checkpoint.
+  regression gate. This correction is the exact next increment before the
+  combined-result slice; no population calculation changes are part of the
+  grid-infrastructure promotion checkpoint.
 - Shared potential-area semantics: decision recorded on 2026-08-03. The
   promoted roads/population soft-distance percentages remain frozen-V2 parity
   proxies until the planned combined-result and wind/solar phases replace

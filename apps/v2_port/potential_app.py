@@ -81,12 +81,14 @@ from potential_model.social_acceptance import (  # noqa: E402
 )
 from potential_model.speedlocal_bridge import (  # noqa: E402
     CANONICAL_CULTURE_GROUP_ID,
+    CANONICAL_GRID_GROUP_ID,
     CANONICAL_NATURE_GROUP_ID,
     CANONICAL_POPULATION_GROUP_ID,
     CANONICAL_ROADS_GROUP_ID,
     WindGroupControlContract,
     WindLayerControlContract,
     canonical_culture_layer_ids,
+    canonical_grid_layer_ids,
     canonical_nature_layer_ids,
     canonical_population_layer_ids,
     canonical_road_layer_ids,
@@ -95,6 +97,9 @@ from potential_model.speedlocal_bridge import (  # noqa: E402
     culture_control_contract,
     culture_source_geojson,
     default_wind_layer_selection,
+    grid_acceptance_frame,
+    grid_control_contract,
+    grid_source_geojson,
     nature_acceptance_frame,
     nature_control_contract,
     nature_source_geojson,
@@ -229,7 +234,7 @@ SOLAR_APPLIED_CONFIG_KEY = "solar_applied_config"
 START_DEFAULT_VERSION_KEY = "potential_start_default_version"
 # Reset pre-migration browser sessions once so removed population and culture
 # adapter state cannot reach their canonical manifest boundaries.
-START_DEFAULT_VERSION = "manifest_culture_group_v1"
+START_DEFAULT_VERSION = "manifest_grid_group_v1"
 WIND_EMPTY_SELECTION_ACTIVE_KEY = "wind_empty_selection_active"
 WIND_CONTROL_LANGUAGE = "sv"
 WIND_RUNTIME_BASE_RESOLUTION = 10
@@ -265,6 +270,8 @@ WIND_NATURE_GROUP_ID = CANONICAL_NATURE_GROUP_ID
 WIND_NATURE_PARAM_KEY = "protected_buffer_m"
 WIND_CULTURE_GROUP_ID = CANONICAL_CULTURE_GROUP_ID
 WIND_CULTURE_GROUP_LABEL = "kulturmiljöer"
+WIND_GRID_GROUP_ID = CANONICAL_GRID_GROUP_ID
+WIND_GRID_PARAM_KEY = "grid_max_distance_m"
 WIND_REINDEER_GROUP_ID = "reindeer"
 WIND_REINDEER_GROUP_LABEL = "rennäring / reindrift"
 SOLAR_PROTECTED_GROUP_ID = "protected"
@@ -6347,11 +6354,19 @@ def _wind_filter_buffer_layer(
             WIND_CULTURE_GROUP_ID,
         )
     )
+    is_grid_group = (
+        str(group_id) == WIND_GRID_GROUP_ID
+        and canonical_wind_group_is_declared(
+            str(region_id),
+            WIND_GRID_GROUP_ID,
+        )
+    )
     is_manifest_group = (
         is_roads_group
         or is_population_group
         or is_nature_group
         or is_culture_group
+        or is_grid_group
     )
     if not is_manifest_group and str(group_id) not in SOLAR_FILTER_GROUP_SPECS:
         return None
@@ -6382,6 +6397,8 @@ def _wind_filter_buffer_layer(
         if is_nature_group
         else culture_control_contract(region_id)
         if is_culture_group
+        else grid_control_contract(region_id)
+        if is_grid_group
         else groups.get(group_id)
     )
     label = (
@@ -8594,9 +8611,18 @@ def normalize_group_layer_map(
         normalized_region_id,
         WIND_CULTURE_GROUP_ID,
     )
+    grid_is_migrated = canonical_wind_group_is_declared(
+        normalized_region_id,
+        WIND_GRID_GROUP_ID,
+    )
     canonical_culture_ids = (
         canonical_culture_layer_ids(normalized_region_id)
         if culture_is_migrated
+        else ()
+    )
+    canonical_grid_ids = (
+        canonical_grid_layer_ids(normalized_region_id)
+        if grid_is_migrated
         else ()
     )
     legacy_roads = source.get(SOLAR_ROAD_GROUP_ID, [])
@@ -8616,6 +8642,12 @@ def normalize_group_layer_map(
         raise ValueError(
             "Legacy protected nature selections are no longer supported; "
             "use the canonical nature group"
+        )
+    legacy_grid = source.get(SOLAR_ELECTRICAL_GROUP_ID, [])
+    if legacy_grid and grid_is_migrated:
+        raise ValueError(
+            "Legacy electrical grid selections are no longer supported; "
+            "use the canonical grid_infrastructure group"
         )
 
     available_road_ids = canonical_road_layer_ids(normalized_region_id)
@@ -8726,6 +8758,31 @@ def normalize_group_layer_map(
             )
     requested_culture_set = set(requested_culture)
 
+    raw_grid = source.get(WIND_GRID_GROUP_ID, [])
+    if raw_grid is None:
+        raw_grid = []
+    if isinstance(raw_grid, (str, bytes)):
+        raise TypeError(
+            "A V2 Final grid-infrastructure selection must be a list of layer ids"
+        )
+    requested_grid = tuple(str(layer_id).strip() for layer_id in raw_grid)
+    if grid_is_migrated:
+        if any(not layer_id for layer_id in requested_grid):
+            raise ValueError(
+                "A V2 Final grid-infrastructure selection contains a blank layer id"
+            )
+        if len(requested_grid) != len(set(requested_grid)):
+            raise ValueError(
+                "A V2 Final grid-infrastructure selection contains duplicate layer ids"
+            )
+        unknown_grid = set(requested_grid) - set(canonical_grid_ids)
+        if unknown_grid:
+            raise ValueError(
+                f"{normalized_region_id}/wind selected undeclared "
+                f"grid-infrastructure layers: {sorted(unknown_grid)}"
+            )
+    requested_grid_set = set(requested_grid)
+
     legacy_selection = normalize_legacy_group_layer_map(source)
     normalized: dict[str, list[str]] = {}
     for group_id in public_group_ids:
@@ -8753,13 +8810,19 @@ def normalize_group_layer_map(
                 for layer_id in canonical_culture_ids
                 if layer_id in requested_culture_set
             ]
+        elif group_id == WIND_GRID_GROUP_ID and grid_is_migrated:
+            normalized[group_id] = [
+                layer_id
+                for layer_id in canonical_grid_ids
+                if layer_id in requested_grid_set
+            ]
         else:
             normalized[group_id] = list(legacy_selection.get(group_id, []))
     # Hidden legacy groups remain available to the frozen-reference oracle
     # until their own complete behavior slice is migrated. They are not
     # exposed by public_wind_group_ids() or the V2 Final controls.
     for group_id in WIND_GROUP_LAYER_DEFAULTS:
-        if group_id == "settlement" or (
+        if group_id in {"settlement", SOLAR_ELECTRICAL_GROUP_ID} or (
             group_id == SOLAR_PROTECTED_GROUP_ID and nature_is_migrated
         ):
             continue
@@ -8777,6 +8840,8 @@ def _wind_group_param_key(group_id: str) -> str | None:
         return WIND_POPULATION_PARAM_KEY
     if str(group_id) == WIND_NATURE_GROUP_ID:
         return WIND_NATURE_PARAM_KEY
+    if str(group_id) == WIND_GRID_GROUP_ID:
+        return WIND_GRID_PARAM_KEY
     return GROUP_PARAM_MAP.get(str(group_id))
 
 
@@ -8797,6 +8862,11 @@ def _wind_control_groups(region_id: str) -> list[Any]:
         )
         else None
     )
+    grid_group = (
+        grid_control_contract(region_id)
+        if canonical_wind_group_is_declared(region_id, WIND_GRID_GROUP_ID)
+        else None
+    )
     controls: list[Any] = []
     for group_id in public_wind_group_ids(region_id):
         if group_id == WIND_ROADS_GROUP_ID:
@@ -8807,6 +8877,8 @@ def _wind_control_groups(region_id: str) -> list[Any]:
             group = nature_group
         elif group_id == WIND_CULTURE_GROUP_ID and culture_group is not None:
             group = culture_group
+        elif group_id == WIND_GRID_GROUP_ID and grid_group is not None:
+            group = grid_group
         else:
             group = legacy_groups.get(group_id)
         if group is not None:
@@ -9030,6 +9102,7 @@ def _wind_group_controls(
             is_nature_group = group.id == WIND_NATURE_GROUP_ID
             is_population_group = group.id == WIND_POPULATION_GROUP_ID
             is_culture_group = group.id == WIND_CULTURE_GROUP_ID
+            is_grid_group = group.id == WIND_GRID_GROUP_ID
             is_reindeer_group = group.id == WIND_REINDEER_GROUP_ID
             is_roads_group = group.id == WIND_ROADS_GROUP_ID
             is_manifest_group = isinstance(group, WindGroupControlContract)
@@ -9144,6 +9217,8 @@ def _wind_group_controls(
 
                 if not is_nature_group and not (
                     is_culture_group and is_manifest_group
+                ) and not (
+                    is_grid_group and is_manifest_group
                 ):
                     with st.expander(
                         "Fler datakällor"
@@ -9473,6 +9548,42 @@ def _wind_polygon_source_layers(
                         "name": (
                             f"Vind källa: {layer_spec.label} "
                             f"({culture_group.label})"
+                        ),
+                        "feature_collection": geojson,
+                        "fill_property": "fill",
+                        "legend_items": [],
+                        "legend_id": f"wind_polygon_source_{layer_id}",
+                        "legend_title": "",
+                        "default_visible": False,
+                        "stroke_color": source_color,
+                        "fill_color": source_color,
+                        "stroke_opacity": max(min(opacity, 1.0), 0.0),
+                        "fill_opacity": max(min(opacity * 0.28, 1.0), 0.0),
+                        "weight": 2.0,
+                        "point_radius": int(layer_spec.point_radius),
+                        "use_global_opacity": False,
+                        "source_layer_id": f"wind:{layer_id}",
+                        "layer_kind": "vector",
+                    }
+                )
+            continue
+        if group_id == WIND_GRID_GROUP_ID and canonical_wind_group_is_declared(
+            region_id,
+            WIND_GRID_GROUP_ID,
+        ):
+            grid_group = grid_control_contract(region_id)
+            grid_layers = {layer.id: layer for layer in grid_group.layers}
+            for layer_id in selected.get(group_id, []):
+                layer_spec = grid_layers.get(layer_id)
+                if layer_spec is None:
+                    continue
+                geojson = grid_source_geojson(region_id, layer_id)
+                source_color = _rgb_to_hex(layer_spec.source_color)
+                map_layers.append(
+                    {
+                        "name": (
+                            f"Vind källa: {layer_spec.label} "
+                            f"({grid_group.label})"
                         ),
                         "feature_collection": geojson,
                         "fill_property": "fill",
@@ -9834,6 +9945,8 @@ def _allocation_priority_layer_groups(
     canonical_nature_ids: tuple[str, ...] = ()
     canonical_culture_group: WindGroupControlContract | None = None
     canonical_culture_ids: tuple[str, ...] = ()
+    canonical_grid_group: WindGroupControlContract | None = None
+    canonical_grid_ids: tuple[str, ...] = ()
     raw_groups: list[tuple[str, list[str]]] = []
     if str(technology) == "solar":
         raw_groups.append((SOLAR_POPULATION_GROUP_ID, [WIND_POPULATION_SOURCE_LAYER_ID]))
@@ -9891,11 +10004,29 @@ def _allocation_priority_layer_groups(
         raw_groups.append(
             (WIND_CULTURE_GROUP_ID, list(canonical_culture_ids))
         )
+        canonical_grid_group = grid_control_contract(region_id)
+        unavailable_grid_ids = [
+            layer.id
+            for layer in canonical_grid_group.layers
+            if not layer.ready
+        ]
+        if unavailable_grid_ids:
+            raise ValueError(
+                f"{region_id}/wind canonical grid-infrastructure ranking "
+                f"layers are not ready: {unavailable_grid_ids}"
+            )
+        canonical_grid_ids = tuple(
+            layer.id for layer in canonical_grid_group.layers
+        )
+        raw_groups.append(
+            (WIND_GRID_GROUP_ID, list(canonical_grid_ids))
+        )
         for group_id, layer_ids in WIND_GROUP_LAYER_DEFAULTS.items():
             if group_id in {
                 SOLAR_POPULATION_GROUP_ID,
                 SOLAR_PROTECTED_GROUP_ID,
                 WIND_CULTURE_GROUP_ID,
+                SOLAR_ELECTRICAL_GROUP_ID,
             }:
                 continue
             raw_groups.append((group_id, list(layer_ids)))
@@ -9911,6 +10042,7 @@ def _allocation_priority_layer_groups(
             WIND_POPULATION_GROUP_ID,
             WIND_NATURE_GROUP_ID,
             WIND_CULTURE_GROUP_ID,
+            WIND_GRID_GROUP_ID,
         }:
             canonical_group = (
                 canonical_population_group
@@ -9918,6 +10050,8 @@ def _allocation_priority_layer_groups(
                 else canonical_nature_group
                 if group_id == WIND_NATURE_GROUP_ID
                 else canonical_culture_group
+                if group_id == WIND_CULTURE_GROUP_ID
+                else canonical_grid_group
             )
             canonical_ids = (
                 canonical_population_ids
@@ -9925,6 +10059,8 @@ def _allocation_priority_layer_groups(
                 else canonical_nature_ids
                 if group_id == WIND_NATURE_GROUP_ID
                 else canonical_culture_ids
+                if group_id == WIND_CULTURE_GROUP_ID
+                else canonical_grid_ids
             )
             if canonical_group is None or not canonical_ids:
                 raise ValueError(
@@ -10050,6 +10186,14 @@ def _cached_canonical_allocation_distance_frame(
             canonical_domain_ids,
             int(target_resolution),
         )
+    elif canonical_group_id == CANONICAL_GRID_GROUP_ID:
+        frame = grid_acceptance_frame(
+            str(region_id),
+            layer_ids,
+            float(buffer_m),
+            canonical_domain_ids,
+            int(target_resolution),
+        )
     else:
         raise ValueError(
             "Unsupported canonical allocation-ranking group: "
@@ -10092,6 +10236,7 @@ def _apply_landscape_priority_to_allocation_frame(
                 CANONICAL_POPULATION_GROUP_ID,
                 CANONICAL_NATURE_GROUP_ID,
                 CANONICAL_CULTURE_GROUP_ID,
+                CANONICAL_GRID_GROUP_ID,
             }:
                 raise ValueError(
                     "Unsupported canonical allocation-ranking group: "
@@ -10336,11 +10481,14 @@ def _wind_fast_distance_runtime_result(
     nature_layers = {layer.id: layer for layer in nature_group.layers}
     culture_group = culture_control_contract(region_id)
     culture_layers = {layer.id: layer for layer in culture_group.layers}
+    grid_group = grid_control_contract(region_id)
+    grid_layers = {layer.id: layer for layer in grid_group.layers}
     canonical_groups = {
         WIND_ROADS_GROUP_ID: roads_group,
         WIND_POPULATION_GROUP_ID: population_group,
         WIND_NATURE_GROUP_ID: nature_group,
         WIND_CULTURE_GROUP_ID: culture_group,
+        WIND_GRID_GROUP_ID: grid_group,
     }
     if str(registry_meta.get("_runtime_strategy") or "") != "fast_distance":
         return None
@@ -10422,6 +10570,23 @@ def _wind_fast_distance_runtime_result(
             ]
             canonical_frame = (
                 culture_acceptance_frame(
+                    region_id,
+                    canonical_ids,
+                    threshold_m,
+                    frame["hex_id"].astype(str),
+                    int(target_resolution),
+                )
+                if canonical_ids
+                else None
+            )
+        elif group_id == WIND_GRID_GROUP_ID:
+            canonical_ids = [
+                layer_id
+                for layer_id in layer_ids
+                if layer_id in grid_layers
+            ]
+            canonical_frame = (
+                grid_acceptance_frame(
                     region_id,
                     canonical_ids,
                     threshold_m,
@@ -10514,6 +10679,7 @@ def _wind_fast_distance_runtime_result(
             **population_layers,
             **nature_layers,
             **culture_layers,
+            **grid_layers,
         }
         selected_labels = [
             manifest_layers[layer_id].label
@@ -12920,6 +13086,12 @@ def _wind_runtime_result(
         raise ValueError(
             "Canonical roads must run through the manifest engine; the legacy "
             "geometry runtime no longer accepts wind roads"
+        )
+    if selected.get(WIND_GRID_GROUP_ID):
+        raise ValueError(
+            "Canonical grid infrastructure must run through the manifest "
+            "engine; the legacy geometry runtime no longer accepts wind "
+            "electrical selections"
         )
     runtime_cfg = _wind_runtime_config_json(
         ui_params,

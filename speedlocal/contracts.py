@@ -7,7 +7,11 @@ from typing import Any
 
 STANDARD_GROUP_IDS = ("roads", "population", "nature", "culture", "grid_infrastructure")
 SUPPORTED_GEOMETRY_FAMILIES = {"point", "line", "polygon", "grid"}
-SUPPORTED_OPERATIONS = {"distance_exclusion", "hard_exclusion"}
+SUPPORTED_OPERATIONS = {
+    "distance_exclusion",
+    "hard_exclusion",
+    "proximity_feasibility",
+}
 
 
 @dataclass(frozen=True)

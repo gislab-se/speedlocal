@@ -159,6 +159,27 @@ CULTURE_SELECTION_EXPECTATIONS = {
         5: {0.0: (212 / 365 * 100.0, 153), 250.0: (212 / 365 * 100.0, 153), 1000.0: (212 / 365 * 100.0, 153), 1500.0: (205 / 365 * 100.0, 160)},
     },
 }
+GRID_LAYER_IDS = (
+    "high_voltage_lines",
+    "underground_cables",
+    "existing_wind_turbines",
+)
+GRID_SELECTION_EXPECTATIONS = {
+    ("high_voltage_lines",): {
+        7: {
+            500.0: (34.692391700036, 8_970),
+            2000.0: (38.929144521296, 6_732),
+            15000.0: (78.842961970635, 364),
+        },
+        6: {2000.0: (60.600873786408, 711)},
+        5: {2000.0: (79.991726027397, 61)},
+    },
+    GRID_LAYER_IDS: {
+        7: {2000.0: (39.481352384419, 6_673)},
+        6: {2000.0: (61.125457697642, 702)},
+        5: {2000.0: (80.542534246575, 59)},
+    },
+}
 
 for import_root in (ROOT, PORT_ROOT, PORT_APPS):
     if str(import_root) not in sys.path:
@@ -370,6 +391,57 @@ def _hard_exclusion_acceptance_oracle(
             threshold_m > 0 and distance_m <= threshold_m
         )
         oracle[cell_id] = 0.0 if blocked else 1.0
+    return oracle
+
+
+def _proximity_acceptance_oracle(
+    registry: dict,
+    layer_ids: tuple[str, ...],
+    threshold_m: float,
+    target_resolution: int,
+    target_cell_ids: set[str],
+) -> dict[str, float]:
+    """Reproduce frozen multi-source proximity-feasibility semantics."""
+    rolled: dict[str, tuple[float, bool]] = {}
+    for layer_id in layer_ids:
+        distance = distance_table_for_layer(registry, layer_id)
+        if distance["hex_id"].astype(str).duplicated().any():
+            raise ValueError(
+                f"Frozen {layer_id} distance table has duplicate hex ids"
+            )
+        for row in distance.itertuples(index=False):
+            source_id = str(row.hex_id)
+            target_id = (
+                source_id
+                if target_resolution == 7
+                else str(h3.cell_to_parent(source_id, target_resolution))
+            )
+            value = (
+                float(row.distance_m),
+                str(row.intersects).strip().lower()
+                in {"1", "true", "yes"},
+            )
+            previous = rolled.get(target_id)
+            rolled[target_id] = value if previous is None else (
+                min(previous[0], value[0]),
+                previous[1] or value[1],
+            )
+    oracle: dict[str, float] = {}
+    for cell_id in target_cell_ids:
+        if cell_id not in rolled:
+            raise ValueError(
+                "Frozen proximity selection is missing target cell: "
+                f"{cell_id}"
+            )
+        distance_m, intersects = rolled[cell_id]
+        oracle[cell_id] = (
+            1.0
+            if intersects
+            else max(
+                0.0,
+                min(1.0, 1.0 - (distance_m / max(threshold_m, 1.0))),
+            )
+        )
     return oracle
 
 
@@ -719,6 +791,86 @@ def main() -> int:
                     f"Trøndelag {'+'.join(layer_ids)} R{resolution} drifted "
                     f"at {buffer_m:.0f} m: share={actual_share:.12f}, "
                     f"blocked={actual_blocked}, "
+                    f"max_cell_error={max_cell_error}, canonical="
+                    f"{((result or {}).get('canonical_layer_ids') or [])}.",
+                )
+
+    for layer_ids, resolution_expectations in GRID_SELECTION_EXPECTATIONS.items():
+        grid_only = {
+            group_id: []
+            for group_id in app.public_wind_group_ids("trondelag")
+        }
+        grid_only[app.WIND_GRID_GROUP_ID] = list(layer_ids)
+        for resolution, expectations in resolution_expectations.items():
+            display_geometry_path = app._h3_display_geometry_path(
+                trondelag_region,
+                resolution,
+            )
+            target_cell_ids = set(
+                app.load_h3_display_geometries(display_geometry_path)
+            )
+            for distance_m, (expected_share, expected_zero) in expectations.items():
+                params = app._reference_default_wind_params()
+                params[app.WIND_GRID_PARAM_KEY] = distance_m
+                result = app._wind_fast_distance_runtime_result(
+                    trondelag_region,
+                    params,
+                    grid_only,
+                    resolution,
+                )
+                frame = (
+                    (result or {}).get("fast_distance_frame")
+                    if isinstance(result, dict)
+                    else None
+                )
+                oracle = _proximity_acceptance_oracle(
+                    trondelag_registry,
+                    layer_ids,
+                    distance_m,
+                    resolution,
+                    target_cell_ids,
+                )
+                actual = (
+                    {
+                        str(row.hex_id):
+                        float(row.potential_area_share_pct) / 100.0
+                        for row in frame.itertuples(index=False)
+                    }
+                    if isinstance(frame, pd.DataFrame)
+                    else {}
+                )
+                max_cell_error = (
+                    max(
+                        abs(actual[cell_id] - oracle[cell_id])
+                        for cell_id in actual
+                    )
+                    if actual and actual.keys() == oracle.keys()
+                    else float("inf")
+                )
+                actual_share = float(
+                    ((result or {}).get("combined") or {}).get(
+                        "land_share_pct",
+                        -1.0,
+                    )
+                )
+                actual_zero = (
+                    int(frame["potential_area_share_pct"].eq(0.0).sum())
+                    if isinstance(frame, pd.DataFrame)
+                    else -1
+                )
+                report.check(
+                    result is not None
+                    and result.get("canonical_layer_ids") == sorted(layer_ids)
+                    and len(frame) == DISPLAY_COUNTS[resolution]
+                    and actual_zero == expected_zero
+                    and abs(actual_share - expected_share) <= 1e-12
+                    and max_cell_error <= 1e-12,
+                    f"Trøndelag {'+'.join(layer_ids)} R{resolution} uses "
+                    f"canonical proximity feasibility at {distance_m:.0f} m "
+                    f"({expected_share:.12f}%, {expected_zero} zero cells).",
+                    f"Trøndelag {'+'.join(layer_ids)} R{resolution} proximity "
+                    f"drifted at {distance_m:.0f} m: "
+                    f"share={actual_share:.12f}, zero={actual_zero}, "
                     f"max_cell_error={max_cell_error}, canonical="
                     f"{((result or {}).get('canonical_layer_ids') or [])}.",
                 )
@@ -1168,6 +1320,55 @@ def main() -> int:
         f"{invalid_culture_selection_errors}",
     )
 
+    invalid_grid_selection_errors: list[str] = []
+    for invalid_layer_ids, expected_message in (
+        (
+            ("high_voltage_lines", "high_voltage_lines"),
+            "duplicate layer ids",
+        ),
+        (("grid_unknown",), "undeclared grid-infrastructure layers"),
+        (("power_substations",), "undeclared grid-infrastructure layers"),
+        (("",), "blank layer id"),
+    ):
+        invalid_selection = {
+            group_id: []
+            for group_id in app.public_wind_group_ids("trondelag")
+        }
+        invalid_selection[app.WIND_GRID_GROUP_ID] = list(invalid_layer_ids)
+        try:
+            app._wind_fast_distance_runtime_result(
+                trondelag_region,
+                app._reference_default_wind_params(),
+                invalid_selection,
+                7,
+            )
+        except ValueError as exc:
+            if expected_message not in str(exc):
+                invalid_grid_selection_errors.append(str(exc))
+        else:
+            invalid_grid_selection_errors.append(
+                f"{invalid_layer_ids!r} did not fail closed"
+            )
+    try:
+        app.normalize_group_layer_map(
+            {"electrical": ["high_voltage_lines"]},
+            "trondelag",
+        )
+    except ValueError as exc:
+        if "Legacy electrical grid selections" not in str(exc):
+            invalid_grid_selection_errors.append(str(exc))
+    else:
+        invalid_grid_selection_errors.append(
+            "the legacy electrical alias did not fail closed"
+        )
+    report.check(
+        not invalid_grid_selection_errors,
+        "The V2 Final runtime rejects duplicate, blank, undeclared, and "
+        "legacy electrical grid selections.",
+        "The V2 Final grid-selection boundary validation drifted: "
+        f"{invalid_grid_selection_errors}",
+    )
+
     original_population_distance_loader = app.distance_table_for_layer
     population_loader_calls: list[str] = []
     population_loader_results: list[dict[str, object] | None] = []
@@ -1391,6 +1592,63 @@ def main() -> int:
         f"{culture_loader_errors or culture_loader_calls}",
     )
 
+    canonical_grid_ids = list(app.canonical_grid_layer_ids("trondelag"))
+    canonical_grid_only = {
+        group_id: []
+        for group_id in app.public_wind_group_ids("trondelag")
+    }
+    canonical_grid_only[app.WIND_GRID_GROUP_ID] = canonical_grid_ids
+    original_grid_distance_loader = app.distance_table_for_layer
+    grid_loader_calls: list[str] = []
+    grid_loader_errors: list[str] = []
+    grid_loader_results: list[dict[str, object] | None] = []
+    try:
+        def _reject_legacy_grid(registry_meta, layer_id):
+            normalized_layer_id = str(layer_id)
+            grid_loader_calls.append(normalized_layer_id)
+            if normalized_layer_id in canonical_grid_ids:
+                raise AssertionError(
+                    f"{normalized_layer_id} reached legacy distance loading"
+                )
+            return original_grid_distance_loader(
+                registry_meta,
+                normalized_layer_id,
+            )
+
+        app.distance_table_for_layer = _reject_legacy_grid
+        for resolution in (7, 6, 5):
+            grid_loader_results.append(
+                app._wind_fast_distance_runtime_result(
+                    trondelag_region,
+                    {
+                        **app._reference_default_wind_params(),
+                        app.WIND_GRID_PARAM_KEY: 2000.0,
+                    },
+                    canonical_grid_only,
+                    resolution,
+                )
+            )
+    except Exception as exc:
+        grid_loader_errors.append(str(exc))
+    finally:
+        app.distance_table_for_layer = original_grid_distance_loader
+    report.check(
+        canonical_grid_ids == list(GRID_LAYER_IDS)
+        and not grid_loader_errors
+        and len(grid_loader_results) == 3
+        and all(
+            result is not None
+            and result.get("canonical_layer_ids")
+            == sorted(canonical_grid_ids)
+            for result in grid_loader_results
+        )
+        and not set(canonical_grid_ids).intersection(grid_loader_calls),
+        "The wind grid-infrastructure filter never reaches the legacy "
+        "distance loader at R7/R6/R5.",
+        "The grid-infrastructure filter still depends on legacy distance "
+        f"loading: {grid_loader_errors or grid_loader_calls}",
+    )
+
     original_priority_groups = app._allocation_priority_layer_groups
     original_priority_loader = app.distance_table_for_layer
     priority_loader_calls: list[str] = []
@@ -1542,6 +1800,22 @@ def main() -> int:
         "the canonical culture contract.",
         "Wind allocation ranking still exposes a legacy culture path: "
         f"{culture_priority_specs}.",
+    )
+    grid_priority_specs = [
+        spec
+        for spec in priority_specs
+        if spec.get("canonical_group_id")
+        == app.CANONICAL_GRID_GROUP_ID
+    ]
+    report.check(
+        len(grid_priority_specs) == 1
+        and grid_priority_specs[0].get("canonical_layer_ids")
+        == list(GRID_LAYER_IDS)
+        and grid_priority_specs[0].get("layer_ids") == [],
+        "Wind allocation ranking exposes all grid-infrastructure sources "
+        "only through the canonical contract.",
+        "Wind allocation ranking still exposes a legacy electrical path: "
+        f"{grid_priority_specs}.",
     )
 
     original_population_contract = app.population_control_contract

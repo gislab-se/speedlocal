@@ -200,19 +200,26 @@ def _distance_exclusion(
                 f"{sorted(missing)}"
             )
         rows = {cell_id: rows[cell_id] for cell_id in sorted(analysis_cell_ids)}
-    blocked_count = sum(
-        1
-        for distance, intersects in rows.values()
-        if intersects
-        or (
-            distance is not None
-            and distance <= threshold
-            and (
-                layer.contract.operation != "hard_exclusion"
-                or threshold > 0
+    if layer.contract.operation == "proximity_feasibility":
+        blocked_count = sum(
+            1
+            for distance, intersects in rows.values()
+            if not intersects and (distance is None or distance > threshold)
+        )
+    else:
+        blocked_count = sum(
+            1
+            for distance, intersects in rows.values()
+            if intersects
+            or (
+                distance is not None
+                and distance <= threshold
+                and (
+                    layer.contract.operation != "hard_exclusion"
+                    or threshold > 0
+                )
             )
         )
-    )
     return (
         LayerResult(
             layer_id=layer.contract.id,
@@ -327,7 +334,11 @@ def _distance_group_result(
     if len(operations) != 1:
         raise ValueError(f"Layers in group {group_id} must use one operation")
     operation = operations.pop()
-    if operation not in {"distance_exclusion", "hard_exclusion"}:
+    if operation not in {
+        "distance_exclusion",
+        "hard_exclusion",
+        "proximity_feasibility",
+    }:
         raise ValueError(f"Unsupported distance-group operation: {operation}")
     thresholds = {result.threshold_m for result, _ in layer_results}
     if len(thresholds) != 1:
@@ -345,17 +356,32 @@ def _distance_group_result(
         ]
         min_distance = min(observed_distances) if observed_distances else None
         intersects = any(intersection for _, intersection in values)
-        coverage_missing = not observed_distances
-        blocked = intersects or (
-            min_distance is not None
-            and min_distance <= threshold
-            and (operation != "hard_exclusion" or threshold > 0)
-        )
+        coverage_missing = not observed_distances and not intersects
+        if operation == "proximity_feasibility":
+            blocked = coverage_missing or (
+                not intersects
+                and min_distance is not None
+                and min_distance > threshold
+            )
+        else:
+            blocked = intersects or (
+                min_distance is not None
+                and min_distance <= threshold
+                and (operation != "hard_exclusion" or threshold > 0)
+            )
         blocked_count += int(blocked)
         if coverage_missing:
             acceptance = 0.0
         elif operation == "hard_exclusion":
             acceptance = 0.0 if blocked else 1.0
+        elif operation == "proximity_feasibility":
+            if intersects:
+                acceptance = 1.0
+            else:
+                acceptance = max(
+                    0.0,
+                    min(1.0, 1.0 - (min_distance / max(threshold, 1.0))),
+                )
         elif intersects:
             acceptance = 0.0
         elif threshold <= 0:
@@ -457,6 +483,7 @@ def run_analysis(
         if validated.contract.operation in {
             "distance_exclusion",
             "hard_exclusion",
+            "proximity_feasibility",
         }:
             distance_resolution = (
                 validated.contract.source.distance_h3_resolution

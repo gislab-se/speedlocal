@@ -10,7 +10,11 @@ import pandas as pd
 from speedlocal.catalogs import load_analysis, load_region
 from speedlocal.contracts import AnalysisContract, ParameterContract
 from speedlocal.engine import run_analysis
-from speedlocal.geometry import VectorBufferPreview, build_vector_buffer_preview
+from speedlocal.geometry import (
+    VectorBufferPreview,
+    build_h3_proximity_preview,
+    build_vector_buffer_preview,
+)
 from speedlocal.sources import resolve_analysis_domain_cell_areas_km2
 from speedlocal.validation import validate_contract, validate_layer
 
@@ -19,7 +23,12 @@ CANONICAL_ROADS_GROUP_ID = "roads"
 CANONICAL_POPULATION_GROUP_ID = "population"
 CANONICAL_NATURE_GROUP_ID = "nature"
 CANONICAL_CULTURE_GROUP_ID = "culture"
-CANONICAL_DISTANCE_OPERATIONS = {"distance_exclusion", "hard_exclusion"}
+CANONICAL_GRID_GROUP_ID = "grid_infrastructure"
+CANONICAL_DISTANCE_OPERATIONS = {
+    "distance_exclusion",
+    "hard_exclusion",
+    "proximity_feasibility",
+}
 CANONICAL_TO_TRANSITIONAL_GROUP_ID = {
     "nature": "protected",
     "culture": "culture",
@@ -109,6 +118,7 @@ def public_wind_group_ids(region_id: str) -> tuple[str, ...]:
         if group_id in {
             CANONICAL_NATURE_GROUP_ID,
             CANONICAL_CULTURE_GROUP_ID,
+            CANONICAL_GRID_GROUP_ID,
         } and any(
             layer.group_id == group_id for layer in analysis.layers.values()
         ):
@@ -154,6 +164,7 @@ def default_wind_layer_selection(region_id: str) -> dict[str, list[str]]:
             CANONICAL_POPULATION_GROUP_ID,
             CANONICAL_NATURE_GROUP_ID,
             CANONICAL_CULTURE_GROUP_ID,
+            CANONICAL_GRID_GROUP_ID,
         }:
             public_group_id = CANONICAL_TO_TRANSITIONAL_GROUP_ID.get(
                 layer.group_id
@@ -196,8 +207,41 @@ def vector_buffer_preview(
         )
     region = load_region(str(region_id))
     native_crs = str(region.get("native_crs") or "")
+    requested_layers = [analysis.layers[layer_id] for layer_id in requested]
+    if all(layer.operation == "proximity_feasibility" for layer in requested_layers):
+        group_ids = {layer.group_id for layer in requested_layers}
+        resolutions = {
+            layer.source.distance_h3_resolution for layer in requested_layers
+        }
+        if len(group_ids) != 1 or None in resolutions or len(resolutions) != 1:
+            raise ValueError(
+                "A proximity preview requires one group at one declared H3 resolution"
+            )
+        distance = float(buffer_m)
+        runtime = run_analysis(
+            region=str(region_id),
+            analysis="wind",
+            layers=list(requested),
+            parameters={
+                layer_id: {"buffer_m": distance} for layer_id in requested
+            },
+            target_resolution=int(next(iter(resolutions))),
+        )
+        if len(runtime.groups) != 1 or runtime.groups[0].group_id not in group_ids:
+            raise ValueError("The proximity preview did not produce one canonical group")
+        feasible_cell_ids = tuple(
+            cell.cell_id
+            for cell in runtime.groups[0].cells
+            if not cell.blocked and not cell.coverage_missing
+        )
+        return build_h3_proximity_preview(
+            requested_layers,
+            native_crs=native_crs,
+            buffer_m=distance,
+            feasible_cell_ids=feasible_cell_ids,
+        )
     return build_vector_buffer_preview(
-        [analysis.layers[layer_id] for layer_id in requested],
+        requested_layers,
         native_crs=native_crs,
         buffer_m=float(buffer_m),
     )
@@ -251,6 +295,14 @@ def canonical_culture_layer_ids(region_id: str) -> tuple[str, ...]:
     )
 
 
+def canonical_grid_layer_ids(region_id: str) -> tuple[str, ...]:
+    """Return canonical grid-infrastructure layers in manifest order."""
+    return canonical_wind_group_layer_ids(
+        region_id,
+        CANONICAL_GRID_GROUP_ID,
+    )
+
+
 def wind_group_control_contract(
     region_id: str,
     canonical_group_id: str,
@@ -296,6 +348,8 @@ def wind_group_control_contract(
     analysis_kind = (
         "hard_exclusion"
         if operation == "hard_exclusion"
+        else "proximity_feasibility"
+        if operation == "proximity_feasibility"
         else "distance_conflict"
     )
     layer_controls: list[WindLayerControlContract] = []
@@ -376,6 +430,14 @@ def culture_control_contract(region_id: str) -> WindGroupControlContract:
     )
 
 
+def grid_control_contract(region_id: str) -> WindGroupControlContract:
+    """Expose canonical manifest-driven grid-infrastructure controls."""
+    return wind_group_control_contract(
+        region_id,
+        CANONICAL_GRID_GROUP_ID,
+    )
+
+
 def wind_source_geojson(
     region_id: str,
     canonical_group_id: str,
@@ -435,6 +497,15 @@ def culture_source_geojson(region_id: str, layer_id: str) -> dict:
     return wind_source_geojson(
         region_id,
         CANONICAL_CULTURE_GROUP_ID,
+        layer_id,
+    )
+
+
+def grid_source_geojson(region_id: str, layer_id: str) -> dict:
+    """Read one validated canonical grid-infrastructure source."""
+    return wind_source_geojson(
+        region_id,
+        CANONICAL_GRID_GROUP_ID,
         layer_id,
     )
 
@@ -681,6 +752,24 @@ def culture_acceptance_frame(
     return wind_group_acceptance_frame(
         region_id,
         CANONICAL_CULTURE_GROUP_ID,
+        layer_ids,
+        buffer_m,
+        analysis_cell_ids,
+        target_resolution,
+    )
+
+
+def grid_acceptance_frame(
+    region_id: str,
+    layer_ids: Collection[str],
+    buffer_m: float,
+    analysis_cell_ids: Collection[str],
+    target_resolution: int,
+) -> pd.DataFrame:
+    """Adapt canonical grid proximity-feasibility results to V2 Final."""
+    return wind_group_acceptance_frame(
+        region_id,
+        CANONICAL_GRID_GROUP_ID,
         layer_ids,
         buffer_m,
         analysis_cell_ids,

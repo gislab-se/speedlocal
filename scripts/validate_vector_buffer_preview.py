@@ -18,6 +18,9 @@ from speedlocal.catalogs import load_analysis, load_region
 
 GEOMETRY_IMPORT_ERROR: ModuleNotFoundError | None = None
 try:
+    from apps.v2_port.apps.potential_model.speedlocal_bridge import (
+        vector_buffer_preview as build_manifest_vector_buffer_preview,
+    )
     from speedlocal.geometry import GeometryPreviewError, build_vector_buffer_preview
 except ModuleNotFoundError as exc:
     GEOMETRY_IMPORT_ERROR = exc
@@ -101,6 +104,9 @@ def main() -> int:
     cultural_environment_layer = contract.layers[
         "valuable_cultural_environment"
     ]
+    high_voltage_layer = contract.layers["high_voltage_lines"]
+    underground_cable_layer = contract.layers["underground_cables"]
+    wind_turbine_layer = contract.layers["existing_wind_turbines"]
     native_crs = str(region["native_crs"])
 
     zero = build_vector_buffer_preview(
@@ -192,6 +198,20 @@ def main() -> int:
         [cultural_preservation_layer, cultural_environment_layer],
         native_crs=native_crs,
         buffer_m=1000,
+    )
+    grid_layer_ids = (
+        high_voltage_layer.id,
+        underground_cable_layer.id,
+        wind_turbine_layer.id,
+    )
+    grid_at_500 = build_manifest_vector_buffer_preview(
+        "trondelag", grid_layer_ids, 500
+    )
+    grid_at_2000 = build_manifest_vector_buffer_preview(
+        "trondelag", grid_layer_ids, 2000
+    )
+    grid_at_15000 = build_manifest_vector_buffer_preview(
+        "trondelag", grid_layer_ids, 15000
     )
 
     report.check(
@@ -338,6 +358,39 @@ def main() -> int:
         and culture_at_1000.area_m2 > culture_at_250.area_m2,
         "The combined culture preview grows monotonically at 0/250/1000 m.",
         "The combined culture preview did not grow with its metric buffer.",
+    )
+    report.check(
+        grid_at_500.layer_ids
+        == (
+            "high_voltage_lines",
+            "underground_cables",
+            "existing_wind_turbines",
+        )
+        and grid_at_500.source_feature_count == 3
+        and grid_at_500.declared_feature_count == 17_732,
+        "The combined grid preview resolves all declared line/point sources.",
+        "The combined grid preview did not preserve its three-source contract.",
+    )
+    report.check(
+        grid_at_500.semantics == "analysis_cell_coverage"
+        and grid_at_500.geometry_type in {"Polygon", "MultiPolygon"}
+        and grid_at_500.area_m2 < grid_at_2000.area_m2
+        < grid_at_15000.area_m2,
+        "The R7 grid-feasibility preview grows monotonically at 500/2000/15000 m.",
+        "The R7 grid-feasibility preview did not grow with maximum connection distance.",
+    )
+    report.check(
+        all(
+            feature.get("geometry", {}).get("type")
+            in {"Polygon", "MultiPolygon"}
+            for feature in grid_at_2000.geojson.get("features", [])
+        )
+        and grid_at_2000.geojson["features"][0]["properties"].get(
+            "source_h3_resolution"
+        )
+        == 7,
+        "The mixed grid line/point coverage serializes as R7 polygonal GeoJSON.",
+        "The mixed grid line/point coverage emitted an invalid analysis-cell preview.",
     )
     report.check(
         _failure_code(

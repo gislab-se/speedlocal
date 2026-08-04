@@ -7,8 +7,9 @@ from pathlib import Path
 from typing import Any, Iterable, Literal
 
 from pyproj import CRS, Transformer
+import h3
 from shapely import make_valid
-from shapely.geometry import mapping, shape
+from shapely.geometry import Polygon, mapping, shape
 from shapely.geometry.base import BaseGeometry
 from shapely.ops import transform, unary_union
 from shapely.validation import explain_validity
@@ -21,7 +22,11 @@ SOURCE_CRS = CRS.from_user_input("OGC:CRS84")
 WEB_CRS = CRS.from_epsg(4326)
 SUPPORTED_VECTOR_FAMILIES = {"point", "line", "polygon"}
 
-PreviewSemantics = Literal["dissolved_source_footprint", "metric_buffer"]
+PreviewSemantics = Literal[
+    "dissolved_source_footprint",
+    "metric_buffer",
+    "analysis_cell_coverage",
+]
 
 
 class GeometryPreviewError(ValueError):
@@ -61,7 +66,11 @@ def _preview_error(code: str, message: str, error: Exception | None = None) -> G
 
 
 def _validate_buffer_contract(layer: LayerContract, distance: float) -> None:
-    if layer.operation not in {"distance_exclusion", "hard_exclusion"}:
+    if layer.operation not in {
+        "distance_exclusion",
+        "hard_exclusion",
+        "proximity_feasibility",
+    }:
         raise GeometryPreviewError(
             "layer_operation_unsupported",
             f"Layer {layer.id!r} does not declare a distance-based operation.",
@@ -364,6 +373,156 @@ def _repair_result_if_declared(
             "manifest-declared repair.",
         )
     return repaired
+
+
+def build_h3_proximity_preview(
+    layers: Iterable[LayerContract],
+    *,
+    native_crs: str,
+    buffer_m: float,
+    feasible_cell_ids: Iterable[str],
+) -> VectorBufferPreview:
+    """Build the map preview represented by feasible source-resolution cells.
+
+    ``proximity_feasibility`` is evaluated from manifest-declared H3 distance
+    observations. Its truthful lightweight map preview is therefore the union
+    of source-resolution cells that the engine classifies as feasible, rather
+    than a second expensive vector-buffer calculation with different geometry.
+    Exact source vectors remain available through the separate source preview.
+    """
+
+    layer_list = tuple(layers)
+    if not layer_list:
+        raise GeometryPreviewError("layers_empty", "At least one layer is required.")
+    layer_ids = tuple(layer.id for layer in layer_list)
+    if len(layer_ids) != len(set(layer_ids)):
+        raise GeometryPreviewError("layers_duplicate", "Layer ids must be unique.")
+
+    target_crs = _metric_crs(native_crs)
+    distance = _buffer_distance(buffer_m)
+    source_feature_count = 0
+    declared_feature_count = 0
+    declared_resolutions: set[int] = set()
+    for layer in layer_list:
+        if layer.operation != "proximity_feasibility":
+            raise GeometryPreviewError(
+                "layer_operation_unsupported",
+                f"Layer {layer.id!r} does not declare proximity_feasibility.",
+            )
+        _validate_buffer_contract(layer, distance)
+        try:
+            validated = validate_layer(layer)
+        except Exception as exc:
+            raise _preview_error(
+                "layer_validation_failed",
+                f"Layer {layer.id!r} failed source-contract validation: {exc}",
+                exc,
+            )
+        resolution = layer.source.distance_h3_resolution
+        if resolution is None:
+            raise GeometryPreviewError(
+                "distance_resolution_missing",
+                f"Layer {layer.id!r} has no declared distance H3 resolution.",
+            )
+        declared_resolutions.add(int(resolution))
+        source_geometries, _ = _load_source_geometries(
+            validated.assets.geojson_path,
+            layer_id=layer.id,
+            expected_family=validated.geometry_family,
+            geometry_collection_policy=layer.source.geometry_collection_policy,
+            geometry_validity_policy=layer.source.geometry_validity_policy,
+        )
+        source_feature_count += len(source_geometries)
+        declared_feature_count += validated.assets.feature_count
+    if len(declared_resolutions) != 1:
+        raise GeometryPreviewError(
+            "distance_resolution_mismatch",
+            "Selected proximity layers must share one source H3 resolution.",
+        )
+    source_resolution = next(iter(declared_resolutions))
+
+    normalized_cells = tuple(sorted({str(cell_id).strip() for cell_id in feasible_cell_ids}))
+    if not normalized_cells or any(not cell_id for cell_id in normalized_cells):
+        raise GeometryPreviewError(
+            "analysis_coverage_empty",
+            "The proximity preview has no feasible analysis cells.",
+        )
+    web_polygons: list[BaseGeometry] = []
+    for cell_id in normalized_cells:
+        try:
+            if not h3.is_valid_cell(cell_id):
+                raise ValueError("invalid H3 cell")
+            actual_resolution = int(h3.get_resolution(cell_id))
+            if actual_resolution != source_resolution:
+                raise ValueError(
+                    f"R{actual_resolution} cell; expected R{source_resolution}"
+                )
+            boundary = h3.cell_to_boundary(cell_id)
+            polygon = Polygon([(float(lng), float(lat)) for lat, lng in boundary])
+        except Exception as exc:
+            raise _preview_error(
+                "analysis_cell_invalid",
+                f"The proximity preview contains invalid cell {cell_id!r}.",
+                exc,
+            )
+        _ensure_usable_geometry(polygon, f"H3 cell {cell_id!r}")
+        web_polygons.append(polygon)
+
+    try:
+        web_geometry = unary_union(web_polygons)
+    except Exception as exc:
+        raise _preview_error(
+            "dissolve_failed",
+            "The feasible H3 cells could not be dissolved.",
+            exc,
+        )
+    _ensure_usable_geometry(web_geometry, "feasible H3 coverage")
+    try:
+        area_m2 = sum(
+            float(h3.cell_area(cell_id, unit="m^2"))
+            for cell_id in normalized_cells
+        )
+    except Exception as exc:
+        raise _preview_error(
+            "analysis_cell_area_invalid",
+            "The feasible H3 coverage area could not be measured.",
+            exc,
+        )
+    if not math.isfinite(area_m2) or area_m2 <= 0:
+        raise GeometryPreviewError(
+            "analysis_cell_area_invalid",
+            "The feasible H3 coverage area must be finite and positive.",
+        )
+
+    canonical_native_crs = target_crs.to_string()
+    properties = {
+        "layer_ids": list(layer_ids),
+        "native_crs": canonical_native_crs,
+        "buffer_m": distance,
+        "semantics": "analysis_cell_coverage",
+        "source_h3_resolution": source_resolution,
+        "feasible_cell_count": len(normalized_cells),
+    }
+    return VectorBufferPreview(
+        geojson={
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": properties,
+                    "geometry": mapping(web_geometry),
+                }
+            ],
+        },
+        layer_ids=layer_ids,
+        native_crs=canonical_native_crs,
+        buffer_m=distance,
+        semantics="analysis_cell_coverage",
+        geometry_type=web_geometry.geom_type,
+        source_feature_count=source_feature_count,
+        declared_feature_count=declared_feature_count,
+        area_m2=area_m2,
+    )
 
 
 def build_vector_buffer_preview(

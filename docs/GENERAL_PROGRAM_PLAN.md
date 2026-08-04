@@ -218,7 +218,8 @@ Current slice status:
   promoted on 2026-08-03 and unpublished;
 - culture: complete current Trøndelag behavior locally promoted on 2026-08-03
   and unpublished;
-- grid infrastructure: next planned slice;
+- grid infrastructure: complete current Trøndelag behavior locally promoted
+  on 2026-08-04 and unpublished;
 - dynamic medium and large road layers: complete;
 - generic group result and distance-engine contract conformance: complete;
 - the temporary separate parity app has been removed;
@@ -246,8 +247,8 @@ Current slice status:
   visibility are map-review state and do not alter the numeric request;
 - the five-group public whitelist is manifest-declared. Roads, all three wind
   population sources, Trøndelag `protected_areas` under canonical `nature`,
-  and both Trøndelag culture sources are now manifest-driven; remaining
-  unmigrated non-road options
+  both Trøndelag culture sources, and all three current Trøndelag grid-
+  infrastructure sources are now manifest-driven; remaining unmigrated options
   still come from the region-manifest-declared legacy
   registry. That bounded adapter is not canonical manifest layer availability
   and not a solar analysis contract;
@@ -310,6 +311,16 @@ Current slice status:
   group toggle, advanced-source adapter, and legacy distance paths are
   removed. The user approved clean-process localhost review on 2026-08-03, so
   the complete current culture slice is locally promoted but unpublished;
+- the grid-infrastructure manifest declares `high_voltage_lines`,
+  `underground_cables`, and `existing_wind_turbines` under canonical
+  `grid_infrastructure`, with generic `proximity_feasibility` and a shared
+  500–15,000 m maximum-connection-distance contract. R7 distance observations
+  roll up generically to R6/R5, and source-resolution R7 feasibility coverage
+  provides the fast buffer-review layer while exact vectors remain available
+  as sources. Independent engine, frozen-reference, preview, and real-app
+  gates pass. The user approved clean-process localhost review on 2026-08-04,
+  so the complete current grid-infrastructure slice is locally promoted but
+  unpublished;
 - the population parity result currently starts from frozen-V2 R8 distance
   rows and rolls them up to R7/R6/R5. This remains valid reference parity but
   is a known potential modeling problem for the intended R7 contract. Before
