@@ -288,6 +288,16 @@ class DefaultRequestContract:
 
 
 @dataclass(frozen=True)
+class AreaResultContract:
+    technology: str
+    applicable_group_ids: tuple[str, ...]
+    restriction_combination: str
+    operation_order: str
+    denominator: str
+    geometry_semantics: str
+
+
+@dataclass(frozen=True)
 class AnalysisContract:
     id: str
     region_id: str
@@ -295,6 +305,7 @@ class AnalysisContract:
     layers: dict[str, LayerContract]
     default_request: DefaultRequestContract | None = None
     analysis_domain: AnalysisDomainContract | None = None
+    area_result: AreaResultContract | None = None
     ui: AnalysisUIContract | None = None
 
 
@@ -481,6 +492,28 @@ def default_request_contract(
     )
 
 
+def area_result_contract(
+    raw: dict[str, Any] | None,
+) -> AreaResultContract | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("Analysis area_result must be an object")
+    applicable_group_ids = raw.get("applicable_group_ids")
+    if not isinstance(applicable_group_ids, list):
+        raise ValueError(
+            "Analysis area_result applicable_group_ids must be a list"
+        )
+    return AreaResultContract(
+        technology=str(raw["technology"]),
+        applicable_group_ids=tuple(str(item) for item in applicable_group_ids),
+        restriction_combination=str(raw["restriction_combination"]),
+        operation_order=str(raw["operation_order"]),
+        denominator=str(raw["denominator"]),
+        geometry_semantics=str(raw["geometry_semantics"]),
+    )
+
+
 def analysis_contract(raw: dict[str, Any]) -> AnalysisContract:
     layers: dict[str, LayerContract] = {}
     for item in raw.get("layers") or []:
@@ -504,5 +537,6 @@ def analysis_contract(raw: dict[str, Any]) -> AnalysisContract:
         layers=layers,
         default_request=default_request_contract(raw.get("default_request")),
         analysis_domain=analysis_domain_contract(raw.get("analysis_domain")),
+        area_result=area_result_contract(raw.get("area_result")),
         ui=analysis_ui_contract(raw.get("ui")),
     )

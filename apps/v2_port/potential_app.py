@@ -112,6 +112,7 @@ from potential_model.speedlocal_bridge import (  # noqa: E402
     roads_control_contract,
     vector_buffer_preview,
     vector_preview_layer_ids,
+    wind_area_result_frame,
     wind_analysis_domain_cell_areas_km2,
     wind_analysis_domain_resolution,
 )
@@ -10405,6 +10406,26 @@ def _cached_wind_analysis_domain_cell_areas_km2(
     )
 
 
+@st.cache_data(show_spinner=False, max_entries=12)
+def _cached_wind_area_result_frame(
+    region_id: str,
+    selected_groups: tuple[tuple[str, tuple[str, ...]], ...],
+    group_buffers_m: tuple[tuple[str, float], ...],
+    target_resolution: int,
+) -> pd.DataFrame:
+    layer_ids = tuple(
+        layer_id
+        for _group_id, group_layer_ids in selected_groups
+        for layer_id in group_layer_ids
+    )
+    return wind_area_result_frame(
+        str(region_id),
+        layer_ids,
+        {group_id: float(value) for group_id, value in group_buffers_m},
+        int(target_resolution),
+    )
+
+
 def _wind_analysis_domain_cell_area_km2_series(
     frame: pd.DataFrame,
     region_id: str,
@@ -13032,6 +13053,63 @@ def _wind_polygon_summary_frame(
     return frame.sort_values("hex_id").reset_index(drop=True)
 
 
+def _exact_wind_area_summary_frame(
+    region: dict[str, Any],
+    proxy_frame: pd.DataFrame,
+    exact_area_frame: pd.DataFrame,
+    target_resolution: int,
+) -> pd.DataFrame:
+    """Keep contextual ranking fields but replace proxy area with exact area."""
+
+    if proxy_frame.empty or exact_area_frame.empty:
+        raise ValueError("Exact wind area integration requires complete frames")
+    proxy_ids = set(proxy_frame["hex_id"].astype(str))
+    exact_ids = set(exact_area_frame["hex_id"].astype(str))
+    if proxy_ids != exact_ids:
+        raise ValueError(
+            "Exact wind area result does not cover the current analysis domain"
+        )
+    area_columns = [
+        "display_area_km2",
+        "potential_area_km2",
+        "potential_area_share_pct",
+        "potential_area_share",
+    ]
+    frame = proxy_frame.drop(
+        columns=[column for column in area_columns if column in proxy_frame],
+    ).merge(
+        exact_area_frame[
+            [
+                "hex_id",
+                "display_area_km2",
+                "potential_area_km2",
+                "potential_area_share_pct",
+            ]
+        ],
+        on="hex_id",
+        how="inner",
+        validate="one_to_one",
+    )
+    display_geometry_path = _h3_display_geometry_path(
+        region,
+        int(target_resolution),
+    )
+    if not display_geometry_path:
+        raise ValueError("Exact wind area result has no display geometry")
+    frame = _finalize_fast_wind_share_frame(
+        frame,
+        display_geometry_path,
+        str(region.get("region_id") or ""),
+        int(target_resolution),
+        compute_core=False,
+    )
+    frame["wind_score"] = frame["potential_area_share_pct"].astype(float)
+    frame["wind_class"] = frame["share_class_id"].astype(str)
+    frame["wind_class_label"] = frame["share_class_label"].astype(str)
+    frame["wind_color"] = frame["fill"].astype(str)
+    return frame.sort_values("hex_id").reset_index(drop=True)
+
+
 def _wind_source_status_frame() -> pd.DataFrame:
     groups, _, registry_meta = load_acceptance_registry()
     status_df = acceptance_layer_status_table(registry_meta).copy()
@@ -13202,6 +13280,12 @@ def _render_establishment_focus(energy_model_state: dict[str, Any], geography_re
     solar_stats = solar_stats if isinstance(solar_stats, dict) else {}
     social_summary = energy_model_state.get("social_acceptance_summary")
     social_effect = social_summary if isinstance(social_summary, dict) else {}
+    wind_area_result_stats = energy_model_state.get("wind_area_result_stats")
+    wind_area_result_stats = (
+        wind_area_result_stats
+        if isinstance(wind_area_result_stats, dict)
+        else {}
+    )
 
     wind_need = float(energy_model_state.get("wind_area_need_km2", 0.0) or 0.0)
     solar_need = float(energy_model_state.get("solar_area_need_km2", 0.0) or 0.0)
@@ -13236,8 +13320,20 @@ def _render_establishment_focus(energy_model_state: dict[str, Any], geography_re
     total_twh = wind_twh + solar_twh
     wind_share_pct = float(energy_model_state.get("wind_share_pct", 0.0) or 0.0)
     solar_share_pct = float(energy_model_state.get("solar_share_pct", 0.0) or 0.0)
-    wind_available_area = float(proposal_stats.get("available_candidate_area_km2", 0.0) or 0.0)
-    wind_available_hex = int(proposal_stats.get("available_candidate_hex", 0) or 0)
+    wind_available_area = float(
+        wind_area_result_stats.get(
+            "potential_area_km2",
+            proposal_stats.get("available_candidate_area_km2", 0.0),
+        )
+        or 0.0
+    )
+    wind_available_hex = int(
+        wind_area_result_stats.get(
+            "potential_hex_count",
+            proposal_stats.get("available_candidate_hex", 0),
+        )
+        or 0
+    )
     solar_available_area = float(solar_stats.get("available_candidate_area_km2", 0.0) or 0.0)
     solar_available_hex = int(solar_stats.get("available_candidate_hex", 0) or 0)
     total_available_area = wind_available_area + solar_available_area
@@ -15091,6 +15187,84 @@ def _unified_workspace_tab(
                     analysis_h3_resolution,
                 )
             )
+            region_id = str(region.get("region_id") or "")
+            normalized_area_selection = normalize_group_layer_map(
+                wind_selected_layers,
+                region_id,
+            )
+            area_group_ids = (
+                CANONICAL_ROADS_GROUP_ID,
+                CANONICAL_POPULATION_GROUP_ID,
+                CANONICAL_NATURE_GROUP_ID,
+                CANONICAL_CULTURE_GROUP_ID,
+                CANONICAL_GRID_GROUP_ID,
+            )
+            selected_area_groups = tuple(
+                (
+                    group_id,
+                    tuple(normalized_area_selection.get(group_id, [])),
+                )
+                for group_id in area_group_ids
+                if normalized_area_selection.get(group_id, [])
+            )
+            area_group_buffers: list[tuple[str, float]] = []
+            for group_id, _layer_ids in selected_area_groups:
+                control_group = _wind_control_group(region_id, group_id)
+                if control_group is None:
+                    raise ValueError(
+                        f"Canonical area-result group {group_id} has no control contract"
+                    )
+                threshold_key = _wind_group_param_key(group_id)
+                threshold_m = (
+                    float(
+                        wind_ui_params.get(
+                            threshold_key,
+                            control_group.analysis_default_m,
+                        )
+                    )
+                    if threshold_key
+                    else float(control_group.analysis_default_m)
+                )
+                area_group_buffers.append((group_id, threshold_m))
+            exact_wind_area_frame = _cached_wind_area_result_frame(
+                region_id,
+                selected_area_groups,
+                tuple(area_group_buffers),
+                int(analysis_h3_resolution),
+            )
+            custom_wind_analysis_frame = _exact_wind_area_summary_frame(
+                region,
+                custom_wind_analysis_frame,
+                exact_wind_area_frame,
+                int(analysis_h3_resolution),
+            )
+            if int(h3_resolution) == int(analysis_h3_resolution):
+                custom_wind_summary = custom_wind_analysis_frame.copy()
+            exact_model_area_km2 = float(
+                pd.to_numeric(
+                    exact_wind_area_frame["display_area_km2"],
+                    errors="raise",
+                ).sum()
+            )
+            exact_potential_area_km2 = float(
+                pd.to_numeric(
+                    exact_wind_area_frame["potential_area_km2"],
+                    errors="raise",
+                ).sum()
+            )
+            energy_model_state["wind_area_result_stats"] = {
+                "model_area_km2": exact_model_area_km2,
+                "potential_area_km2": exact_potential_area_km2,
+                "potential_pct": (
+                    exact_potential_area_km2
+                    / max(exact_model_area_km2, 1e-9)
+                    * 100.0
+                ),
+                "potential_hex_count": int(
+                    exact_wind_area_frame["potential_area_km2"].gt(0.0).sum()
+                ),
+                "resolution": int(analysis_h3_resolution),
+            }
             custom_wind_summary_frame = custom_wind_analysis_frame.copy()
             potential_frames.append(
                 {
@@ -15221,9 +15395,15 @@ def _unified_workspace_tab(
             analysis_hex_area_km2,
             social_acceptance_impact_pct,
         )
+        wind_area_result_stats = energy_model_state.get("wind_area_result_stats")
+        exact_wind_available_area = (
+            float(wind_area_result_stats.get("potential_area_km2", 0.0) or 0.0)
+            if isinstance(wind_area_result_stats, dict)
+            else float(wind_stats_for_outside.get("available_candidate_area_km2", 0.0) or 0.0)
+        )
         energy_model_state["acceptance_adjusted_capacity"] = _acceptance_adjusted_capacity_metrics(
             float(energy_model_state.get("wind_area_need_km2", 0.0) or 0.0),
-            float(wind_stats_for_outside.get("available_candidate_area_km2", 0.0) or 0.0),
+            exact_wind_available_area,
             float(energy_model_state.get("solar_area_need_km2", 0.0) or 0.0),
             float(solar_stats_for_outside.get("available_candidate_area_km2", 0.0) or 0.0),
             energy_model_state.get("social_acceptance_summary") if isinstance(energy_model_state.get("social_acceptance_summary"), dict) else {},

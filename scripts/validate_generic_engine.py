@@ -12,12 +12,17 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import h3
+from shapely.geometry import box
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from speedlocal import run_analysis
+from speedlocal.area_result import (
+    calculate_remaining_area_cells,
+    run_area_analysis,
+)
 from speedlocal.catalogs import load_analysis
 from speedlocal.contracts import (
     AnalysisDomainContract,
@@ -1740,6 +1745,178 @@ def main() -> int:
     else:
         raise AssertionError("Upward distance rollup did not fail closed")
     checks += 1
+
+    synthetic_model_cells = {"cell": box(0.0, 0.0, 10.0, 10.0)}
+    synthetic_model_areas = {"cell": 2.0}
+    overlap_result = calculate_remaining_area_cells(
+        synthetic_model_cells,
+        synthetic_model_areas,
+        exclusion_groups=(
+            (
+                box(0.0, 0.0, 6.0, 10.0),
+                box(4.0, 0.0, 8.0, 10.0),
+            ),
+        ),
+    )[0]
+    assert math.isclose(
+        overlap_result.remaining_area_km2,
+        0.4,
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    )
+    assert math.isclose(
+        overlap_result.potential_pct,
+        20.0,
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    )
+    checks += 2
+
+    reordered_overlap = calculate_remaining_area_cells(
+        synthetic_model_cells,
+        synthetic_model_areas,
+        exclusion_groups=(
+            (
+                box(4.0, 0.0, 8.0, 10.0),
+                box(0.0, 0.0, 6.0, 10.0),
+            ),
+        ),
+    )[0]
+    assert reordered_overlap == overlap_result
+    checks += 1
+
+    feasibility_result = calculate_remaining_area_cells(
+        synthetic_model_cells,
+        synthetic_model_areas,
+        exclusion_groups=((box(0.0, 0.0, 2.0, 10.0),),),
+        feasibility_groups=((box(0.0, 0.0, 5.0, 10.0),),),
+    )[0]
+    assert math.isclose(
+        feasibility_result.remaining_area_km2,
+        0.6,
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    )
+    assert math.isclose(
+        feasibility_result.potential_pct,
+        30.0,
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    )
+    checks += 2
+
+    unfiltered_area = calculate_remaining_area_cells(
+        synthetic_model_cells,
+        synthetic_model_areas,
+    )[0]
+    assert unfiltered_area.remaining_area_km2 == 2.0
+    assert unfiltered_area.potential_pct == 100.0
+    checks += 2
+
+    direct_population_area = run_area_analysis(
+        "trondelag",
+        "wind",
+        ["population_points"],
+        {"population_points": {"buffer_m": 100.0}},
+        target_resolution=7,
+    )
+    assert direct_population_area.technology == "wind"
+    assert direct_population_area.active_group_ids == ("population",)
+    assert len(direct_population_area.cells) == 13_735
+    assert math.isclose(
+        direct_population_area.model_area_km2,
+        TRONDELAG_ANALYSIS_DOMAIN_AREA_KM2,
+        rel_tol=0.0,
+        abs_tol=1e-9,
+    )
+    assert math.isclose(
+        direct_population_area.potential_pct,
+        93.1071645226975,
+        rel_tol=0.0,
+        abs_tol=1e-9,
+    )
+    checks += 5
+
+    for rollup_resolution, expected_count in ((6, 2_163), (5, 365)):
+        rolled_area = run_area_analysis(
+            "trondelag",
+            "wind",
+            ["population_points"],
+            {"population_points": {"buffer_m": 100.0}},
+            target_resolution=rollup_resolution,
+        )
+        target_areas = resolve_analysis_domain_cell_areas_km2(
+            trondelag,
+            rollup_resolution,
+        )
+        child_model: dict[str, float] = {}
+        child_remaining: dict[str, float] = {}
+        for cell in direct_population_area.cells:
+            parent = str(h3.cell_to_parent(cell.cell_id, rollup_resolution))
+            child_model[parent] = child_model.get(parent, 0.0) + cell.model_area_km2
+            child_remaining[parent] = (
+                child_remaining.get(parent, 0.0) + cell.remaining_area_km2
+            )
+        assert rolled_area.resolution == rollup_resolution
+        assert len(rolled_area.cells) == expected_count
+        assert set(target_areas) == {cell.cell_id for cell in rolled_area.cells}
+        assert math.isclose(
+            rolled_area.model_area_km2,
+            math.fsum(target_areas.values()),
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        )
+        for cell in rolled_area.cells:
+            expected_fraction = (
+                child_remaining[cell.cell_id] / child_model[cell.cell_id]
+            )
+            assert math.isclose(
+                cell.potential_pct,
+                expected_fraction * 100.0,
+                rel_tol=0.0,
+                abs_tol=1e-9,
+            )
+            assert math.isclose(
+                cell.remaining_area_km2,
+                target_areas[cell.cell_id] * expected_fraction,
+                rel_tol=0.0,
+                abs_tol=1e-9,
+            )
+        checks += 4 + expected_count * 2
+
+    for invalid_resolution in (6.5, True, "6"):
+        try:
+            run_area_analysis(
+                "trondelag",
+                "wind",
+                ["population_points"],
+                {"population_points": {"buffer_m": 100.0}},
+                target_resolution=invalid_resolution,
+            )
+        except TypeError as exc:
+            assert "must be an integer" in str(exc)
+        else:
+            raise AssertionError(
+                f"Area-result resolution {invalid_resolution!r} did not fail closed"
+            )
+        checks += 1
+
+    for undeclared_resolution in (8, 4):
+        try:
+            run_area_analysis(
+                "trondelag",
+                "wind",
+                ["population_points"],
+                {"population_points": {"buffer_m": 100.0}},
+                target_resolution=undeclared_resolution,
+            )
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(
+                f"Area-result R{undeclared_resolution} did not fail closed"
+            )
+        checks += 1
 
     checks += _assert_invalid_distance_rows_fail_closed()
 

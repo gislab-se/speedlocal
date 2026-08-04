@@ -58,6 +58,51 @@ def validate_contract(contract: AnalysisContract) -> None:
             f"{sorted(unknown_default_layers)}"
         )
 
+    area_result = contract.area_result
+    if area_result is not None:
+        if area_result.technology not in {"wind", "solar"}:
+            raise ValueError(
+                "Analysis area_result technology must be 'wind' or 'solar'"
+            )
+        applicable_group_ids = area_result.applicable_group_ids
+        if not applicable_group_ids:
+            raise ValueError(
+                "Analysis area_result applicable_group_ids must not be empty"
+            )
+        if len(applicable_group_ids) != len(set(applicable_group_ids)):
+            raise ValueError(
+                "Analysis area_result applicable_group_ids must not contain duplicates"
+            )
+        unknown_area_groups = set(applicable_group_ids) - set(contract.groups)
+        if unknown_area_groups:
+            raise ValueError(
+                "Analysis area_result contains undeclared groups: "
+                f"{sorted(unknown_area_groups)}"
+            )
+        if area_result.restriction_combination != "geometry_union":
+            raise ValueError(
+                "Analysis area_result restriction_combination must be "
+                "'geometry_union'"
+            )
+        if area_result.operation_order != "feasibility_then_exclusion":
+            raise ValueError(
+                "Analysis area_result operation_order must be "
+                "'feasibility_then_exclusion'"
+            )
+        if area_result.denominator != "analysis_domain":
+            raise ValueError(
+                "Analysis area_result denominator must be 'analysis_domain'"
+            )
+        if area_result.geometry_semantics != "exact_vector_clip":
+            raise ValueError(
+                "Analysis area_result geometry_semantics must be "
+                "'exact_vector_clip'"
+            )
+        if contract.analysis_domain is None:
+            raise ValueError(
+                "Analysis area_result requires an analysis-domain contract"
+            )
+
     domain = contract.analysis_domain
     if domain is not None:
         if (

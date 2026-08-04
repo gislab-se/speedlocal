@@ -55,6 +55,20 @@
   "default_request": {
     "selected_layer_ids": []
   },
+  "area_result": {
+    "technology": "wind",
+    "applicable_group_ids": [
+      "roads",
+      "population",
+      "nature",
+      "culture",
+      "grid_infrastructure"
+    ],
+    "restriction_combination": "geometry_union",
+    "operation_order": "feasibility_then_exclusion",
+    "denominator": "analysis_domain",
+    "geometry_semantics": "exact_vector_clip"
+  },
   "analysis_domain": {
     "provider": "v2_archive",
     "path": "docs/geocontext/potential_framework/data/trondelag_r7_app_bundle/hex.geojson",

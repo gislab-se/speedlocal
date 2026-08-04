@@ -330,7 +330,15 @@ Current slice status:
   checkpoint passes its full package gate, and all five group regressions pass.
   The user approved clean-process localhost review on 2026-08-04. The coarse
   `built_low_selection` SSB 1 km-grid centroid proxy remains visibly
-  caution-flagged as a known limitation. Combined-result work is next.
+  caution-flagged as a known limitation;
+- the first combined-result increment is locally promoted on 2026-08-04. Wind
+  potential is now literal remaining area over the manifest model denominator
+  in the actual map, hover, table, acceptance, and allocation chain. Exact R7
+  geometry drives R6/R5 rollups, while all five promoted group metrics retain
+  their accepted behavior. Localhost review also confirmed a 0.5% wind cell
+  can remain wind-only while the integer hover rounds to 0%; the minimum
+  suitability/display threshold is deliberately deferred. The equivalent
+  solar contract is next before the shared two-technology result is complete.
 
 ## Definition of done for a slice
 

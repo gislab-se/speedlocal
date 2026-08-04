@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from speedlocal.area_result import run_area_analysis
 from speedlocal.catalogs import load_analysis, load_region
 from speedlocal.contracts import AnalysisContract, ParameterContract
 from speedlocal.engine import run_analysis
@@ -103,6 +104,69 @@ def wind_analysis_domain_cell_areas_km2(
     """Return validated manifest-domain cell areas in square kilometres."""
     analysis = _validated_wind_analysis(region_id)
     return resolve_analysis_domain_cell_areas_km2(analysis, resolution)
+
+
+def wind_area_result_frame(
+    region_id: str,
+    layer_ids: Collection[str],
+    group_buffer_m: dict[str, float],
+    target_resolution: int,
+) -> pd.DataFrame:
+    """Adapt the exact manifest-declared wind area result to V2 Final."""
+
+    analysis = _validated_wind_analysis(region_id)
+    requested = tuple(str(layer_id) for layer_id in layer_ids)
+    if len(requested) != len(set(requested)):
+        raise ValueError("A wind area-result request contains duplicate layers")
+    unknown = set(requested) - set(analysis.layers)
+    if unknown:
+        raise ValueError(
+            f"{region_id}/wind has no canonical area-result layers: "
+            f"{sorted(unknown)}"
+        )
+    ordered = tuple(
+        layer_id for layer_id in analysis.layers if layer_id in set(requested)
+    )
+    parameters: dict[str, dict[str, float]] = {}
+    for layer_id in ordered:
+        layer = analysis.layers[layer_id]
+        if layer.group_id not in group_buffer_m:
+            raise ValueError(
+                f"Wind area-result group {layer.group_id} has no applied distance"
+            )
+        parameters[layer_id] = {
+            "buffer_m": float(group_buffer_m[layer.group_id]),
+        }
+    result = run_area_analysis(
+        region=str(region_id),
+        analysis="wind",
+        layers=ordered,
+        parameters=parameters,
+        target_resolution=target_resolution,
+    )
+    frame = pd.DataFrame(
+        (
+            {
+                "hex_id": cell.cell_id,
+                "display_area_km2": cell.model_area_km2,
+                "potential_area_km2": cell.remaining_area_km2,
+                "potential_area_share_pct": cell.potential_pct,
+            }
+            for cell in result.cells
+        )
+    )
+    if frame.empty or frame["hex_id"].duplicated().any():
+        raise ValueError("Canonical wind area result is empty or duplicated")
+    frame.attrs["area_result"] = {
+        "technology": result.technology,
+        "active_group_ids": result.active_group_ids,
+        "selected_layer_ids": result.selected_layer_ids,
+        "model_area_km2": result.model_area_km2,
+        "remaining_area_km2": result.remaining_area_km2,
+        "potential_pct": result.potential_pct,
+        "resolution": result.resolution,
+    }
+    return frame.sort_values("hex_id").reset_index(drop=True)
 
 
 def public_wind_group_ids(region_id: str) -> tuple[str, ...]:

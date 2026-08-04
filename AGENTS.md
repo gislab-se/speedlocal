@@ -67,9 +67,10 @@
 - The complete current Trøndelag `protected_areas` source is manifest-declared
   under canonical `nature`, and its generic binary hard-exclusion behavior is
   locally promoted after approved localhost review on 2026-08-03. The public
-  wind `protected` adapter is removed for Trøndelag. A reliable result hover
-  and literal technology-specific establishment-area percentages remain
-  deferred to the combined-result and wind/solar phases.
+  wind `protected` adapter is removed for Trøndelag. Literal wind
+  establishment-area percentages and their result hover are now locally
+  promoted in the first combined-result increment; the equivalent solar
+  contract remains in the combined-result and wind/solar phases.
 - Both complete current Trøndelag culture sources are
   manifest-declared under canonical `culture`; their generic binary
   hard-exclusion automated gates pass at R7/R6/R5. The redundant wind culture
@@ -89,7 +90,14 @@
   48-file runtime-package gate, and clean-process localhost review pass. The
   `built_low_selection` source is a known coarse SSB 1 km-grid centroid proxy;
   its manifest-driven caution flag must remain until its data model is revised.
-- The combined-result slice is the next planned slice.
+- The first combined-result increment is locally promoted on 2026-08-04. Wind
+  now uses an exact, overlap-safe, manifest-declared R7 establishment-area
+  result throughout map class, hover, result-table capacity, acceptance
+  capacity, and scenario allocation; R6/R5 derive from R7. The five promoted
+  group metrics remain unchanged. A reviewed 0.5% wind cell is classified as
+  wind-only while the integer hover displays 0%; choosing a minimum suitability
+  threshold or a `<1%` display is explicitly deferred. The equivalent
+  manifest-driven solar area contract is the next planned increment.
 - Bornholm source and engine contracts may validate in parallel as onboarding
   diagnostics, but they do not block Trøndelag slice promotion.
 - Do not implement regional exceptions yet.

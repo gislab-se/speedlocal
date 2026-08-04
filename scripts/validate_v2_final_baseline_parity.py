@@ -2129,6 +2129,69 @@ def main() -> int:
         + "; ".join(unfiltered_rollup_details),
     )
 
+    exact_population = app.wind_area_result_frame(
+        "trondelag",
+        ("population_points",),
+        {"population": 100.0},
+        7,
+    )
+    proxy_context = pd.DataFrame(
+        {
+            "hex_id": exact_population["hex_id"].astype(str),
+            "potential_area_share_pct": 50.0,
+        }
+    )
+    proxy_context = app._finalize_fast_wind_share_frame(
+        proxy_context,
+        app._h3_display_geometry_path(trondelag_region, 7),
+        "trondelag",
+        7,
+        compute_core=False,
+    )
+    exact_summary = app._exact_wind_area_summary_frame(
+        trondelag_region,
+        proxy_context,
+        exact_population,
+        7,
+    )
+    exact_combined = app._combined_potential_establishment_frame(
+        trondelag_region,
+        exact_summary,
+        pd.DataFrame(),
+        pd.DataFrame(),
+        pd.DataFrame(),
+        7,
+        7,
+    )
+    exact_score = pd.to_numeric(
+        exact_combined["wind_potential_score"],
+        errors="coerce",
+    )
+    exact_area = pd.to_numeric(
+        exact_combined["wind_potential_area_km2"],
+        errors="coerce",
+    )
+    report.check(
+        len(exact_population) == DISPLAY_COUNTS[7]
+        and len(exact_summary) == DISPLAY_COUNTS[7]
+        and len(exact_combined) == DISPLAY_COUNTS[7]
+        and exact_score.notna().all()
+        and abs(float(exact_area.sum()) - 42_096.717936363726) <= 1e-6
+        and abs(
+            float(exact_area.sum())
+            / TRONDELAG_MODEL_DOMAIN_AREA_KM2
+            * 100.0
+            - 93.1071645226975
+        )
+        <= 1e-9,
+        "The actual combined-result adapter replaces proxy wind area with the "
+        "accepted exact population R7 area before map and hover classification.",
+        "The combined-result adapter did not preserve the accepted exact R7 "
+        f"population area: cells={len(exact_combined)}, "
+        f"area={float(exact_area.sum()):.12f}, "
+        f"score_missing={int(exact_score.isna().sum())}.",
+    )
+
     tooltip_hex_ids = list(r7_model_areas)[:3]
     tooltip_frame = pd.DataFrame(
         {
