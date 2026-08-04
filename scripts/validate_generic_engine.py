@@ -1837,6 +1837,35 @@ def main() -> int:
     )
     checks += 5
 
+    solar_contract = load_analysis("trondelag", "solar")
+    assert solar_contract.area_result is not None
+    assert solar_contract.area_result.technology == "solar"
+    assert solar_contract.groups == trondelag.groups
+    assert tuple(solar_contract.layers) == tuple(trondelag.layers)
+    assert solar_contract.analysis_domain == trondelag.analysis_domain
+    direct_solar_population_area = run_area_analysis(
+        "trondelag",
+        "solar",
+        ["population_points"],
+        {"population_points": {"buffer_m": 100.0}},
+        target_resolution=7,
+    )
+    assert direct_solar_population_area.technology == "solar"
+    assert direct_solar_population_area.cells == direct_population_area.cells
+    assert math.isclose(
+        direct_solar_population_area.model_area_km2,
+        TRONDELAG_ANALYSIS_DOMAIN_AREA_KM2,
+        rel_tol=0.0,
+        abs_tol=1e-9,
+    )
+    assert math.isclose(
+        direct_solar_population_area.potential_pct,
+        93.1071645226975,
+        rel_tol=0.0,
+        abs_tol=1e-9,
+    )
+    checks += 9
+
     for rollup_resolution, expected_count in ((6, 2_163), (5, 365)):
         rolled_area = run_area_analysis(
             "trondelag",
@@ -1882,7 +1911,16 @@ def main() -> int:
                 rel_tol=0.0,
                 abs_tol=1e-9,
             )
-        checks += 4 + expected_count * 2
+        rolled_solar_area = run_area_analysis(
+            "trondelag",
+            "solar",
+            ["population_points"],
+            {"population_points": {"buffer_m": 100.0}},
+            target_resolution=rollup_resolution,
+        )
+        assert rolled_solar_area.technology == "solar"
+        assert rolled_solar_area.cells == rolled_area.cells
+        checks += 6 + expected_count * 2
 
     for invalid_resolution in (6.5, True, "6"):
         try:

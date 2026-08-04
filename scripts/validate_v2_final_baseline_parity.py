@@ -91,13 +91,13 @@ ROADS_LARGE_DOWNSTREAM_EXPECTATIONS = {
 ROADS_LARGE_APP_ROLLUP_EXPECTATIONS = {
     300.0: {
         7: (96.8838733163451, 13_307, 428),
-        6: (97.04147018030514, 2_126, 37),
-        5: (97.03287671232877, 364, 1),
+        6: (97.04147018030514, 2_162, 1),
+        5: (97.03287671232877, 365, 0),
     },
     1000.0: {
         7: (95.54743356388788, 13_301, 434),
-        6: (95.74826629680999, 2_123, 40),
-        5: (95.80219178082193, 364, 1),
+        6: (95.74826629680999, 2_161, 2),
+        5: (95.80219178082193, 365, 0),
     },
 }
 TRONDELAG_MODEL_DOMAIN_AREA_KM2 = 45_213.18864360976
@@ -2072,7 +2072,7 @@ def main() -> int:
                 == expected_not_suitable,
                 f"Trøndelag roads_large R7 at {road_distance:.0f} m "
                 f"rolls to R{resolution} with manifest-area scoring and "
-                "area-weighted class dominance.",
+                "positive exact-area classification.",
                 f"Trøndelag roads_large R7→R{resolution} establishment "
                 f"drifted at {road_distance:.0f} m: area={area:.12f}, "
                 f"domain={domain_area:.12f}, score={score:.12f}, "
@@ -2190,6 +2190,165 @@ def main() -> int:
         f"population area: cells={len(exact_combined)}, "
         f"area={float(exact_area.sum()):.12f}, "
         f"score_missing={int(exact_score.isna().sum())}.",
+    )
+
+    exact_solar_population = app.solar_area_result_frame(
+        "trondelag",
+        ("population_points",),
+        {"population": 100.0},
+        7,
+    )
+    solar_area_groups, solar_area_buffers = app._solar_exact_area_request(
+        True,
+        100.0,
+        [],
+    )
+    exact_solar_summary = app._exact_solar_area_summary_frame(
+        trondelag_region,
+        pd.DataFrame(
+            {"hex_id": exact_solar_population["hex_id"].astype(str)}
+        ),
+        exact_solar_population,
+        7,
+    )
+    exact_solar_combined = app._combined_potential_establishment_frame(
+        trondelag_region,
+        pd.DataFrame(),
+        exact_solar_summary,
+        pd.DataFrame(),
+        pd.DataFrame(),
+        7,
+        7,
+    )
+    exact_solar_score = pd.to_numeric(
+        exact_solar_combined["solar_potential_score"],
+        errors="coerce",
+    )
+    exact_solar_area = pd.to_numeric(
+        exact_solar_combined["solar_potential_area_km2"],
+        errors="coerce",
+    )
+    exact_solar_by_hex = exact_solar_population.set_index("hex_id")
+    combined_solar_by_hex = exact_solar_combined.set_index("hex_id")
+    exact_solar_score_error = float(
+        (
+            pd.to_numeric(
+                combined_solar_by_hex.loc[
+                    exact_solar_by_hex.index,
+                    "solar_potential_score",
+                ],
+                errors="raise",
+            )
+            - pd.to_numeric(
+                exact_solar_by_hex["potential_area_share_pct"],
+                errors="raise",
+            )
+        ).abs().max()
+    )
+    report.check(
+        solar_area_groups == (("population", ("population_points",)),)
+        and solar_area_buffers == (("population", 100.0),)
+        and len(exact_solar_population) == DISPLAY_COUNTS[7]
+        and len(exact_solar_summary) == DISPLAY_COUNTS[7]
+        and len(exact_solar_combined) == DISPLAY_COUNTS[7]
+        and exact_solar_score.notna().all()
+        and exact_solar_score_error <= 0.05
+        and abs(
+            float(exact_solar_area.sum()) - 42_096.717936363726
+        )
+        <= 1e-6,
+        "The solar manifest and combined-result adapter use the same exact "
+        "population geometry and denominator as the technology-area contract.",
+        "The combined-result adapter did not preserve exact solar population "
+        f"area: cells={len(exact_solar_combined)}, "
+        f"area={float(exact_solar_area.sum()):.12f}, "
+        f"max_score_error={exact_solar_score_error:.12f}, "
+        f"score_missing={int(exact_solar_score.isna().sum())}.",
+    )
+
+    classification_hex_ids = list(r7_model_areas)[:5]
+    classification_model_areas = pd.Series(
+        {
+            hex_id: float(r7_model_areas[hex_id])
+            for hex_id in classification_hex_ids
+        }
+    )
+    wind_percentages = pd.Series(
+        [1.0, 39.0, 0.0, 0.0, 0.5],
+        index=classification_hex_ids,
+    )
+    solar_percentages = pd.Series(
+        [54.0, 52.0, 1.0, 0.0, 0.0],
+        index=classification_hex_ids,
+    )
+    classification_wind = pd.DataFrame(
+        {
+            "hex_id": classification_hex_ids,
+            "potential_area_share_pct": wind_percentages.values,
+            "potential_area_km2": (
+                classification_model_areas
+                * wind_percentages
+                / 100.0
+            ).values,
+            "wind_hard_exclusion_intersects": True,
+        }
+    )
+    classification_solar = pd.DataFrame(
+        {
+            "hex_id": classification_hex_ids,
+            "potential_area_share_pct": solar_percentages.values,
+            "potential_area_km2": (
+                classification_model_areas
+                * solar_percentages
+                / 100.0
+            ).values,
+            "protected_buffer_share_pct": 100.0,
+            "large_filter_buffer_share_pct": 100.0,
+        }
+    )
+    classification_result = app._combined_potential_establishment_frame(
+        trondelag_region,
+        classification_wind,
+        classification_solar,
+        pd.DataFrame(),
+        pd.DataFrame(),
+        7,
+        7,
+    ).set_index("hex_id")
+    reviewed_classes = classification_result.loc[
+        classification_hex_ids,
+        "establishment_class",
+    ].tolist()
+    reviewed_wind_scores = pd.to_numeric(
+        classification_result.loc[
+            classification_hex_ids,
+            "wind_potential_score",
+        ],
+        errors="raise",
+    ).tolist()
+    reviewed_solar_scores = pd.to_numeric(
+        classification_result.loc[
+            classification_hex_ids,
+            "solar_potential_score",
+        ],
+        errors="raise",
+    ).tolist()
+    report.check(
+        reviewed_classes
+        == [
+            "wind_and_solar",
+            "wind_and_solar",
+            "solar_only",
+            "not_suitable",
+            "wind_only",
+        ]
+        and reviewed_wind_scores == [1.0, 39.0, 0.0, 0.0, 0.5]
+        and reviewed_solar_scores == [54.0, 52.0, 1.0, 0.0, 0.0],
+        "Combined-result classes derive only from exact positive technology "
+        "area, including the reviewed 1/54, 39/52, 0/1, 0/0 and 0.5/0 cases.",
+        "Exact-area classification or denominator drifted: "
+        f"classes={reviewed_classes}, wind={reviewed_wind_scores}, "
+        f"solar={reviewed_solar_scores}.",
     )
 
     tooltip_hex_ids = list(r7_model_areas)[:3]

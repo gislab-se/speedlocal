@@ -89,6 +89,24 @@ def _validated_wind_analysis(region_id: str) -> AnalysisContract:
     return analysis
 
 
+def _validated_area_analysis(
+    region_id: str,
+    technology: str,
+) -> AnalysisContract:
+    analysis = load_analysis(str(region_id), str(technology))
+    validate_contract(analysis)
+    if analysis.area_result is None:
+        raise ValueError(
+            f"{region_id}/{technology} has no area-result contract"
+        )
+    if analysis.area_result.technology != str(technology):
+        raise ValueError(
+            f"{region_id}/{technology} declares area technology "
+            f"{analysis.area_result.technology}"
+        )
+    return analysis
+
+
 def wind_analysis_domain_resolution(region_id: str) -> int:
     """Return the canonical wind-analysis resolution from its manifest."""
     analysis = _validated_wind_analysis(region_id)
@@ -106,22 +124,23 @@ def wind_analysis_domain_cell_areas_km2(
     return resolve_analysis_domain_cell_areas_km2(analysis, resolution)
 
 
-def wind_area_result_frame(
+def technology_area_result_frame(
     region_id: str,
+    technology: str,
     layer_ids: Collection[str],
     group_buffer_m: dict[str, float],
     target_resolution: int,
 ) -> pd.DataFrame:
-    """Adapt the exact manifest-declared wind area result to V2 Final."""
+    """Adapt one exact manifest-declared technology area to V2 Final."""
 
-    analysis = _validated_wind_analysis(region_id)
+    analysis = _validated_area_analysis(region_id, technology)
     requested = tuple(str(layer_id) for layer_id in layer_ids)
     if len(requested) != len(set(requested)):
         raise ValueError("A wind area-result request contains duplicate layers")
     unknown = set(requested) - set(analysis.layers)
     if unknown:
         raise ValueError(
-            f"{region_id}/wind has no canonical area-result layers: "
+            f"{region_id}/{technology} has no canonical area-result layers: "
             f"{sorted(unknown)}"
         )
     ordered = tuple(
@@ -132,14 +151,15 @@ def wind_area_result_frame(
         layer = analysis.layers[layer_id]
         if layer.group_id not in group_buffer_m:
             raise ValueError(
-                f"Wind area-result group {layer.group_id} has no applied distance"
+                f"{technology.title()} area-result group {layer.group_id} "
+                "has no applied distance"
             )
         parameters[layer_id] = {
             "buffer_m": float(group_buffer_m[layer.group_id]),
         }
     result = run_area_analysis(
         region=str(region_id),
-        analysis="wind",
+        analysis=str(technology),
         layers=ordered,
         parameters=parameters,
         target_resolution=target_resolution,
@@ -167,6 +187,40 @@ def wind_area_result_frame(
         "resolution": result.resolution,
     }
     return frame.sort_values("hex_id").reset_index(drop=True)
+
+
+def wind_area_result_frame(
+    region_id: str,
+    layer_ids: Collection[str],
+    group_buffer_m: dict[str, float],
+    target_resolution: int,
+) -> pd.DataFrame:
+    """Adapt the exact manifest-declared wind area result to V2 Final."""
+
+    return technology_area_result_frame(
+        region_id,
+        "wind",
+        layer_ids,
+        group_buffer_m,
+        target_resolution,
+    )
+
+
+def solar_area_result_frame(
+    region_id: str,
+    layer_ids: Collection[str],
+    group_buffer_m: dict[str, float],
+    target_resolution: int,
+) -> pd.DataFrame:
+    """Adapt the exact manifest-declared solar area result to V2 Final."""
+
+    return technology_area_result_frame(
+        region_id,
+        "solar",
+        layer_ids,
+        group_buffer_m,
+        target_resolution,
+    )
 
 
 def public_wind_group_ids(region_id: str) -> tuple[str, ...]:

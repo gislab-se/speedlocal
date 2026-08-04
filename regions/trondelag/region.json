@@ -16,7 +16,8 @@
   "available_h3_resolutions": [7, 6, 5],
   "default_h3_resolution": 7,
   "analysis_manifests": {
-    "wind": "regions/trondelag/analyses/wind.json"
+    "wind": "regions/trondelag/analyses/wind.json",
+    "solar": "regions/trondelag/analyses/solar.json"
   },
   "landing_card": {
     "title": "Tröndelag",

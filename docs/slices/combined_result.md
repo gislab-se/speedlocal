@@ -1,7 +1,7 @@
 # Combined-result slice characterization
 
-Status: wind-area increment locally promoted on 2026-08-04; full
-two-technology slice remains in progress and unpublished
+Status: complete two-technology slice locally promoted on 2026-08-04 and
+unpublished
 Behavior reference: accepted area contract plus explicit Trøndelag review
 Integration target: the existing V2 Final combined map, hover, table, and
 scenario-allocation flow
@@ -122,3 +122,44 @@ wind-only, while the compact integer hover displays 0%. Before product
 completion, choose and validate either a minimum suitability threshold (for
 example greater than 1%) or a `<1%` hover label. Do not silently change the
 classification or rounding while the solar contract is being migrated.
+
+## Solar-area local promotion
+
+Characterization on 2026-08-04 found that small-scale rooftop solar is a
+population-demand schematic and must remain separate from contiguous land
+potential. The previous large-scale path combined vector-derived H3 shares
+with distance-table heuristics, used theoretical H3 cell area as denominator,
+and contained a Trøndelag-specific resolution branch. Those values were not
+literal establishment areas comparable with the promoted wind result.
+
+The five canonical source groups and analysis domain now exist once in
+`regions/trondelag/analyses/standard_constraints.json`. Thin wind and solar
+manifests inherit that source contract and declare separate technology
+applicability. Large-scale solar passes its active canonical controls through
+the same overlap-safe exact-vector engine and replaces public area values
+before map class, hover/popup, table and acceptance capacity, and scenario
+allocation. Legacy proxy fields remain only where current ranking or
+explanation still consumes them.
+
+The unfiltered exact solar denominator is 45,213.188644 km². The independent
+population 250 m / 100 m gate leaves 42,096.717936 km², or 93.107164523%, at
+R7 and verifies the same R7-child derivation at R6/R5. Automated candidate
+validation passes: generic engine 6,655/6,655, baseline parity and full real
+Streamlit AppTest with no blockers, vector preview 29/29, guardrails 17/17,
+delivery repository 82/82, and runtime bundle 20/20.
+
+Localhost review then found that the map class could still disagree with the
+literal exact-area values. The remaining causes were legacy whole-cell solar
+blocking, a wind-only manifest-area denominator, and dominant-child class
+rollup at R6/R5. The candidate correction removes those presentation
+overrides: both technologies divide by their manifest-declared model area,
+positive exact remaining area determines presence, and parent classes are
+recomputed from summed exact areas. Regression cases now require 1/54 and
+39/52 percent wind/solar to be green, 0/1 to be yellow, 0/0 to be red, and
+0.5/0 to remain blue. The below-1-percent display/threshold question remains a
+separate deferred product decision. The corrected candidate passes generic
+engine 6,655/6,655, baseline parity without blockers, full real Streamlit
+AppTest 75/75, vector preview 29/29, V2 port guardrails 17/17, delivery
+repository 82/82, and runtime bundle 20/20. Clean-process localhost review was
+approved on 2026-08-04, including the corrected mixed-technology classes, so
+the complete two-technology combined-result slice is locally promoted.

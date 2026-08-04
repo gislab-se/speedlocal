@@ -1,10 +1,10 @@
 {
   "schema_version": "1.0",
-  "analysis_id": "wind",
+  "analysis_id": "solar",
   "region_id": "trondelag",
   "extends": "regions/trondelag/analyses/standard_constraints.json",
   "area_result": {
-    "technology": "wind",
+    "technology": "solar",
     "applicable_group_ids": [
       "roads",
       "population",

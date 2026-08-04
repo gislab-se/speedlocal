@@ -51,10 +51,10 @@ the same day. The complete grid-infrastructure candidate then began on
 4 August and passed local promotion the same day, ahead of its original 13
 August start. The population R8-to-direct-R7 correction passed its automated,
 runtime-package, and clean-process localhost gates on 4 August and is locally
-promoted. The first combined-result increment then integrated literal wind
+promoted. The combined-result slice then integrated literal wind and solar
 area through map, hover, table, acceptance, and allocation and passed local
-promotion on 4 August. The equivalent manifest-driven solar result is the next
-planned increment within the same slice.
+promotion on 4 August. The wind-and-solar phase, including continuous
+technology-mix acceptance, is the next planned slice.
 The later slice order and final delivery date remain unchanged.
 
 ## Branch and publication cadence
@@ -233,12 +233,11 @@ During this plan:
 - **3 Aug (confirmed early):** geometry-driven population adapters are
   sufficient for the Trøndelag polygon-grid, polygon-feature, and
   point-feature sources without a region-name algorithm branch.
-- **17 Aug:** confirm that the common restriction result supports both wind and
-  solar, unions overlapping applicable restrictions once, and returns area-
-  derived percentages using the manifest-declared model land denominator.
-  Wind passed this gate early on 4 August; solar remains before the full
-  two-technology decision can be closed. The reviewed 0.5%-shown-as-0% hover
-  edge case is recorded for a later suitability/display-threshold decision.
+- **17 Aug (confirmed early on 4 Aug):** the common restriction result supports
+  both wind and solar, unions overlapping applicable restrictions once, and
+  returns area-derived percentages using the manifest-declared model land
+  denominator. The reviewed 0.5%-shown-as-0% hover edge case remains recorded
+  for a later suitability/display-threshold decision.
 - **21 Aug:** confirm that scenario and acceptance inputs are delivery-quality.
 - **24 Aug:** decide whether Skaraborg is active or visibly limited by missing
   reviewed data.

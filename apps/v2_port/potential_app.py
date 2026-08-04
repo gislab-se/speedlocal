@@ -112,6 +112,7 @@ from potential_model.speedlocal_bridge import (  # noqa: E402
     roads_control_contract,
     vector_buffer_preview,
     vector_preview_layer_ids,
+    solar_area_result_frame,
     wind_area_result_frame,
     wind_analysis_domain_cell_areas_km2,
     wind_analysis_domain_resolution,
@@ -285,6 +286,12 @@ SOLAR_COASTAL_GROUP_ID = "coastal"
 WIND_ESTABLISHMENT_INTERSECTION_BLOCK_GROUP_IDS = {SOLAR_COASTAL_GROUP_ID}
 SOLAR_LAND_USE_GROUP_ID = "land_use"
 SOLAR_FOREST_LAYER_ID = "forest_land_cover"
+SOLAR_AREA_CANONICAL_GROUP_IDS = {
+    SOLAR_PROTECTED_GROUP_ID: CANONICAL_NATURE_GROUP_ID,
+    SOLAR_ROAD_GROUP_ID: CANONICAL_ROADS_GROUP_ID,
+    SOLAR_ELECTRICAL_GROUP_ID: CANONICAL_GRID_GROUP_ID,
+    SOLAR_CULTURE_GROUP_ID: CANONICAL_CULTURE_GROUP_ID,
+}
 SOLAR_FILTER_GROUP_SPECS: dict[str, dict[str, Any]] = {
     SOLAR_PROTECTED_GROUP_ID: {
         "label": PROTECTED_NATURE_LABEL,
@@ -4541,6 +4548,67 @@ def _solar_active_filter_configs(config: dict[str, Any]) -> list[dict[str, Any]]
             }
         )
     return active
+
+
+def _solar_exact_area_request(
+    population_active: bool,
+    population_buffer_m: float,
+    filter_configs: list[dict[str, Any]] | tuple[dict[str, Any], ...],
+) -> tuple[
+    tuple[tuple[str, tuple[str, ...]], ...],
+    tuple[tuple[str, float], ...],
+]:
+    """Translate public solar controls to canonical shared constraints."""
+
+    selected: dict[str, tuple[str, ...]] = {}
+    buffers: dict[str, float] = {}
+    if population_active:
+        selected[CANONICAL_POPULATION_GROUP_ID] = (
+            WIND_POPULATION_SOURCE_LAYER_ID,
+        )
+        buffers[CANONICAL_POPULATION_GROUP_ID] = float(
+            population_buffer_m
+        )
+    for config in filter_configs:
+        public_group_id = str(config.get("group_id") or "")
+        canonical_group_id = SOLAR_AREA_CANONICAL_GROUP_IDS.get(
+            public_group_id
+        )
+        if canonical_group_id is None:
+            raise ValueError(
+                "Exact solar area does not support active legacy group "
+                f"{public_group_id!r}"
+            )
+        layer_ids = tuple(
+            dict.fromkeys(
+                str(layer_id)
+                for layer_id in (config.get("layer_ids") or ())
+            )
+        )
+        if not layer_ids:
+            continue
+        selected[canonical_group_id] = layer_ids
+        buffers[canonical_group_id] = float(
+            config.get("buffer_m", 0.0) or 0.0
+        )
+    order = (
+        CANONICAL_ROADS_GROUP_ID,
+        CANONICAL_POPULATION_GROUP_ID,
+        CANONICAL_NATURE_GROUP_ID,
+        CANONICAL_CULTURE_GROUP_ID,
+        CANONICAL_GRID_GROUP_ID,
+    )
+    selected_groups = tuple(
+        (group_id, selected[group_id])
+        for group_id in order
+        if group_id in selected
+    )
+    group_buffers = tuple(
+        (group_id, buffers[group_id])
+        for group_id in order
+        if group_id in selected
+    )
+    return selected_groups, group_buffers
 
 
 def _solar_large_scale_is_active(
@@ -10426,6 +10494,26 @@ def _cached_wind_area_result_frame(
     )
 
 
+@st.cache_data(show_spinner=False, max_entries=12)
+def _cached_solar_area_result_frame(
+    region_id: str,
+    selected_groups: tuple[tuple[str, tuple[str, ...]], ...],
+    group_buffers_m: tuple[tuple[str, float], ...],
+    target_resolution: int,
+) -> pd.DataFrame:
+    layer_ids = tuple(
+        layer_id
+        for _group_id, group_layer_ids in selected_groups
+        for layer_id in group_layer_ids
+    )
+    return solar_area_result_frame(
+        str(region_id),
+        layer_ids,
+        {group_id: float(value) for group_id, value in group_buffers_m},
+        int(target_resolution),
+    )
+
+
 def _wind_analysis_domain_cell_area_km2_series(
     frame: pd.DataFrame,
     region_id: str,
@@ -11104,7 +11192,6 @@ def _potential_establishment_source_frame(
     technology: str,
     target_resolution: int,
     source_resolution: int,
-    coarse_filter_intersection_blocks: bool = False,
     source_cell_areas_km2: Mapping[str, float] | None = None,
     target_cell_areas_km2: Mapping[str, float] | None = None,
 ) -> pd.DataFrame:
@@ -11125,7 +11212,7 @@ def _potential_establishment_source_frame(
     target_hex_area = float(h3_hex_area_km2(int(target_resolution)))
     source_area_capacity = _establishment_cell_area_km2_series(
         work,
-        source_cell_areas_km2 if technology == "wind" else None,
+        source_cell_areas_km2,
         source_hex_area,
         f"{technology} R{source_resolution}",
     )
@@ -11156,9 +11243,6 @@ def _potential_establishment_source_frame(
                 / 100.0
                 * source_area_capacity
             )
-        if "wind_hard_exclusion_intersects" not in work.columns:
-            work["wind_hard_exclusion_intersects"] = False
-        work["wind_hard_exclusion_intersects"] = work["wind_hard_exclusion_intersects"].fillna(False).astype(bool)
     else:
         if "potential_area_km2" in work.columns:
             area = pd.to_numeric(work["potential_area_km2"], errors="coerce").fillna(0.0)
@@ -11172,32 +11256,9 @@ def _potential_establishment_source_frame(
             work["potential_score"] = pd.to_numeric(work[score_col], errors="coerce").fillna(0.0).clip(lower=0.0, upper=100.0)
         else:
             work["potential_score"] = (work["potential_area_km2"] / max(source_hex_area, 1e-9) * 100.0).clip(lower=0.0, upper=100.0)
-        filter_share_sources = [
-            pd.to_numeric(work[column], errors="coerce").fillna(0.0).clip(lower=0.0, upper=100.0)
-            for column in [
-                "large_filter_buffer_share_pct",
-                "filter_buffer_share_pct",
-                "protected_buffer_share_pct",
-            ]
-            if column in work.columns
-        ]
-        if filter_share_sources:
-            work["_solar_filter_intersection_share_pct"] = pd.concat(filter_share_sources, axis=1).max(axis=1)
-        else:
-            work["_solar_filter_intersection_share_pct"] = 0.0
-        if "small_area_m2" in work.columns:
-            work["_solar_small_area_km2"] = pd.to_numeric(work["small_area_m2"], errors="coerce").fillna(0.0).clip(lower=0.0) / 1_000_000.0
-        else:
-            work["_solar_small_area_km2"] = 0.0
-
     if int(target_resolution) < int(source_resolution):
         work["hex_id"] = work["hex_id"].map(lambda value: str(h3.cell_to_parent(str(value), int(target_resolution))))
         agg_spec: dict[str, Any] = {"potential_area_km2": ("potential_area_km2", "sum")}
-        if technology == "wind":
-            agg_spec["wind_hard_exclusion_intersects"] = ("wind_hard_exclusion_intersects", "max")
-        if technology == "solar":
-            agg_spec["_solar_filter_intersection_share_pct"] = ("_solar_filter_intersection_share_pct", "max")
-            agg_spec["_solar_small_area_km2"] = ("_solar_small_area_km2", "sum")
         work = (
             work.groupby("hex_id", as_index=False)
             .agg(**agg_spec)
@@ -11206,7 +11267,7 @@ def _potential_establishment_source_frame(
         )
         target_area_capacity = _establishment_cell_area_km2_series(
             work,
-            target_cell_areas_km2 if technology == "wind" else None,
+            target_cell_areas_km2,
             target_hex_area,
             f"{technology} R{target_resolution}",
         )
@@ -11222,7 +11283,7 @@ def _potential_establishment_source_frame(
     else:
         target_area_capacity = _establishment_cell_area_km2_series(
             work,
-            target_cell_areas_km2 if technology == "wind" else None,
+            target_cell_areas_km2,
             target_hex_area,
             f"{technology} R{target_resolution}",
         )
@@ -11238,17 +11299,6 @@ def _potential_establishment_source_frame(
 
     out = work[["hex_id", "potential_score", "potential_area_km2"]].copy()
     suitable = out["potential_area_km2"].gt(1e-9)
-    if technology == "wind":
-        wind_hard_blocked = pd.Series(False, index=work.index)
-        if "wind_hard_exclusion_intersects" in work.columns:
-            wind_hard_blocked = work["wind_hard_exclusion_intersects"].fillna(False).astype(bool)
-        suitable = suitable & ~wind_hard_blocked
-    if technology == "solar" and bool(coarse_filter_intersection_blocks):
-        filter_share = pd.to_numeric(work.get("_solar_filter_intersection_share_pct"), errors="coerce").fillna(0.0)
-        small_area = pd.to_numeric(work.get("_solar_small_area_km2"), errors="coerce").fillna(0.0)
-        # Trondelag uses R7 as app level. Any selected land-exclusion overlap must be visible at
-        # cell level so the coarse map mirrors Bornholm's finer-grid establishment behavior.
-        suitable = suitable & ~(filter_share.gt(0.0) & small_area.le(1e-9))
     out[f"{technology}_suitable"] = suitable
     out[f"{technology}_potential_score"] = out["potential_score"].round(1)
     out[f"{technology}_potential_area_km2"] = out["potential_area_km2"].clip(lower=0.0)
@@ -11265,18 +11315,6 @@ def _combined_establishment_class(wind_suitable: bool, solar_suitable: bool) -> 
     if solar_suitable:
         return "solar_only"
     return "not_suitable"
-
-
-def _dominant_establishment_class_from_areas(row: Any) -> str:
-    class_order = ["wind_and_solar", "wind_only", "solar_only", "not_suitable"]
-    best_class = "not_suitable"
-    best_area = -1.0
-    for class_id in class_order:
-        area = float(getattr(row, f"rollup_area_{class_id}", 0.0) or 0.0)
-        if area > best_area:
-            best_class = class_id
-            best_area = area
-    return best_class if best_area > 0.0 else "not_suitable"
 
 
 def _apply_establishment_style_columns(frame: pd.DataFrame) -> pd.DataFrame:
@@ -11393,7 +11431,7 @@ def _rollup_potential_establishment_frame(
     source_frame: pd.DataFrame,
     target_resolution: int,
     source_resolution: int,
-    wind_target_cell_areas_km2: Mapping[str, float],
+    target_cell_areas_km2: Mapping[str, float],
 ) -> pd.DataFrame:
     display_geometry_path = _h3_display_geometry_path(region, int(target_resolution))
     if not display_geometry_path:
@@ -11415,36 +11453,9 @@ def _rollup_potential_establishment_frame(
         return _apply_establishment_style_columns(base)
 
     work = source_frame.copy()
-    if "wind_model_area_km2" not in work.columns:
-        raise ValueError("Wind establishment rollup requires source model areas")
-    child_model_area_km2 = pd.to_numeric(
-        work["wind_model_area_km2"],
-        errors="coerce",
-    )
-    child_model_area_valid = child_model_area_km2.notna() & child_model_area_km2.map(
-        lambda value: math.isfinite(float(value)) and float(value) > 0.0
-    )
-    if not bool(child_model_area_valid.all()):
-        raise ValueError(
-            "Wind establishment rollup source model areas must be positive and finite"
-        )
     work["hex_id"] = work["hex_id"].astype(str).map(lambda value: str(h3.cell_to_parent(str(value), int(target_resolution))))
     target_hex_area_km2 = float(h3_hex_area_km2(int(target_resolution)))
-    for class_id in ["wind_and_solar", "wind_only", "solar_only", "not_suitable"]:
-        work[f"rollup_area_{class_id}"] = (
-            work.get("establishment_class", "")
-            .astype(str)
-            .eq(class_id)
-            .astype(float)
-            * child_model_area_km2
-        )
-
-    agg_spec: dict[str, Any] = {
-        "rollup_area_wind_and_solar": ("rollup_area_wind_and_solar", "sum"),
-        "rollup_area_wind_only": ("rollup_area_wind_only", "sum"),
-        "rollup_area_solar_only": ("rollup_area_solar_only", "sum"),
-        "rollup_area_not_suitable": ("rollup_area_not_suitable", "sum"),
-    }
+    agg_spec: dict[str, Any] = {}
     for technology in ["wind", "solar"]:
         for column, method in [
             (f"{technology}_potential_area_km2", "sum"),
@@ -11474,15 +11485,6 @@ def _rollup_potential_establishment_frame(
         .reset_index(drop=True)
     )
     base = base.merge(rolled, on="hex_id", how="left")
-    for column in base.columns:
-        if column.startswith("rollup_area_"):
-            base[column] = pd.to_numeric(base[column], errors="coerce").fillna(0.0)
-    base["establishment_class"] = [
-        _dominant_establishment_class_from_areas(row)
-        for row in base.itertuples(index=False)
-    ]
-    base["wind_suitable"] = base["establishment_class"].isin(["wind_and_solar", "wind_only"])
-    base["solar_suitable"] = base["establishment_class"].isin(["wind_and_solar", "solar_only"])
 
     for technology in ["wind", "solar"]:
         area_col = f"{technology}_potential_area_km2"
@@ -11494,7 +11496,7 @@ def _rollup_potential_establishment_frame(
         ).fillna(0.0).clip(lower=0.0)
         target_area_capacity = _establishment_cell_area_km2_series(
             base,
-            wind_target_cell_areas_km2 if technology == "wind" else None,
+            target_cell_areas_km2,
             target_hex_area_km2,
             f"{technology} R{target_resolution}",
         )
@@ -11502,8 +11504,9 @@ def _rollup_potential_establishment_frame(
             [potential_area, target_area_capacity],
             axis=1,
         ).min(axis=1)
-        if technology == "wind":
-            base["wind_model_area_km2"] = target_area_capacity.astype(float)
+        base[f"{technology}_model_area_km2"] = (
+            target_area_capacity.astype(float)
+        )
         base[f"{technology}_potential_score"] = (
             base[area_col]
             / target_area_capacity
@@ -11532,6 +11535,22 @@ def _rollup_potential_establishment_frame(
         if phase_col not in base.columns:
             base[phase_col] = ""
 
+    base["wind_suitable"] = pd.to_numeric(
+        base["wind_potential_area_km2"],
+        errors="coerce",
+    ).fillna(0.0).gt(1e-9)
+    base["solar_suitable"] = pd.to_numeric(
+        base["solar_potential_area_km2"],
+        errors="coerce",
+    ).fillna(0.0).gt(1e-9)
+    base["establishment_class"] = [
+        _combined_establishment_class(bool(wind), bool(solar))
+        for wind, solar in zip(
+            base["wind_suitable"],
+            base["solar_suitable"],
+        )
+    ]
+
     base["wind_outside_lp_area_km2"] = pd.to_numeric(base.get("wind_conflict_area_km2"), errors="coerce").fillna(0.0).clip(lower=0.0)
     base["solar_outside_lp_area_km2"] = pd.to_numeric(base.get("solar_conflict_area_km2"), errors="coerce").fillna(0.0).clip(lower=0.0)
     base["outside_lp_shortage"] = base["wind_outside_lp_area_km2"].gt(0.0) | base["solar_outside_lp_area_km2"].gt(0.0)
@@ -11559,18 +11578,21 @@ def _combined_potential_establishment_frame(
     if base.empty:
         return base
     region_id = str(region.get("region_id") or "")
-    wind_source_cell_areas: Mapping[str, float] | None = None
-    wind_target_cell_areas: Mapping[str, float] | None = None
-    if not wind_potential.empty:
-        wind_source_cell_areas = _cached_wind_analysis_domain_cell_areas_km2(
+    source_cell_areas: Mapping[str, float] | None = None
+    target_cell_areas: Mapping[str, float] | None = None
+    if not wind_potential.empty or not solar_potential.empty:
+        source_cell_areas = _cached_wind_analysis_domain_cell_areas_km2(
             region_id,
             int(source_resolution),
         )
-        wind_target_cell_areas = _cached_wind_analysis_domain_cell_areas_km2(
+        target_cell_areas = _cached_wind_analysis_domain_cell_areas_km2(
             region_id,
             int(target_resolution),
         )
-    if not wind_potential.empty and int(target_resolution) < int(source_resolution):
+    if (
+        (not wind_potential.empty or not solar_potential.empty)
+        and int(target_resolution) < int(source_resolution)
+    ):
         source_frame = _combined_potential_establishment_frame(
             region,
             wind_potential,
@@ -11580,14 +11602,16 @@ def _combined_potential_establishment_frame(
             int(source_resolution),
             int(source_resolution),
         )
-        if wind_target_cell_areas is None:
-            raise ValueError("Wind rollup requires manifest-declared target areas")
+        if target_cell_areas is None:
+            raise ValueError(
+                "Potential rollup requires manifest-declared target areas"
+            )
         return _rollup_potential_establishment_frame(
             region,
             source_frame,
             int(target_resolution),
             int(source_resolution),
-            wind_target_cell_areas,
+            target_cell_areas,
         )
 
     wind = _potential_establishment_source_frame(
@@ -11595,19 +11619,16 @@ def _combined_potential_establishment_frame(
         "wind",
         int(target_resolution),
         int(source_resolution),
-        source_cell_areas_km2=wind_source_cell_areas,
-        target_cell_areas_km2=wind_target_cell_areas,
-    )
-    solar_filter_intersection_blocks = (
-        str(region.get("region_id", "") or "").lower() == "trondelag"
-        and int(target_resolution) <= 7
+        source_cell_areas_km2=source_cell_areas,
+        target_cell_areas_km2=target_cell_areas,
     )
     solar = _potential_establishment_source_frame(
         solar_potential,
         "solar",
         int(target_resolution),
         int(source_resolution),
-        coarse_filter_intersection_blocks=solar_filter_intersection_blocks,
+        source_cell_areas_km2=source_cell_areas,
+        target_cell_areas_km2=target_cell_areas,
     )
     if not wind.empty:
         base = base.merge(wind, on="hex_id", how="left")
@@ -11686,6 +11707,8 @@ def _combined_potential_establishment_frame(
         else:
             base[phase_col] = base[phase_col].fillna("").astype(str)
 
+    base["wind_suitable"] = base["wind_potential_area_km2"].gt(1e-9)
+    base["solar_suitable"] = base["solar_potential_area_km2"].gt(1e-9)
     base["establishment_class"] = [
         _combined_establishment_class(bool(wind), bool(solar))
         for wind, solar in zip(base["wind_suitable"], base["solar_suitable"])
@@ -13110,6 +13133,66 @@ def _exact_wind_area_summary_frame(
     return frame.sort_values("hex_id").reset_index(drop=True)
 
 
+def _exact_solar_area_summary_frame(
+    region: dict[str, Any],
+    proxy_frame: pd.DataFrame,
+    exact_area_frame: pd.DataFrame,
+    target_resolution: int,
+) -> pd.DataFrame:
+    """Keep solar context while replacing every public area value."""
+
+    if proxy_frame.empty or exact_area_frame.empty:
+        raise ValueError("Exact solar area integration requires complete frames")
+    proxy_ids = set(proxy_frame["hex_id"].astype(str))
+    exact_ids = set(exact_area_frame["hex_id"].astype(str))
+    if proxy_ids != exact_ids:
+        raise ValueError(
+            "Exact solar area result does not cover the current analysis domain"
+        )
+    area_columns = [
+        "display_area_km2",
+        "potential_area_m2",
+        "potential_area_km2",
+        "potential_area_share_pct",
+    ]
+    frame = proxy_frame.drop(
+        columns=[column for column in area_columns if column in proxy_frame],
+    ).merge(
+        exact_area_frame[
+            [
+                "hex_id",
+                "display_area_km2",
+                "potential_area_km2",
+                "potential_area_share_pct",
+            ]
+        ],
+        on="hex_id",
+        how="inner",
+        validate="one_to_one",
+    )
+    frame["potential_area_m2"] = (
+        frame["potential_area_km2"].astype(float) * 1_000_000.0
+    )
+    frame["solar_score"] = frame["potential_area_share_pct"].astype(float)
+    classes = [
+        _solar_score_class(float(value))
+        for value in frame["solar_score"]
+    ]
+    frame["solar_class"] = [item["id"] for item in classes]
+    frame["solar_class_label"] = [item["label"] for item in classes]
+    frame["solar_color"] = [item["color"] for item in classes]
+    display_geometry_path = _h3_display_geometry_path(
+        region,
+        int(target_resolution),
+    )
+    if not display_geometry_path:
+        raise ValueError("Exact solar area result has no display geometry")
+    return _filter_frame_to_display_geometries(
+        frame.sort_values("hex_id").reset_index(drop=True),
+        display_geometry_path,
+    )
+
+
 def _wind_source_status_frame() -> pd.DataFrame:
     groups, _, registry_meta = load_acceptance_registry()
     status_df = acceptance_layer_status_table(registry_meta).copy()
@@ -14489,11 +14572,18 @@ def _unified_workspace_tab(
     active_solar_filter_count = int(solar_large_population_active) + len(
         solar_large_filter_configs
     )
+    solar_public_group_by_canonical = {
+        CANONICAL_ROADS_GROUP_ID: SOLAR_ROAD_GROUP_ID,
+        CANONICAL_NATURE_GROUP_ID: SOLAR_PROTECTED_GROUP_ID,
+        CANONICAL_CULTURE_GROUP_ID: SOLAR_CULTURE_GROUP_ID,
+        CANONICAL_GRID_GROUP_ID: SOLAR_ELECTRICAL_GROUP_ID,
+    }
     public_solar_filter_group_ids = {
-        SOLAR_ROAD_GROUP_ID if group_id == WIND_ROADS_GROUP_ID else group_id
+        solar_public_group_by_canonical[group_id]
         for group_id in public_wind_group_ids(
             str(region.get("region_id") or "")
         )
+        if group_id in solar_public_group_by_canonical
     }
     show_user_wind = _wind_potential_is_active(_selected_wind_layers())
     lablab_landscape_manifest = _pdf_landscape_manifest(landscape_manifest)
@@ -14893,30 +14983,68 @@ def _unified_workspace_tab(
                 solar_large_filter_configs,
             )
         )
+        solar_area_groups, solar_area_buffers = _solar_exact_area_request(
+            bool(solar_large_population_active),
+            float(large_population_buffer_m),
+            solar_large_filter_configs,
+        )
+        exact_solar_area_frame = _cached_solar_area_result_frame(
+            str(region.get("region_id") or ""),
+            solar_area_groups,
+            solar_area_buffers,
+            int(h3_resolution),
+        )
+        exact_solar_analysis_frame = (
+            exact_solar_area_frame
+            if int(h3_resolution) == int(analysis_h3_resolution)
+            else _cached_solar_area_result_frame(
+                str(region.get("region_id") or ""),
+                solar_area_groups,
+                solar_area_buffers,
+                int(analysis_h3_resolution),
+            )
+        )
+        user_solar_frame = _exact_solar_area_summary_frame(
+            region,
+            user_solar_frame,
+            exact_solar_area_frame,
+            int(h3_resolution),
+        )
+        user_solar_analysis_frame = _exact_solar_area_summary_frame(
+            region,
+            user_solar_analysis_frame,
+            exact_solar_analysis_frame,
+            int(analysis_h3_resolution),
+        )
+        exact_solar_model_area_km2 = float(
+            pd.to_numeric(
+                exact_solar_analysis_frame["display_area_km2"],
+                errors="raise",
+            ).sum()
+        )
+        exact_solar_potential_area_km2 = float(
+            pd.to_numeric(
+                exact_solar_analysis_frame["potential_area_km2"],
+                errors="raise",
+            ).sum()
+        )
+        energy_model_state["solar_area_result_stats"] = {
+            "model_area_km2": exact_solar_model_area_km2,
+            "potential_area_km2": exact_solar_potential_area_km2,
+            "potential_pct": (
+                exact_solar_potential_area_km2
+                / max(exact_solar_model_area_km2, 1e-9)
+                * 100.0
+            ),
+            "potential_hex_count": int(
+                exact_solar_analysis_frame["potential_area_km2"].gt(0.0).sum()
+            ),
+            "resolution": int(analysis_h3_resolution),
+        }
         active_solar_filter_count = int(bool(solar_large_population_active)) + len(solar_large_filter_configs)
         if active_solar_filter_count > 0:
-            solar_unfiltered_analysis_frame = _solar_large_scale_frame(
-                region,
-                landscape_manifest,
-                analysis_h3_resolution,
-                0.0,
-                None,
-                [],
-                False,
-                [],
-            )
-            unfiltered_solar_area_km2 = float(
-                pd.to_numeric(
-                    solar_unfiltered_analysis_frame.get("potential_area_km2", pd.Series(dtype=float)),
-                    errors="coerce",
-                ).fillna(0.0).sum()
-            )
-            filtered_solar_area_km2 = float(
-                pd.to_numeric(
-                    user_solar_analysis_frame.get("potential_area_km2", pd.Series(dtype=float)),
-                    errors="coerce",
-                ).fillna(0.0).sum()
-            )
+            unfiltered_solar_area_km2 = exact_solar_model_area_km2
+            filtered_solar_area_km2 = exact_solar_potential_area_km2
             removed_solar_area_km2 = max(0.0, unfiltered_solar_area_km2 - filtered_solar_area_km2)
             energy_model_state["solar_filter_impact"] = {
                 "active_filter_count": active_solar_filter_count,
@@ -15401,11 +15529,28 @@ def _unified_workspace_tab(
             if isinstance(wind_area_result_stats, dict)
             else float(wind_stats_for_outside.get("available_candidate_area_km2", 0.0) or 0.0)
         )
+        solar_area_result_stats = energy_model_state.get(
+            "solar_area_result_stats"
+        )
+        exact_solar_available_area = (
+            float(
+                solar_area_result_stats.get("potential_area_km2", 0.0)
+                or 0.0
+            )
+            if isinstance(solar_area_result_stats, dict)
+            else float(
+                solar_stats_for_outside.get(
+                    "available_candidate_area_km2",
+                    0.0,
+                )
+                or 0.0
+            )
+        )
         energy_model_state["acceptance_adjusted_capacity"] = _acceptance_adjusted_capacity_metrics(
             float(energy_model_state.get("wind_area_need_km2", 0.0) or 0.0),
             exact_wind_available_area,
             float(energy_model_state.get("solar_area_need_km2", 0.0) or 0.0),
-            float(solar_stats_for_outside.get("available_candidate_area_km2", 0.0) or 0.0),
+            exact_solar_available_area,
             energy_model_state.get("social_acceptance_summary") if isinstance(energy_model_state.get("social_acceptance_summary"), dict) else {},
         )
         adjusted_capacity = energy_model_state["acceptance_adjusted_capacity"]

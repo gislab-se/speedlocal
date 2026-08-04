@@ -1,0 +1,434 @@
+{
+  "schema_version": "1.0",
+  "analysis_id": "standard_constraints",
+  "region_id": "trondelag",
+  "groups": ["roads", "population", "nature", "culture", "grid_infrastructure"],
+  "ui": {
+    "groups": [
+      {
+        "id": "roads",
+        "label": "Transportinfrastruktur",
+        "analysis_label": "Minsta avstånd",
+        "interpretation": "För nära är dåligt. Valda väglager kombineras till en gemensam avståndsrestriktion utan regionspecifik kod.",
+        "expanded_by_default": true,
+        "blend_default": 50,
+        "group_color": "#b18421"
+      },
+      {
+        "id": "population",
+        "label": "Befolkning och bebyggelse",
+        "analysis_label": "Minsta avstånd",
+        "interpretation": "För nära är dåligt. Valda grid-, polygon- och punktkällor kombineras till en gemensam avståndsrestriktion.",
+        "expanded_by_default": true,
+        "blend_default": 50,
+        "group_color": "#b7532d"
+      },
+      {
+        "id": "nature",
+        "label": "Skyddad natur",
+        "analysis_label": "Valfri buffert",
+        "interpretation": "Skyddad natur är en binär restriktion. En hexagon utesluts när vald naturkälla skär den eller ligger inom den valda bufferten.",
+        "expanded_by_default": false,
+        "blend_default": 60,
+        "group_color": "#407749"
+      },
+      {
+        "id": "culture",
+        "label": "Värdefulla kulturmiljöer",
+        "analysis_label": "Valfri buffert",
+        "interpretation": "Kulturmiljöer är en binär restriktion. En hexagon utesluts när någon vald kulturkälla skär den eller ligger inom den valda bufferten.",
+        "expanded_by_default": false,
+        "blend_default": 60,
+        "group_color": "#844e94"
+      },
+      {
+        "id": "grid_infrastructure",
+        "label": "Elinfrastruktur / nätanslutning",
+        "analysis_label": "Största anslutningsavstånd",
+        "interpretation": "För långt bort är dåligt. Valda lednings-, kabel- och punktkällor kombineras till en gemensam närhetsbaserad genomförbarhet.",
+        "expanded_by_default": true,
+        "blend_default": 50,
+        "group_color": "#227371"
+      }
+    ]
+  },
+  "default_request": {
+    "selected_layer_ids": []
+  },
+  "analysis_domain": {
+    "provider": "v2_archive",
+    "path": "docs/geocontext/potential_framework/data/trondelag_r7_app_bundle/hex.geojson",
+    "id_field": "hex_id",
+    "area_field": "display_area_m2",
+    "area_unit": "m2",
+    "cell_kind": "h3",
+    "resolution": 7,
+    "expected_cell_count": 13735,
+    "rollups": [
+      {
+        "provider": "v2_archive",
+        "path": "docs/geocontext/potential_framework/data/trondelag_r7_app_bundle/h3/trondelag_landscape_h3_r6_rollup.geojson",
+        "id_field": "hex_id",
+        "area_field": "display_area_m2",
+        "area_unit": "m2",
+        "resolution": 6,
+        "expected_cell_count": 2163
+      },
+      {
+        "provider": "v2_archive",
+        "path": "docs/geocontext/potential_framework/data/trondelag_r7_app_bundle/h3/trondelag_landscape_h3_r5_rollup.geojson",
+        "id_field": "hex_id",
+        "area_field": "display_area_m2",
+        "area_unit": "m2",
+        "resolution": 5,
+        "expected_cell_count": 365
+      }
+    ]
+  },
+  "layers": [
+    {
+      "id": "roads_medium",
+      "label": "Mellanvägar",
+      "group_id": "roads",
+      "source": {
+        "provider": "v2_archive",
+        "asset_manifest": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/asset_manifest.csv",
+        "layer_id": "roads_medium",
+        "expected_geometry_families": ["line"],
+        "data_representation": "network"
+      },
+      "operation": "distance_exclusion",
+      "parameters": {
+        "buffer_m": {
+          "type": "number",
+          "unit": "m",
+          "default": 300,
+          "minimum": 100,
+          "maximum": 2000,
+          "step": 25
+        }
+      },
+      "ui": {
+        "note": "Härledd från norsk N500 vägkategori F.",
+        "source_color": "#b18421",
+        "point_radius": 40
+      }
+    },
+    {
+      "id": "roads_large",
+      "label": "Stora vägar",
+      "group_id": "roads",
+      "source": {
+        "provider": "v2_archive",
+        "asset_manifest": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/asset_manifest.csv",
+        "layer_id": "roads_large",
+        "expected_geometry_families": ["line"],
+        "data_representation": "network"
+      },
+      "operation": "distance_exclusion",
+      "parameters": {
+        "buffer_m": {
+          "type": "number",
+          "unit": "m",
+          "default": 300,
+          "minimum": 100,
+          "maximum": 2000,
+          "step": 25
+        }
+      },
+      "ui": {
+        "note": "Härledd från norska N500 vägkategorier E och R.",
+        "source_color": "#855913",
+        "point_radius": 40
+      }
+    },
+    {
+      "id": "population_points",
+      "label": "Befolkning 250 m-rutor",
+      "group_id": "population",
+      "source": {
+        "provider": "v2_archive",
+        "asset_manifest": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/asset_manifest.csv",
+        "layer_id": "population_points",
+        "expected_geometry_families": ["polygon"],
+        "data_representation": "grid",
+        "distance_provider": "generated_runtime",
+        "distance_path": "data/generated/population_r7/population_points.csv",
+        "distance_h3_resolution": 7,
+        "distance_coverage": {
+          "mode": "complete",
+          "missing_policy": "error",
+          "expected_source_row_count": 13735,
+          "source_ids_sha256": "fdea5973b898319643b7c94ad43b3480c98e639a8f378cbc23e8bc56751fcbba"
+        }
+      },
+      "operation": "distance_exclusion",
+      "parameters": {
+        "buffer_m": {
+          "type": "number",
+          "unit": "m",
+          "default": 100,
+          "minimum": 100,
+          "maximum": 3000,
+          "step": 50
+        }
+      },
+      "ui": {
+        "note": "Upplöst polygonproxy för bebodda 250 m-rutor. Avstånd och intersektion beräknas direkt mot analysdomänens R7-hexagoner.",
+        "source_color": "#b7532d",
+        "point_radius": 70
+      }
+    },
+    {
+      "id": "built_centre",
+      "label": "Bebyggelsekärnor",
+      "group_id": "population",
+      "source": {
+        "provider": "v2_archive",
+        "asset_manifest": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/asset_manifest.csv",
+        "layer_id": "built_centre",
+        "expected_geometry_families": ["polygon"],
+        "data_representation": "features",
+        "distance_provider": "generated_runtime",
+        "distance_path": "data/generated/population_r7/built_centre.csv",
+        "distance_h3_resolution": 7,
+        "distance_coverage": {
+          "mode": "complete",
+          "missing_policy": "error",
+          "expected_source_row_count": 13735,
+          "source_ids_sha256": "fdea5973b898319643b7c94ad43b3480c98e639a8f378cbc23e8bc56751fcbba"
+        }
+      },
+      "operation": "distance_exclusion",
+      "parameters": {
+        "buffer_m": {
+          "type": "number",
+          "unit": "m",
+          "default": 100,
+          "minimum": 100,
+          "maximum": 3000,
+          "step": 50
+        }
+      },
+      "ui": {
+        "note": "Polygoner för tätorter och sammanhängande bebyggelsekärnor.",
+        "source_color": "#94381e",
+        "point_radius": 45
+      }
+    },
+    {
+      "id": "built_low_selection",
+      "label": "Fritidshus",
+      "group_id": "population",
+      "source": {
+        "provider": "v2_archive",
+        "asset_manifest": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/asset_manifest.csv",
+        "layer_id": "built_low_selection",
+        "expected_geometry_families": ["point"],
+        "data_representation": "features",
+        "distance_provider": "generated_runtime",
+        "distance_path": "data/generated/population_r7/built_low_selection.csv",
+        "distance_h3_resolution": 7,
+        "distance_coverage": {
+          "mode": "complete",
+          "missing_policy": "error",
+          "expected_source_row_count": 13735,
+          "source_ids_sha256": "fdea5973b898319643b7c94ad43b3480c98e639a8f378cbc23e8bc56751fcbba"
+        }
+      },
+      "operation": "distance_exclusion",
+      "parameters": {
+        "buffer_m": {
+          "type": "number",
+          "unit": "m",
+          "default": 100,
+          "minimum": 100,
+          "maximum": 3000,
+          "step": 50
+        }
+      },
+      "ui": {
+        "note": "Grov 1 km-gridproxy. Varje punkt är centrum för en SSB-ruta och representerar antalet fritidshus i rutan; läget för enskilda fritidshus är inte känt.",
+        "source_color": "#eca074",
+        "point_radius": 4,
+        "quality_flag": "caution"
+      }
+    },
+    {
+      "id": "protected_areas",
+      "label": "Naturvernområden",
+      "group_id": "nature",
+      "source": {
+        "provider": "v2_archive",
+        "asset_manifest": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/asset_manifest.csv",
+        "layer_id": "protected_areas",
+        "expected_geometry_families": ["polygon"],
+        "data_representation": "features",
+        "geometry_collection_policy": "highest_dimension",
+        "distance_h3_resolution": 7
+      },
+      "operation": "hard_exclusion",
+      "parameters": {
+        "buffer_m": {
+          "type": "number",
+          "unit": "m",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 2000,
+          "step": 50
+        }
+      },
+      "ui": {
+        "note": "NEA Naturvern, klippt och upplöst som första källa för skyddad natur.",
+        "source_color": "#407749",
+        "point_radius": 45
+      }
+    },
+    {
+      "id": "cultural_preservation",
+      "label": "Kulturmiljöer och kulturminnen",
+      "group_id": "culture",
+      "source": {
+        "provider": "v2_archive",
+        "asset_manifest": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/asset_manifest.csv",
+        "layer_id": "cultural_preservation",
+        "expected_geometry_families": ["polygon"],
+        "data_representation": "features",
+        "geometry_validity_policy": "make_valid",
+        "distance_h3_resolution": 7
+      },
+      "operation": "hard_exclusion",
+      "parameters": {
+        "buffer_m": {
+          "type": "number",
+          "unit": "m",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 1500,
+          "step": 50
+        }
+      },
+      "ui": {
+        "note": "Kulturmiljöer och kulturminnen från norska Riksantikvaren.",
+        "source_color": "#844e94",
+        "point_radius": 45
+      }
+    },
+    {
+      "id": "valuable_cultural_environment",
+      "label": "Värdefulla kulturlandskap",
+      "group_id": "culture",
+      "source": {
+        "provider": "v2_archive",
+        "asset_manifest": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/asset_manifest.csv",
+        "layer_id": "valuable_cultural_environment",
+        "expected_geometry_families": ["polygon"],
+        "data_representation": "features",
+        "distance_h3_resolution": 7
+      },
+      "operation": "hard_exclusion",
+      "parameters": {
+        "buffer_m": {
+          "type": "number",
+          "unit": "m",
+          "default": 0,
+          "minimum": 0,
+          "maximum": 1500,
+          "step": 50
+        }
+      },
+      "ui": {
+        "note": "Värdefulla kulturlandskap från norska Miljødirektoratet.",
+        "source_color": "#9c65ab",
+        "point_radius": 45
+      }
+    },
+    {
+      "id": "high_voltage_lines",
+      "label": "Högspänningsledningar",
+      "group_id": "grid_infrastructure",
+      "source": {
+        "provider": "v2_archive",
+        "asset_manifest": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/asset_manifest.csv",
+        "layer_id": "high_voltage_lines",
+        "expected_geometry_families": ["line"],
+        "data_representation": "network",
+        "distance_h3_resolution": 7
+      },
+      "operation": "proximity_feasibility",
+      "parameters": {
+        "buffer_m": {
+          "type": "number",
+          "unit": "m",
+          "default": 2000,
+          "minimum": 500,
+          "maximum": 15000,
+          "step": 250
+        }
+      },
+      "ui": {
+        "note": "NVE:s transmissionsnät från den verifierade källan i UTM 32.",
+        "source_color": "#116c6a",
+        "point_radius": 40
+      }
+    },
+    {
+      "id": "underground_cables",
+      "label": "Markkablar",
+      "group_id": "grid_infrastructure",
+      "source": {
+        "provider": "v2_archive",
+        "asset_manifest": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/asset_manifest.csv",
+        "layer_id": "underground_cables",
+        "expected_geometry_families": ["line"],
+        "data_representation": "network",
+        "distance_h3_resolution": 7
+      },
+      "operation": "proximity_feasibility",
+      "parameters": {
+        "buffer_m": {
+          "type": "number",
+          "unit": "m",
+          "default": 2000,
+          "minimum": 500,
+          "maximum": 15000,
+          "step": 250
+        }
+      },
+      "ui": {
+        "note": "Den verifierade Trøndelag-källan innehåller NVE:s sjö- och undervattenskablar.",
+        "source_color": "#399896",
+        "point_radius": 40
+      }
+    },
+    {
+      "id": "existing_wind_turbines",
+      "label": "Befintliga vindkraftverk",
+      "group_id": "grid_infrastructure",
+      "source": {
+        "provider": "v2_archive",
+        "asset_manifest": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/asset_manifest.csv",
+        "layer_id": "existing_wind_turbines",
+        "expected_geometry_families": ["point"],
+        "data_representation": "features",
+        "distance_h3_resolution": 7
+      },
+      "operation": "proximity_feasibility",
+      "parameters": {
+        "buffer_m": {
+          "type": "number",
+          "unit": "m",
+          "default": 2000,
+          "minimum": 500,
+          "maximum": 15000,
+          "step": 250
+        }
+      },
+      "ui": {
+        "note": "NVE:s punktlager med befintliga vindkraftverk som möjlig anslutningsproxy.",
+        "source_color": "#1eaa96",
+        "point_radius": 4
+      }
+    }
+  ]
+}

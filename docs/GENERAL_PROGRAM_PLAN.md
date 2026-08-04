@@ -331,14 +331,16 @@ Current slice status:
   The user approved clean-process localhost review on 2026-08-04. The coarse
   `built_low_selection` SSB 1 km-grid centroid proxy remains visibly
   caution-flagged as a known limitation;
-- the first combined-result increment is locally promoted on 2026-08-04. Wind
-  potential is now literal remaining area over the manifest model denominator
-  in the actual map, hover, table, acceptance, and allocation chain. Exact R7
-  geometry drives R6/R5 rollups, while all five promoted group metrics retain
-  their accepted behavior. Localhost review also confirmed a 0.5% wind cell
-  can remain wind-only while the integer hover rounds to 0%; the minimum
-  suitability/display threshold is deliberately deferred. The equivalent
-  solar contract is next before the shared two-technology result is complete.
+- the complete combined-result slice is locally promoted on 2026-08-04. Wind
+  and large-scale solar potential are literal remaining area over the shared
+  manifest model denominator in the actual map, hover, table, acceptance, and
+  allocation chain. Exact R7 geometry drives R6/R5 rollups, and the four map
+  classes are derived from positive exact area for both technologies, while all
+  five promoted group metrics retain their accepted behavior. Localhost review
+  confirmed the corrected mixed-technology classes. A 0.5% wind cell can still
+  remain wind-only while the integer hover rounds to 0%; the minimum
+  suitability/display threshold is deliberately deferred. The wind-and-solar
+  phase and continuous allocation acceptance are next.
 
 ## Definition of done for a slice
 
