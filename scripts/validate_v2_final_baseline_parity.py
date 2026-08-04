@@ -2403,6 +2403,101 @@ def main() -> int:
         f"{[sorted(properties) for properties in tooltip_properties]}.",
     )
 
+    continuous_mix_source = pd.DataFrame(
+        {
+            "scenario": ["mix", "mix"],
+            "year": [2050, 2050],
+            "energy_key": ["wind", "solar"],
+            "value_twh": [31.05, 31.05],
+        }
+    )
+    continuous_mix_rows: list[tuple[float, float, float]] = []
+    continuous_demand_rows: list[tuple[float, float]] = []
+    continuous_area_bundle = type(
+        "ContinuousAreaBundle",
+        (),
+        {
+            "factors_by_scenario": {
+                "mid": {
+                    "NRG_WIN": 100.0,
+                    "NRG_SOL": 20.0,
+                }
+            }
+        },
+    )()
+    for solar_share_pct in (0.0, 50.0, 100.0):
+        balanced = app.rebalance_wind_solar_mix(
+            continuous_mix_source,
+            solar_share_pct,
+        )
+        area_demand = app.calculate_area_demand(
+            balanced,
+            continuous_area_bundle,
+            "mid",
+            {"wind": "NRG_WIN", "solar": "NRG_SOL"},
+        ).set_index("energy_key")
+        continuous_mix_rows.append(
+            (
+                app.energy_mix_twh(balanced, "wind"),
+                app.energy_mix_twh(balanced, "solar"),
+                float(
+                    pd.to_numeric(
+                        balanced["value_twh"],
+                        errors="raise",
+                    ).sum()
+                ),
+            )
+        )
+        continuous_demand_rows.append(
+            (
+                float(area_demand.loc["wind", "area_need_km2"]),
+                float(area_demand.loc["solar", "area_need_km2"]),
+            )
+        )
+    report.check(
+        continuous_mix_rows
+        == [
+            (62.1, 0.0, 62.1),
+            (31.05, 31.05, 62.1),
+            (0.0, 62.1, 62.1),
+        ],
+        "The continuous mix preserves total energy and reaches exact 0/100, "
+        "50/50, and 100/0 wind/solar endpoints.",
+        "The continuous mix changed total energy or missed an endpoint: "
+        f"{continuous_mix_rows}.",
+    )
+    report.check(
+        continuous_demand_rows
+        == [
+            (6210.0, 0.0),
+            (3105.0, 621.0),
+            (0.0, 1242.0),
+        ],
+        "The continuous mix drives technology-specific area demand across "
+        "the full 0-100 percent control domain, including exact zero-demand "
+        "endpoints.",
+        "Continuous-mix area demand drifted or retained phantom endpoint "
+        f"demand: {continuous_demand_rows}.",
+    )
+
+    geography_cache_functions = {
+        "solar large-scale frame": app._solar_large_scale_frame,
+        "wind preview frame": app._wind_polygon_preview_state,
+    }
+    uncached_geography_functions = [
+        label
+        for label, function in geography_cache_functions.items()
+        if not callable(getattr(function, "clear", None))
+    ]
+    report.check(
+        not uncached_geography_functions,
+        "Mix-independent solar and wind geography builders are cache-backed, "
+        "so a mix-only rerun cannot repeat source buffering, clipping, or "
+        "restriction union work.",
+        "Mix-only reruns can still execute geography builders without a "
+        f"cache boundary: {uncached_geography_functions}.",
+    )
+
     allocation_source = pd.DataFrame(
         {
             "hex_id": ["cell-small", "cell-large"],
@@ -2432,6 +2527,23 @@ def main() -> int:
         "Wind allocation fell back to the supplied global H3 sentinel: "
         f"shares={allocated.get('allocated_hex_share_pct', pd.Series()).tolist()}, "
         f"stats={allocation_stats}.",
+    )
+    zero_allocated, zero_allocation_stats = (
+        app.allocate_wind_area_from_core_hexes(
+            allocation_source,
+            0.0,
+            999.0,
+            cell_area_column="display_area_km2",
+        )
+    )
+    report.check(
+        zero_allocated.empty
+        and float(zero_allocation_stats["selected_area_km2"]) == 0.0
+        and float(zero_allocation_stats["unmet_area_km2"]) == 0.0,
+        "A zero-demand technology produces no scenario allocation and no "
+        "phantom unmet area at a continuous-mix endpoint.",
+        "Zero-demand allocation created selected or unmet area: "
+        f"rows={len(zero_allocated)}, stats={zero_allocation_stats}.",
     )
 
     return report.emit()

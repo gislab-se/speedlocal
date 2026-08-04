@@ -54,11 +54,13 @@ from potential_model.energy_modeling import (  # noqa: E402
     allocate_wind_area_from_core_hexes,
     build_times_summary,
     calculate_area_demand,
+    energy_mix_twh,
     h3_hex_area_km2,
     load_area_demand_bundle,
     load_energy_model_inputs,
     planning_scenario_label,
     planning_scenarios,
+    rebalance_wind_solar_mix,
     scenario_display_label,
     select_planning_mix,
 )
@@ -3248,49 +3250,6 @@ def _area_intensity_cap_notes(scenario_table: pd.DataFrame) -> list[str]:
     return notes
 
 
-def _energy_mix_share(mix: pd.DataFrame, energy_key: str) -> float:
-    if mix.empty or "energy_key" not in mix.columns or "value_twh" not in mix.columns:
-        return 0.0
-    values = pd.to_numeric(
-        mix.loc[mix["energy_key"].astype(str) == str(energy_key), "value_twh"],
-        errors="coerce",
-    ).fillna(0.0)
-    return float(values.sum())
-
-
-def _balance_wind_solar_mix(mix: pd.DataFrame, solar_share_pct: float) -> pd.DataFrame:
-    adjusted = mix.copy()
-    if adjusted.empty or "energy_key" not in adjusted.columns or "value_twh" not in adjusted.columns:
-        return adjusted
-
-    solar_share = max(0.0, min(100.0, float(solar_share_pct))) / 100.0
-    wind_twh = _energy_mix_share(adjusted, "wind")
-    solar_twh = _energy_mix_share(adjusted, "solar")
-    total_twh = wind_twh + solar_twh
-    if total_twh <= 0:
-        return adjusted
-
-    targets = {"solar": total_twh * solar_share, "wind": total_twh * (1.0 - solar_share)}
-    for energy_key, target_twh in targets.items():
-        mask = adjusted["energy_key"].astype(str) == energy_key
-        current_twh = float(pd.to_numeric(adjusted.loc[mask, "value_twh"], errors="coerce").fillna(0.0).sum())
-        if not mask.any():
-            new_row = {
-                "scenario": adjusted["scenario"].iloc[0] if "scenario" in adjusted.columns and not adjusted.empty else "",
-                "year": adjusted["year"].iloc[0] if "year" in adjusted.columns and not adjusted.empty else "",
-                "energy_key": energy_key,
-                "value_twh": target_twh,
-            }
-            adjusted = pd.concat([adjusted, pd.DataFrame([new_row])], ignore_index=True, sort=False)
-        elif current_twh > 0:
-            adjusted.loc[mask, "value_twh"] = pd.to_numeric(adjusted.loc[mask, "value_twh"], errors="coerce").fillna(0.0) * (target_twh / current_twh)
-        else:
-            first_idx = adjusted.index[mask][0]
-            adjusted.loc[mask, "value_twh"] = 0.0
-            adjusted.loc[first_idx, "value_twh"] = target_twh
-    return adjusted.reset_index(drop=True)
-
-
 def _energy_mix_state_key(region: dict[str, Any]) -> str:
     return f"energy_model_mix_solar_share_{region.get('region_id', 'region')}"
 
@@ -3333,7 +3292,7 @@ def _render_energy_mix_card(panel: Any, region: dict[str, Any], energy_model_sta
                 _t("Energimix"),
                 min_value=0,
                 max_value=100,
-                step=5,
+                step=1,
                 key=mix_key,
                 format="%d%% sol",
                 help=(
@@ -3500,13 +3459,13 @@ def _render_energy_modeling_panel(
         )
         return state
 
-    native_wind_twh = _energy_mix_share(selected_mix, "wind")
-    native_solar_twh = _energy_mix_share(selected_mix, "solar")
+    native_wind_twh = energy_mix_twh(selected_mix, "wind")
+    native_solar_twh = energy_mix_twh(selected_mix, "solar")
     native_total_twh = native_wind_twh + native_solar_twh
     native_solar_share_pct = (native_solar_twh / native_total_twh * 100.0) if native_total_twh > 0 else 50.0
     mix_key, solar_share_pct = _energy_mix_solar_share_from_session(region)
     wind_share_pct = 100.0 - solar_share_pct
-    selected_mix = _balance_wind_solar_mix(selected_mix, solar_share_pct)
+    selected_mix = rebalance_wind_solar_mix(selected_mix, solar_share_pct)
 
     technology_to_times = _technology_to_times_map(scenario_manifest)
     area_bundle_obj = type(
@@ -6547,6 +6506,7 @@ def _solar_protected_buffer_layer(
     return _solar_filter_buffer_layer(SOLAR_PROTECTED_GROUP_ID, buffer_m, layer_ids)
 
 
+@st.cache_data(show_spinner=False, max_entries=24)
 def _solar_large_scale_frame(
     region: dict[str, Any],
     landscape_manifest: dict[str, Any],
@@ -12778,6 +12738,7 @@ def _wind_runtime_hex_layers(
     )
 
 
+@st.cache_data(show_spinner=False, max_entries=16)
 def _wind_polygon_preview_state(
     region: dict[str, Any],
     ui_params: dict[str, float],
@@ -13601,10 +13562,9 @@ def _render_establishment_focus(energy_model_state: dict[str, Any], geography_re
         h3_resolution,
     )
     st.caption(
-        f"Vindytan är H3-baserad modellarea på R{model_resolution} och "
-        "vägs med analysdomänens deklarerade cellarea. Solytan följer ännu "
-        "V2:s modellarea. Värdena är därför inte geodetiskt exakt "
-        "polygonmätt tillgänglig landarea."
+        f"Vind- och solytan beräknas på R{model_resolution} mot "
+        "analysdomänens manifestdeklarerade cellarea. Samma exakta "
+        "teknikytor används i karta, hover, tabell och scenariofördelning."
     )
     _render_impact_change_table(impact_rows)
 

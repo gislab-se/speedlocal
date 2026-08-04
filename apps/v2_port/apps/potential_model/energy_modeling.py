@@ -385,6 +385,87 @@ def select_planning_mix(mix: pd.DataFrame, scenario: dict[str, Any]) -> pd.DataF
     return selected.reset_index(drop=True)
 
 
+def energy_mix_twh(mix: pd.DataFrame, energy_key: str) -> float:
+    """Return total TWh for one canonical technology in a TIMES mix."""
+    if mix.empty or "energy_key" not in mix.columns or "value_twh" not in mix.columns:
+        return 0.0
+    values = pd.to_numeric(
+        mix.loc[
+            mix["energy_key"].astype(str) == str(energy_key),
+            "value_twh",
+        ],
+        errors="coerce",
+    ).fillna(0.0)
+    return float(values.sum())
+
+
+def rebalance_wind_solar_mix(
+    mix: pd.DataFrame,
+    solar_share_pct: float,
+) -> pd.DataFrame:
+    """Redistribute wind and solar while preserving their combined TWh."""
+    adjusted = mix.copy()
+    if (
+        adjusted.empty
+        or "energy_key" not in adjusted.columns
+        or "value_twh" not in adjusted.columns
+    ):
+        return adjusted
+
+    solar_share = max(0.0, min(100.0, float(solar_share_pct))) / 100.0
+    wind_twh = energy_mix_twh(adjusted, "wind")
+    solar_twh = energy_mix_twh(adjusted, "solar")
+    total_twh = wind_twh + solar_twh
+    if total_twh <= 0.0:
+        return adjusted
+
+    targets = {
+        "solar": total_twh * solar_share,
+        "wind": total_twh * (1.0 - solar_share),
+    }
+    for energy_key, target_twh in targets.items():
+        mask = adjusted["energy_key"].astype(str) == energy_key
+        current_twh = float(
+            pd.to_numeric(
+                adjusted.loc[mask, "value_twh"],
+                errors="coerce",
+            ).fillna(0.0).sum()
+        )
+        if not mask.any():
+            new_row = {
+                "scenario": (
+                    adjusted["scenario"].iloc[0]
+                    if "scenario" in adjusted.columns and not adjusted.empty
+                    else ""
+                ),
+                "year": (
+                    adjusted["year"].iloc[0]
+                    if "year" in adjusted.columns and not adjusted.empty
+                    else ""
+                ),
+                "energy_key": energy_key,
+                "value_twh": target_twh,
+            }
+            adjusted = pd.concat(
+                [adjusted, pd.DataFrame([new_row])],
+                ignore_index=True,
+                sort=False,
+            )
+        elif current_twh > 0.0:
+            adjusted.loc[mask, "value_twh"] = (
+                pd.to_numeric(
+                    adjusted.loc[mask, "value_twh"],
+                    errors="coerce",
+                ).fillna(0.0)
+                * (target_twh / current_twh)
+            )
+        else:
+            first_idx = adjusted.index[mask][0]
+            adjusted.loc[mask, "value_twh"] = 0.0
+            adjusted.loc[first_idx, "value_twh"] = target_twh
+    return adjusted.reset_index(drop=True)
+
+
 def _clean_text(value: object) -> str:
     text = str(value).strip()
     if not text or text.lower() == "nan":

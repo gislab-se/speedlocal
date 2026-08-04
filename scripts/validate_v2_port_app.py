@@ -532,6 +532,29 @@ def _check_manifest_empty_start_and_public_controls(
             f"step={grid_slider.step}.",
         )
 
+    mix_slider_key = f"energy_model_mix_solar_share_{region_id}"
+    try:
+        mix_slider = _by_key(app.slider, mix_slider_key)
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            f"{region_id}: continuous wind/solar mix control is unavailable: "
+            f"{exc}",
+        )
+    else:
+        report.check(
+            not mix_slider.disabled
+            and int(mix_slider.min) == 0
+            and int(mix_slider.max) == 100
+            and int(mix_slider.step) == 1,
+            f"{region_id}: wind/solar mix exposes every integer allocation "
+            "from 0 to 100 percent.",
+            f"{region_id}: continuous mix control drifted: "
+            f"disabled={mix_slider.disabled}, min={mix_slider.min}, "
+            f"max={mix_slider.max}, step={mix_slider.step}.",
+        )
+
     grid_layers = {
         layer.id: layer for layer in grid_control_contract(region_id).layers
     }
@@ -1679,6 +1702,7 @@ def main() -> int:
         "trondelag: detailed V2 source manifest is unavailable.",
     )
     _check_manifest_empty_start_and_public_controls(report)
+    _check_continuous_mix_control(report)
     _check_disabled_bornholm_route(report)
     _check_roads_large_slice(report)
     _check_canonical_road_selection(
@@ -1702,6 +1726,63 @@ def main() -> int:
     _check_culture_slice(report)
     _check_grid_infrastructure_slice(report)
     return report.emit()
+
+
+def _check_continuous_mix_control(report: Report) -> None:
+    region_id = TRONDELAG_REGION_ID
+    mix_slider_key = f"energy_model_mix_solar_share_{region_id}"
+    app = AppTest.from_file(str(APP_PATH), default_timeout=120)
+    app.query_params["region"] = region_id
+    app.run(timeout=120)
+    initial_exceptions, initial_errors = _app_failures(app)
+    if initial_exceptions or initial_errors:
+        report.check(
+            False,
+            "",
+            "trondelag: continuous mix probe could not start: "
+            f"exceptions={initial_exceptions}, errors={initial_errors}.",
+        )
+        return
+    try:
+        mix_slider = _by_key(app.slider, mix_slider_key)
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            f"trondelag: continuous mix probe could not find the slider: {exc}",
+        )
+        return
+
+    endpoint_results: list[tuple[int, list[str], list[str], bool]] = []
+    for solar_share_pct, expected_text in [
+        (0, "Energimix: 100% vind / 0% sol."),
+        (50, "Energimix: 50% vind / 50% sol."),
+        (100, "Energimix: 0% vind / 100% sol."),
+    ]:
+        mix_slider.set_value(solar_share_pct)
+        app.run(timeout=120)
+        exceptions, errors = _app_failures(app)
+        rendered_text = _rendered_text(app)
+        endpoint_results.append(
+            (
+                solar_share_pct,
+                exceptions,
+                errors,
+                expected_text in rendered_text,
+            )
+        )
+        mix_slider = _by_key(app.slider, mix_slider_key)
+
+    report.check(
+        all(
+            not exceptions and not errors and rendered_match
+            for _, exceptions, errors, rendered_match in endpoint_results
+        ),
+        "trondelag: the real app executes 0/100, 50/50, and 100/0 "
+        "wind/solar allocations and renders the selected mix without errors.",
+        "trondelag: a real-app mix endpoint failed: "
+        f"{endpoint_results}.",
+    )
 
 
 def _check_disabled_bornholm_route(report: Report) -> None:
