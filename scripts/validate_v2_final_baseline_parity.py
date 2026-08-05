@@ -2371,11 +2371,12 @@ def main() -> int:
             "solar_potential_score": [100.0, 82.6, 0.0],
         }
     )
-    tooltip_features = app._combined_establishment_feature_collection(
+    tooltip_layer = app._combined_establishment_layer(
         tooltip_frame,
         app._h3_display_geometry_path(trondelag_region, 7),
         7,
-    ).get("features", [])
+    )
+    tooltip_features = (tooltip_layer or {}).get("feature_collection", {}).get("features", [])
     tooltip_bodies = [
         str((feature.get("properties") or {}).get("tooltip_body") or "")
         for feature in tooltip_features
@@ -2401,6 +2402,14 @@ def main() -> int:
         "Combined-potential hover or payload drifted: "
         f"bodies={tooltip_bodies}, keys="
         f"{[sorted(properties) for properties in tooltip_properties]}.",
+    )
+    report.check(
+        bool(tooltip_layer)
+        and tooltip_layer.get("interaction_role") == app.PRIMARY_RESULT_INTERACTION_ROLE
+        and app.PRIMARY_RESULT_INTERACTION_ROLE == "primary_result",
+        "Combined potential is the sole explicitly declared primary map-interaction result.",
+        "Combined potential lost its primary-result interaction role: "
+        f"{(tooltip_layer or {}).get('interaction_role')!r}.",
     )
 
     continuous_mix_source = pd.DataFrame(

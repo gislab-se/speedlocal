@@ -37,7 +37,10 @@ from acceptance_model.layers import (  # noqa: E402
     layer_status_table,
     load_registry,
 )
-from potential_model.map_rendering import build_layered_hex_map_html  # noqa: E402
+from potential_model.map_rendering import (  # noqa: E402
+    PRIMARY_RESULT_INTERACTION_ROLE,
+    build_layered_hex_map_html,
+)
 from potential_model.manifests import load_region, v2_source_root  # noqa: E402
 from potential_model.speedlocal_bridge import (  # noqa: E402
     culture_control_contract,
@@ -152,7 +155,15 @@ def _check_map_interaction_control(report: Report) -> None:
     map_html = build_layered_hex_map_html(
         [
             {
-                "name": "Testlager",
+                "name": "Potentiell etableringsyta",
+                "interaction_role": PRIMARY_RESULT_INTERACTION_ROLE,
+                "feature_collection": {
+                    "type": "FeatureCollection",
+                    "features": [],
+                },
+            },
+            {
+                "name": "Passivt granskningslager",
                 "feature_collection": {
                     "type": "FeatureCollection",
                     "features": [],
@@ -166,21 +177,24 @@ def _check_map_interaction_control(report: Report) -> None:
     required_contract = (
         "map-interaction-control",
         "Panorera kartan",
-        "Granska kartobjekt",
+        "Granska potentiell etableringsyta",
         "setInteractionMode(modeValue)",
         "map.dragging.enable()",
         "map.dragging.disable()",
         "setInteractionMode(interactionMode)",
         "storageKey('interaction-mode')",
         "__potentialMapSetInteractionMode",
-        "map-pan-mode .leaflet-pane canvas",
+        "map-primary-result-pane canvas",
+        "spec.interaction_role === primaryInteractionRole",
+        "interactive: inspectable",
+        "if (!inspectable)",
         "map.closeTooltip()",
     )
     report.check(
         all(marker in map_html for marker in required_contract),
-        "The map exposes a local QGIS-style pan/inspect control below zoom "
-        "without a Streamlit rerun.",
-        "The map pan/inspect control contract is incomplete: "
+        "The map exposes a local QGIS-style pan/inspect control and routes "
+        "hover/click only to the declared primary result without a Streamlit rerun.",
+        "The primary-result-only map interaction contract is incomplete: "
         + ", ".join(marker for marker in required_contract if marker not in map_html),
     )
 

@@ -4,6 +4,9 @@ import json
 from typing import Any
 
 
+PRIMARY_RESULT_INTERACTION_ROLE = "primary_result"
+
+
 def build_landscape_map_html(
     feature_collection: dict[str, Any],
     center: list[float],
@@ -149,6 +152,7 @@ def build_layered_hex_map_html(
     map_reset_token_payload = json.dumps(str(map_reset_token))
     note_title_payload = json.dumps(str(note_title), ensure_ascii=False)
     note_body_payload = json.dumps(str(note_body), ensure_ascii=False)
+    primary_interaction_role_payload = json.dumps(PRIMARY_RESULT_INTERACTION_ROLE)
     return f"""
 <!DOCTYPE html>
 <html>
@@ -191,10 +195,16 @@ def build_layered_hex_map_html(
       stroke-width: 1.8;
       width: 18px;
     }}
-    #map.map-pan-mode .leaflet-pane canvas,
-    #map.map-pan-mode .leaflet-pane svg {{ pointer-events: none !important; }}
+    #map .map-vector-pane,
+    #map .map-vector-pane canvas,
+    #map .map-vector-pane svg,
+    #map .map-vector-pane .leaflet-interactive {{ pointer-events: none !important; }}
+    #map.map-inspect-mode .map-primary-result-pane,
+    #map.map-inspect-mode .map-primary-result-pane canvas,
+    #map.map-inspect-mode .map-primary-result-pane svg,
+    #map.map-inspect-mode .map-primary-result-pane .leaflet-interactive {{ pointer-events: auto !important; }}
     #map.map-inspect-mode,
-    #map.map-inspect-mode .leaflet-interactive {{ cursor: crosshair; }}
+    #map.map-inspect-mode .map-primary-result-pane .leaflet-interactive {{ cursor: crosshair; }}
   </style>
 </head>
 <body>
@@ -209,6 +219,7 @@ def build_layered_hex_map_html(
     const mapResetToken = {map_reset_token_payload};
     const noteTitle = {note_title_payload};
     const noteBody = {note_body_payload};
+    const primaryInteractionRole = {primary_interaction_role_payload};
 
     function browserStorage() {{
       try {{
@@ -480,10 +491,16 @@ def build_layered_hex_map_html(
       const paneName = 'overlay-pane-' + index;
       const pane = map.createPane(paneName);
       const zIndex = Number.isFinite(Number(spec.z_index)) ? Number(spec.z_index) : (400 + index);
+      const inspectable = spec.interaction_role === primaryInteractionRole;
       pane.style.zIndex = String(zIndex);
+      pane.classList.add('map-vector-pane');
+      if (inspectable) {{
+        pane.classList.add('map-primary-result-pane');
+      }}
 
       return L.geoJSON(spec.feature_collection, {{
         pane: paneName,
+        interactive: inspectable,
         style: function(feature) {{
           const fillOpacity = layerFillOpacity(spec, feature);
           const strokeWeight = layerStrokeWeight(spec, feature, false);
@@ -507,6 +524,7 @@ def build_layered_hex_map_html(
           const marker = L.circleMarker(latlng, {{
             radius: layerPointRadiusPixels(spec, feature, latlng),
             pane: paneName,
+            interactive: inspectable,
             stroke: strokeEnabled,
             color: layerStrokeColor(spec, feature),
             weight: strokeEnabled ? strokeWeight : 0,
@@ -521,6 +539,9 @@ def build_layered_hex_map_html(
           return marker;
         }},
         onEachFeature: function(feature, itemLayer) {{
+          if (!inspectable) {{
+            return;
+          }}
           const props = (feature && feature.properties) || {{}};
           if (props.tooltip_title || props.tooltip_body) {{
             const tooltipTitle = props.tooltip_title || props.hex_id || spec.name;
@@ -722,7 +743,7 @@ def build_layered_hex_map_html(
       inspectModeButton = createInteractionButton(
         container,
         'inspect',
-        'Granska kartobjekt',
+        'Granska potentiell etableringsyta',
         '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 10.5V16M12 7.5h.01"/></svg>'
       );
       L.DomEvent.disableClickPropagation(container);

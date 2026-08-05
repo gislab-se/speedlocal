@@ -47,7 +47,10 @@ from potential_model.region_status import (  # noqa: E402
     load_region_context,
     region_data_status_rows,
 )
-from potential_model.map_rendering import build_layered_hex_map_html  # noqa: E402
+from potential_model.map_rendering import (  # noqa: E402
+    PRIMARY_RESULT_INTERACTION_ROLE,
+    build_layered_hex_map_html,
+)
 from potential_model.energy_modeling import (  # noqa: E402
     AREA_SCENARIO_LABELS,
     AREA_SCENARIO_ORDER,
@@ -12485,6 +12488,7 @@ def _combined_establishment_layer(
         "weight": 0.12,
         "z_index": 476,
         "layer_kind": "hex",
+        "interaction_role": PRIMARY_RESULT_INTERACTION_ROLE,
         "opacity_family": COMBINED_ESTABLISHMENT_LAYER_LABEL,
         "opacity_label": COMBINED_ESTABLISHMENT_LAYER_LABEL,
     }
