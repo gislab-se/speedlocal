@@ -149,8 +149,10 @@ No region id may select an adapter or analysis algorithm.
 
 `settlement_distance_m` remains an internal saved-state/model parameter key
 until a versioned state migration can rename it. It is not a public group id
-or a manifest availability contract. Solar's separate registry-backed
-population helpers remain intentionally deferred to the solar slice.
+or a manifest availability contract. Since 2026-08-05, large-scale solar map
+review uses this manifest source and exact area-group preview. The separate
+small-scale rooftop schematic and its energy accounting remain solar-slice
+concerns.
 
 ## First-increment gates
 

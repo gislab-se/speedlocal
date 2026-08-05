@@ -28,6 +28,16 @@ WIND_GROUP_KEY_PREFIX = "wind_control__group__"
 WIND_LAYER_KEY_PREFIX = "wind_control__layer__"
 WIND_VISUAL_SOURCE_KEY_PREFIX = "wind_control__visual_source__"
 WIND_VISUAL_BUFFER_KEY_PREFIX = "wind_control__visual_buffer__"
+SOLAR_APPLIED_CONFIG_KEY = "solar_applied_config"
+SOLAR_VISUAL_SOURCE_KEY_PREFIX = "solar_draft_visual_source__"
+SOLAR_VISUAL_BUFFER_KEY_PREFIX = "solar_draft_visual_buffer__"
+SOLAR_REVIEW_GROUP_IDS = (
+    "large_population",
+    "transport",
+    "protected",
+    "culture",
+    "electrical",
+)
 
 for import_root in (ROOT, PORT_APPS):
     if str(import_root) not in sys.path:
@@ -1690,6 +1700,141 @@ def _check_missing_source_root(report: Report) -> None:
     )
 
 
+def _check_solar_manifest_map_review(report: Report) -> None:
+    """Exercise all applicable solar source/buffer review controls together."""
+
+    app = AppTest.from_file(str(APP_PATH), default_timeout=180)
+    app.query_params["region"] = TRONDELAG_REGION_ID
+    app.run(timeout=180)
+    bootstrap_exceptions, bootstrap_errors = _app_failures(app)
+    if bootstrap_exceptions or bootstrap_errors:
+        report.check(
+            False,
+            "",
+            "trondelag: solar manifest map-review probe could not start: "
+            f"exceptions={bootstrap_exceptions}, errors={bootstrap_errors}.",
+        )
+        return
+    app.session_state["potential_start_default_version_trondelag"] = (
+        "manifest_grid_group_v1"
+    )
+    app.session_state[SOLAR_APPLIED_CONFIG_KEY] = {
+        "small_population_active": False,
+        "large_unfiltered_land_active": False,
+        "large_scale_active": True,
+        "large_population_active": True,
+        "large_protected_layer_ids": ["protected_areas"],
+        "large_protected_active": True,
+        "large_land_use_layer_ids": [],
+        "large_land_use_active": False,
+        "large_road_layer_ids": ["roads_medium", "roads_large"],
+        "large_road_active": True,
+        "large_electrical_layer_ids": [
+            "high_voltage_lines",
+            "underground_cables",
+            "existing_wind_turbines",
+        ],
+        "large_electrical_active": True,
+        "large_culture_layer_ids": [
+            "cultural_preservation",
+            "valuable_cultural_environment",
+        ],
+        "large_culture_active": True,
+        "large_reindeer_layer_ids": [],
+        "large_reindeer_active": False,
+        "large_coastal_layer_ids": [],
+        "large_coastal_active": False,
+        "panel_area_m2_per_person": 10.0,
+        "population_buffer_m": 100.0,
+        "protected_buffer_m": 0.0,
+        "forest_buffer_m": 0.0,
+        "road_buffer_m": 300.0,
+        "solar_grid_max_distance_m": 2000.0,
+        "culture_buffer_m": 0.0,
+        "reindeer_buffer_m": 100.0,
+        "coastal_buffer_m": 0.0,
+        "visible_source_groups": [],
+        "visible_buffer_groups": [],
+    }
+    app.run(timeout=180)
+    initial_exceptions, initial_errors = _app_failures(app)
+    baseline_config = deepcopy(
+        _session_state_value(app, SOLAR_APPLIED_CONFIG_KEY)
+    )
+    try:
+        source_toggles = {
+            group_id: _by_key(
+                app.toggle,
+                f"{SOLAR_VISUAL_SOURCE_KEY_PREFIX}{group_id}",
+            )
+            for group_id in SOLAR_REVIEW_GROUP_IDS
+        }
+        buffer_toggles = {
+            group_id: _by_key(
+                app.toggle,
+                f"{SOLAR_VISUAL_BUFFER_KEY_PREFIX}{group_id}",
+            )
+            for group_id in SOLAR_REVIEW_GROUP_IDS
+        }
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            "trondelag: solar manifest map-review controls are unavailable: "
+            f"{exc!r}; available="
+            f"{[str(item.key) for item in app.toggle if str(item.key or '').startswith('solar_draft_visual_')]}; "
+            f"exceptions={initial_exceptions}; errors={initial_errors}; "
+            f"config={baseline_config}",
+        )
+        return
+
+    report.check(
+        not initial_exceptions
+        and not initial_errors
+        and all(not item.disabled for item in source_toggles.values())
+        and all(not item.disabled for item in buffer_toggles.values()),
+        "trondelag: all five active solar groups expose enabled manifest-backed "
+        "source and buffer review controls.",
+        "trondelag: a solar manifest review control is disabled or failed: "
+        f"exceptions={initial_exceptions}, errors={initial_errors}.",
+    )
+    if initial_exceptions or initial_errors:
+        return
+
+    for item in (*source_toggles.values(), *buffer_toggles.values()):
+        item.set_value(True)
+    app.run(timeout=180)
+    review_exceptions, review_errors = _app_failures(app)
+    review_config = _session_state_value(app, SOLAR_APPLIED_CONFIG_KEY)
+    baseline_analysis = {
+        key: value
+        for key, value in (baseline_config or {}).items()
+        if key not in {"visible_source_groups", "visible_buffer_groups"}
+    }
+    review_analysis = {
+        key: value
+        for key, value in (review_config or {}).items()
+        if key not in {"visible_source_groups", "visible_buffer_groups"}
+    }
+    rendered_text = _rendered_text(app)
+    report.check(
+        not review_exceptions
+        and not review_errors
+        and baseline_analysis == review_analysis
+        and set((review_config or {}).get("visible_source_groups", []))
+        == set(SOLAR_REVIEW_GROUP_IDS)
+        and set((review_config or {}).get("visible_buffer_groups", []))
+        == set(SOLAR_REVIEW_GROUP_IDS)
+        and "kunde inte byggas" not in rendered_text
+        and "kunde inte visas" not in rendered_text,
+        "trondelag: solar source/buffer review executes without changing the "
+        "applied analysis configuration.",
+        "trondelag: solar map review failed or changed analysis state: "
+        f"exceptions={review_exceptions}, errors={review_errors}, "
+        f"analysis_equal={baseline_analysis == review_analysis}.",
+    )
+
+
 def main() -> int:
     report = Report()
     _check_map_interaction_control(report)
@@ -1716,6 +1861,7 @@ def main() -> int:
         "trondelag: detailed V2 source manifest is unavailable.",
     )
     _check_manifest_empty_start_and_public_controls(report)
+    _check_solar_manifest_map_review(report)
     _check_continuous_mix_control(report)
     _check_disabled_bornholm_route(report)
     _check_roads_large_slice(report)

@@ -23,7 +23,11 @@ try:
     from shapely.ops import transform
 
     from apps.v2_port.apps.potential_model.speedlocal_bridge import (
+        analysis_area_group_preview,
+        analysis_source_geojson,
+        area_applicable_group_ids,
         solar_area_result_frame,
+        vector_preview_layer_ids,
         vector_buffer_preview as build_manifest_vector_buffer_preview,
         wind_area_result_frame,
     )
@@ -71,6 +75,14 @@ def _failure_code(action: Callable[[], object]) -> str | None:
     except GeometryPreviewError as exc:  # type: ignore[possibly-undefined]
         return exc.code
     return None
+
+
+def _raises_value_error(action: Callable[[], object]) -> bool:
+    try:
+        action()
+    except (KeyError, ValueError):
+        return True
+    return False
 
 
 def main() -> int:
@@ -231,6 +243,35 @@ def main() -> int:
         {"grid_infrastructure": 2000.0},
         7,
     )
+    solar_preview_cases = {
+        "roads": (("roads_medium", "roads_large"), 300.0),
+        "population": (("population_points",), 100.0),
+        "nature": (("protected_areas",), 0.0),
+        "culture": (
+            ("cultural_preservation", "valuable_cultural_environment"),
+            0.0,
+        ),
+        "grid_infrastructure": (grid_layer_ids, 2000.0),
+    }
+    solar_group_previews = {
+        group_id: analysis_area_group_preview(
+            "trondelag",
+            "solar",
+            group_id,
+            layer_ids,
+            buffer_m,
+        )
+        for group_id, (layer_ids, buffer_m) in solar_preview_cases.items()
+    }
+    solar_source_previews = {
+        group_id: analysis_source_geojson(
+            "trondelag",
+            "solar",
+            group_id,
+            layer_ids[0],
+        )
+        for group_id, (layer_ids, _) in solar_preview_cases.items()
+    }
     wind_grid_rollups_at_2000 = {
         resolution: wind_area_result_frame(
             "trondelag",
@@ -514,6 +555,78 @@ def main() -> int:
         ),
         "Wind and solar consume the same exact 2000 m grid geometry per R7 cell.",
         "Wind and solar grid geometry diverged at 2000 m.",
+    )
+    report.check(
+        area_applicable_group_ids("trondelag", "solar")
+        == ("roads", "population", "nature", "culture", "grid_infrastructure")
+        and all(
+            set(layer_ids).issubset(
+                set(vector_preview_layer_ids("trondelag", "solar", group_id))
+            )
+            for group_id, (layer_ids, _) in solar_preview_cases.items()
+        ),
+        "Solar review availability comes from all five applicable manifest groups.",
+        "Solar review availability drifted from the solar area manifest.",
+    )
+    report.check(
+        all(
+            preview.semantics == "exact_area_clip"
+            and preview.model_area_m2 is not None
+            and preview.model_area_m2 > 0.0
+            and preview.geojson["features"][0]["properties"].get(
+                "analysis_id"
+            )
+            == "solar"
+            and preview.geojson["features"][0]["properties"].get(
+                "group_id"
+            )
+            == group_id
+            for group_id, preview in solar_group_previews.items()
+        ),
+        "All five solar review buffers use exact solar-manifest geometry.",
+        "A solar review buffer fell back to legacy or non-exact geometry.",
+    )
+    report.check(
+        all(
+            payload.get("type") == "FeatureCollection"
+            and bool(payload.get("features"))
+            for payload in solar_source_previews.values()
+        ),
+        "All five solar source previews resolve through manifest providers.",
+        "A solar source preview could not resolve through its manifest provider.",
+    )
+    solar_grid_preview = solar_group_previews["grid_infrastructure"]
+    report.check(
+        math.isclose(
+            float(solar_grid_preview.model_area_m2 or 0.0),
+            float(grid_at_2000.model_area_m2 or 0.0),
+            rel_tol=0.0,
+            abs_tol=1e-6,
+        )
+        and solar_grid_preview.partial_cell_count
+        == grid_at_2000.partial_cell_count,
+        "Solar and wind map review share the exact 2000 m grid geometry.",
+        "Solar and wind map review diverged for the shared grid contract.",
+    )
+    report.check(
+        _raises_value_error(
+            lambda: analysis_area_group_preview(
+                "trondelag",
+                "solar",
+                "nature",
+                ("roads_large",),
+                0.0,
+            )
+        )
+        and _raises_value_error(
+            lambda: vector_preview_layer_ids(
+                "trondelag",
+                "solar",
+                "not_applicable",
+            )
+        ),
+        "Solar review rejects wrong-group and non-applicable manifest requests.",
+        "Solar review accepted a wrong-group or non-applicable request.",
     )
     serialized_grid_geometry = shape(
         grid_at_2000.geojson["features"][0]["geometry"]

@@ -8,8 +8,10 @@ Integration target: V2 Final wind restriction flow
 
 The public and canonical group id is `nature`. The first and complete current
 Trøndelag source is `protected_areas`, labelled `Naturvernområden`. It replaces
-the wind flow's transitional registry group id `protected`; solar keeps its
-separate registry-backed protected-nature behavior until the solar slice.
+the wind flow's transitional registry group id `protected`. Since 2026-08-05,
+solar retains `protected` only as a public session/UI key and resolves its
+source and exact buffer review through canonical `nature` in the solar
+manifest.
 
 The source represents NEA Naturvern clipped and dissolved for Trøndelag. Water
 protection is a possible future source, while land-use classes remain outside

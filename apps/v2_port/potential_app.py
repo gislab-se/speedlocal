@@ -92,6 +92,10 @@ from potential_model.speedlocal_bridge import (  # noqa: E402
     CANONICAL_ROADS_GROUP_ID,
     WindGroupControlContract,
     WindLayerControlContract,
+    analysis_area_group_preview,
+    analysis_group_control_contract,
+    analysis_source_geojson,
+    area_applicable_group_ids,
     canonical_culture_layer_ids,
     canonical_grid_layer_ids,
     canonical_nature_layer_ids,
@@ -342,8 +346,7 @@ SOLAR_FILTER_GROUP_SPECS: dict[str, dict[str, Any]] = {
         "label": "Vägar",
         "source_label": "Sol källa: Vägar",
         "buffer_label": "Solbuffert: Vägar",
-        # Solar still follows the frozen registry until its own manifest slice.
-        # Resolve the layer ids dynamically in _solar_filter_layer_ids().
+        # Standard solar layer ids resolve from the solar analysis manifest.
         "layer_ids": (),
         "active_key": "large_road_active",
         "layer_ids_key": "large_road_layer_ids",
@@ -4395,15 +4398,29 @@ def _solar_filter_spec(group_id: str) -> dict[str, Any]:
     return SOLAR_FILTER_GROUP_SPECS[str(group_id)]
 
 
+@st.cache_data(show_spinner=False, max_entries=16)
+def _solar_manifest_group_contract(
+    region_id: str,
+    visual_group_id: str,
+    canonical_group_id: str,
+) -> WindGroupControlContract:
+    return analysis_group_control_contract(
+        str(region_id),
+        "solar",
+        str(canonical_group_id),
+        public_group_id=str(visual_group_id),
+    )
+
+
 def _solar_filter_layer_ids(group_id: str) -> tuple[str, ...]:
-    if str(group_id) == SOLAR_ROAD_GROUP_ID:
-        _, layers, _ = load_acceptance_registry()
-        return tuple(
-            layer.id
-            for layer in ordered_layers()
-            if str(layer.group_id) == SOLAR_ROAD_GROUP_ID
-            and layer.id in layers
+    canonical_group_id = SOLAR_AREA_CANONICAL_GROUP_IDS.get(str(group_id))
+    if canonical_group_id is not None:
+        contract = _solar_manifest_group_contract(
+            _wind_region_id(),
+            str(group_id),
+            canonical_group_id,
         )
+        return tuple(layer.id for layer in contract.layers)
     return tuple(str(layer_id) for layer_id in (_solar_filter_spec(group_id).get("layer_ids") or ()))
 
 
@@ -4480,7 +4497,26 @@ def _solar_control_selected_protected_layer_ids(config: dict[str, Any]) -> list[
     return _solar_control_selected_filter_layer_ids(config, SOLAR_PROTECTED_GROUP_ID)
 
 
-def _solar_filter_layer_labels(layer_ids: list[str] | tuple[str, ...]) -> list[str]:
+def _solar_filter_layer_labels(
+    group_id: str,
+    layer_ids: list[str] | tuple[str, ...],
+) -> list[str]:
+    canonical_group_id = SOLAR_AREA_CANONICAL_GROUP_IDS.get(str(group_id))
+    if canonical_group_id is not None:
+        controls = {
+            layer.id: layer
+            for layer in _solar_manifest_group_contract(
+                _wind_region_id(),
+                str(group_id),
+                canonical_group_id,
+            ).layers
+        }
+        return [
+            str(controls[str(layer_id)].label)
+            if str(layer_id) in controls
+            else str(layer_id)
+            for layer_id in layer_ids
+        ]
     _, layers, _ = load_acceptance_registry()
     labels: list[str] = []
     for layer_id in layer_ids:
@@ -4503,7 +4539,10 @@ def _solar_active_filter_configs(config: dict[str, Any]) -> list[dict[str, Any]]
             {
                 "group_id": group_id,
                 "layer_ids": layer_ids,
-                "layer_labels": _solar_filter_layer_labels(layer_ids),
+                "layer_labels": _solar_filter_layer_labels(
+                    group_id,
+                    layer_ids,
+                ),
                 "buffer_m": float(config.get(str(spec["buffer_key"]), spec.get("buffer_default_m", 0.0)) or 0.0),
                 "label": str(spec["label"]),
                 "effect": str(spec.get("effect", "exclusion")),
@@ -4840,38 +4879,53 @@ def _render_solar_map_review_controls(
     config: dict[str, Any],
 ) -> None:
     """Render map-only solar controls for the currently applied filters."""
-    active_groups: list[tuple[str, str, list[str], bool]] = []
+    region_id = str(region.get("region_id") or "")
+    active_groups: list[dict[str, Any]] = []
     if bool(config.get("small_population_active", False)):
         active_groups.append(
-            (
-                SOLAR_SMALL_POPULATION_VISUAL_GROUP_ID,
-                str(SOLAR_SMALL_SCALE_LABEL),
-                [],
-                True,
-            )
+            {
+                "visual_group_id": SOLAR_SMALL_POPULATION_VISUAL_GROUP_ID,
+                "canonical_group_id": None,
+                "label": str(SOLAR_SMALL_SCALE_LABEL),
+                "layer_ids": [],
+                "special_population": True,
+            }
         )
     if bool(config.get("large_population_active", False)):
         active_groups.append(
-            (
-                SOLAR_LARGE_POPULATION_VISUAL_GROUP_ID,
-                "Befolkning",
-                [],
-                True,
-            )
+            {
+                "visual_group_id": SOLAR_LARGE_POPULATION_VISUAL_GROUP_ID,
+                "canonical_group_id": CANONICAL_POPULATION_GROUP_ID,
+                "label": "Befolkning",
+                "layer_ids": [WIND_POPULATION_SOURCE_LAYER_ID],
+                "special_population": False,
+            }
         )
     for filter_config in _solar_active_filter_configs(config):
         group_id = str(filter_config.get("group_id", ""))
         spec = SOLAR_FILTER_GROUP_SPECS.get(group_id, {})
         active_groups.append(
-            (
-                group_id,
-                str(spec.get("label") or filter_config.get("label") or group_id),
-                [str(value) for value in filter_config.get("layer_ids", [])],
-                False,
-            )
+            {
+                "visual_group_id": group_id,
+                "canonical_group_id": SOLAR_AREA_CANONICAL_GROUP_IDS.get(
+                    group_id
+                ),
+                "label": str(
+                    spec.get("label")
+                    or filter_config.get("label")
+                    or group_id
+                ),
+                "layer_ids": [
+                    str(value)
+                    for value in filter_config.get("layer_ids", [])
+                ],
+                "special_population": False,
+            }
         )
 
-    active_group_ids = {group_id for group_id, _, _, _ in active_groups}
+    active_group_ids = {
+        str(item["visual_group_id"]) for item in active_groups
+    }
     for group_id in _solar_visual_group_order():
         if group_id not in active_group_ids:
             st.session_state[_solar_visual_control_key("source", group_id)] = False
@@ -4888,30 +4942,70 @@ def _render_solar_map_review_controls(
                 "Dessa val ändrar bara kartan. De påverkar inte analysen "
                 "eller resultattabellen."
             )
-            for group_id, label, layer_ids, special_population in active_groups:
+            for item in active_groups:
+                group_id = str(item["visual_group_id"])
+                canonical_group_id = item.get("canonical_group_id")
+                label = str(item["label"])
+                layer_ids = [str(value) for value in item.get("layer_ids", [])]
+                special_population = bool(item.get("special_population", False))
+                preview_supported = special_population
+                if not special_population and canonical_group_id is not None:
+                    try:
+                        manifest_group = _solar_manifest_group_contract(
+                            region_id,
+                            group_id,
+                            str(canonical_group_id),
+                        )
+                        ready_layer_ids = {
+                            layer.id
+                            for layer in manifest_group.layers
+                            if layer.ready
+                        }
+                        preview_supported = (
+                            bool(layer_ids)
+                            and set(layer_ids).issubset(ready_layer_ids)
+                            and _vector_preview_supported(
+                                region_id,
+                                layer_ids,
+                                "solar",
+                                str(canonical_group_id),
+                            )
+                        )
+                    except (KeyError, OSError, ValueError):
+                        preview_supported = False
                 st.markdown(f"**{label}**")
+                if not preview_supported:
+                    st.session_state[
+                        _solar_visual_control_key("source", group_id)
+                    ] = False
+                    st.session_state[
+                        _solar_visual_control_key("buffer", group_id)
+                    ] = False
                 st.toggle(
                     "Visa källa i kartan",
                     key=_solar_visual_control_key("source", group_id),
+                    disabled=not preview_supported,
                     on_change=_invalidate_workspace_cache,
                     args=("solar source preview changed",),
+                    help=(
+                        "Källan läses från solanalysens manifest."
+                        if preview_supported
+                        else "Källvisning saknar ett komplett "
+                        "manifestdeklarerat vektorkontrakt."
+                    ),
                 )
-                buffer_supported = bool(special_population)
-                if not buffer_supported:
-                    st.session_state[_solar_visual_control_key(
-                        "buffer", group_id
-                    )] = False
                 st.toggle(
                     "Visa buffert i kartan",
                     key=_solar_visual_control_key("buffer", group_id),
-                    disabled=not buffer_supported,
+                    disabled=not preview_supported,
                     on_change=_invalidate_workspace_cache,
                     args=("solar buffer preview changed",),
                     help=(
-                        "Bufferten byggs från den tillämpade källan."
-                        if buffer_supported
-                        else "Buffertvisning aktiveras när gruppens "
-                        "vektorkontrakt har migrerats."
+                        "Bufferten byggs från solmanifestets tillämpade "
+                        "källor och analysavstånd."
+                        if preview_supported
+                        else "Buffertvisning saknar ett komplett "
+                        "manifestdeklarerat vektorkontrakt."
                     ),
                 )
 
@@ -5887,26 +5981,49 @@ def _solar_population_buffer_layer(
 
 
 def _solar_filter_source_layers(
-    group_id: str,
+    region_id: str,
+    visual_group_id: str,
+    canonical_group_id: str,
     layer_ids: list[str] | tuple[str, ...] | None = None,
 ) -> list[dict[str, Any]]:
-    spec = _solar_filter_spec(group_id)
-    groups, layers, registry_meta = load_acceptance_registry()
-    _ = groups
-    selected_layer_ids = _solar_available_filter_layer_ids(group_id, layer_ids)
+    """Build one solar source review layer from the solar manifest."""
+
+    spec = SOLAR_FILTER_GROUP_SPECS.get(str(visual_group_id), {})
+    group_contract = _solar_manifest_group_contract(
+        str(region_id),
+        str(visual_group_id),
+        str(canonical_group_id),
+    )
+    layer_contracts = {layer.id: layer for layer in group_contract.layers}
+    requested = tuple(dict.fromkeys(str(value) for value in (layer_ids or ())))
+    unknown = set(requested) - set(layer_contracts)
+    if not requested or unknown:
+        raise ValueError(
+            f"Solar source review has invalid {canonical_group_id} layers: "
+            f"{sorted(unknown) if unknown else 'empty selection'}"
+        )
+    selected_layer_ids = tuple(
+        layer.id for layer in group_contract.layers if layer.id in set(requested)
+    )
+    source_label = str(
+        spec.get("source_label") or f"Sol källa: {group_contract.label}"
+    )
     features: list[dict[str, Any]] = []
-    selected_labels: list[str] = []
     source_colors: list[str] = []
     for layer_id in selected_layer_ids:
-        layer_spec = layers.get(layer_id)
-        if layer_spec is None:
-            continue
-        geojson = source_geojson_for_layer(registry_meta, layer_id)
-        if not geojson:
-            continue
-        source_color = _rgb_to_hex(layer_spec.source_color)
-        label = layer_label(layer_spec, WIND_CONTROL_LANGUAGE, layer_spec.label)
-        selected_labels.append(label)
+        layer_contract = layer_contracts[layer_id]
+        if not layer_contract.ready:
+            raise ValueError(
+                f"Solar source review layer is not ready: {layer_id}"
+            )
+        geojson = _cached_analysis_source_geojson(
+            str(region_id),
+            "solar",
+            str(canonical_group_id),
+            layer_id,
+        )
+        source_color = _rgb_to_hex(layer_contract.source_color)
+        label = str(layer_contract.label)
         source_colors.append(source_color)
         for feature in geojson.get("features") or []:
             if not isinstance(feature, dict) or not feature.get("geometry"):
@@ -5915,20 +6032,31 @@ def _solar_filter_source_layers(
             props = copied.setdefault("properties", {})
             props["fill"] = source_color
             props["source_layer_id"] = layer_id
-            props["tooltip_title"] = str(spec["source_label"])
+            props["analysis_id"] = "solar"
+            props["canonical_group_id"] = str(canonical_group_id)
+            props["tooltip_title"] = source_label
             props["tooltip_body"] = label
-            props.setdefault("popup", f"<strong>{spec['source_label']}</strong><br>{label}")
+            props.setdefault("popup", f"<strong>{source_label}</strong><br>{label}")
             features.append(copied)
     if not features:
         return []
     return [
         {
-            "name": str(spec["source_label"]),
-            "source_layer_id": f"solar:{group_id}:{'_'.join(selected_layer_ids)}",
+            "name": source_label,
+            "source_layer_id": (
+                f"solar:{canonical_group_id}:{'_'.join(selected_layer_ids)}"
+            ),
             "feature_collection": {"type": "FeatureCollection", "features": features},
             "fill_property": "fill",
-            "legend_items": [{"label": str(spec["label"]), "color": source_colors[0] if source_colors else str(spec["source_color"])}],
-            "legend_id": f"solar_{group_id}_source",
+            "legend_items": [
+                {
+                    "label": str(spec.get("label") or group_contract.label),
+                    "color": source_colors[0]
+                    if source_colors
+                    else _rgb_to_hex(group_contract.group_color),
+                }
+            ],
+            "legend_id": f"solar_{visual_group_id}_source",
             "legend_title": "",
             "default_visible": False,
             "stroke_color": source_colors[0] if source_colors else "#15803d",
@@ -5944,14 +6072,28 @@ def _solar_filter_source_layers(
     ]
 
 
-def _solar_protected_source_layers(layer_ids: list[str] | tuple[str, ...] | None = None) -> list[dict[str, Any]]:
-    return _solar_filter_source_layers(SOLAR_PROTECTED_GROUP_ID, layer_ids)
-
-
 def _solar_available_filter_layer_ids(
     group_id: str,
     layer_ids: list[str] | tuple[str, ...] | set[str] | None = None,
 ) -> tuple[str, ...]:
+    canonical_group_id = SOLAR_AREA_CANONICAL_GROUP_IDS.get(str(group_id))
+    if canonical_group_id is not None:
+        contract = _solar_manifest_group_contract(
+            _wind_region_id(),
+            str(group_id),
+            canonical_group_id,
+        )
+        requested = (
+            [layer.id for layer in contract.layers]
+            if layer_ids is None
+            else [str(layer_id) for layer_id in layer_ids]
+        )
+        ready = {layer.id for layer in contract.layers if layer.ready}
+        return tuple(
+            layer.id
+            for layer in contract.layers
+            if layer.id in set(requested) and layer.id in ready
+        )
     _, layers, registry_meta = load_acceptance_registry()
     requested = list(_solar_filter_layer_ids(group_id)) if layer_ids is None else [str(layer_id) for layer_id in layer_ids]
     allowed = set(_solar_filter_layer_ids(group_id))
@@ -5966,11 +6108,23 @@ def _solar_available_filter_layer_ids(
     return tuple(available)
 
 
-def _solar_available_protected_layer_ids(layer_ids: list[str] | tuple[str, ...] | set[str] | None = None) -> tuple[str, ...]:
-    return _solar_available_filter_layer_ids(SOLAR_PROTECTED_GROUP_ID, layer_ids)
-
-
 def _solar_filter_layer_options(group_id: str) -> list[dict[str, Any]]:
+    canonical_group_id = SOLAR_AREA_CANONICAL_GROUP_IDS.get(str(group_id))
+    if canonical_group_id is not None:
+        contract = _solar_manifest_group_contract(
+            _wind_region_id(),
+            str(group_id),
+            canonical_group_id,
+        )
+        return [
+            {
+                "id": layer.id,
+                "label": layer.label,
+                "ready": bool(layer.ready),
+                "message": str(layer.message or layer.note),
+            }
+            for layer in contract.layers
+        ]
     _, layers, registry_meta = load_acceptance_registry()
     availability = _wind_layer_status_lookup(registry_meta)
     options: list[dict[str, Any]] = []
@@ -5990,10 +6144,6 @@ def _solar_filter_layer_options(group_id: str) -> list[dict[str, Any]]:
             }
         )
     return options
-
-
-def _solar_protected_layer_options() -> list[dict[str, Any]]:
-    return _solar_filter_layer_options(SOLAR_PROTECTED_GROUP_ID)
 
 
 def _solar_filter_runtime_result(
@@ -6018,13 +6168,6 @@ def _solar_filter_runtime_result(
         return None
 
 
-def _solar_protected_runtime_result(
-    buffer_m: float,
-    layer_ids: list[str] | tuple[str, ...] | None = None,
-) -> dict[str, Any] | None:
-    return _solar_filter_runtime_result(SOLAR_PROTECTED_GROUP_ID, buffer_m, layer_ids)
-
-
 def _solar_filter_buffer_geojson(
     group_id: str,
     buffer_m: float,
@@ -6038,18 +6181,51 @@ def _solar_filter_buffer_geojson(
     return geojson if isinstance(geojson, dict) else None
 
 
+@st.cache_data(show_spinner=False, max_entries=64)
+def _cached_analysis_source_geojson(
+    region_id: str,
+    analysis_id: str,
+    canonical_group_id: str,
+    layer_id: str,
+) -> dict[str, Any]:
+    """Return one manifest/provider-resolved source for map review."""
+
+    return analysis_source_geojson(
+        str(region_id),
+        str(analysis_id),
+        str(canonical_group_id),
+        str(layer_id),
+    )
+
+
 @st.cache_data(show_spinner=False, max_entries=32)
 def _cached_vector_buffer_preview(
     region_id: str,
     layer_ids: tuple[str, ...],
     buffer_m: float,
+    analysis_id: str = "wind",
+    canonical_group_id: str | None = None,
 ) -> dict[str, Any]:
     """Return a serializable manifest-resolved preview for map inspection."""
-    preview = vector_buffer_preview(
-        str(region_id),
-        tuple(str(layer_id) for layer_id in layer_ids),
-        float(buffer_m),
-    )
+
+    if canonical_group_id is None:
+        if str(analysis_id) != "wind":
+            raise ValueError(
+                "A non-wind preview requires one canonical area group"
+            )
+        preview = vector_buffer_preview(
+            str(region_id),
+            tuple(str(layer_id) for layer_id in layer_ids),
+            float(buffer_m),
+        )
+    else:
+        preview = analysis_area_group_preview(
+            str(region_id),
+            str(analysis_id),
+            str(canonical_group_id),
+            tuple(str(layer_id) for layer_id in layer_ids),
+            float(buffer_m),
+        )
     return {
         "geojson": preview.geojson,
         "layer_ids": list(preview.layer_ids),
@@ -6072,24 +6248,25 @@ def _cached_vector_buffer_preview(
 def _vector_preview_supported(
     region_id: str,
     layer_ids: list[str] | tuple[str, ...] | None,
+    analysis_id: str = "wind",
+    canonical_group_id: str | None = None,
 ) -> bool:
     requested = {str(layer_id) for layer_id in (layer_ids or ())}
     if not requested:
         return False
-    supported = set(vector_preview_layer_ids(str(region_id)))
+    supported = set(
+        vector_preview_layer_ids(
+            str(region_id),
+            str(analysis_id),
+            canonical_group_id,
+        )
+    )
     return requested.issubset(supported)
 
 
 def _safe_preview_error_code(error: Exception) -> str:
     code = str(getattr(error, "code", "preview_failed") or "preview_failed")
     return code if code.replace("_", "").isalnum() else "preview_failed"
-
-
-def _solar_protected_buffer_geojson(
-    buffer_m: float,
-    layer_ids: list[str] | tuple[str, ...] | None = None,
-) -> dict[str, Any] | None:
-    return _solar_filter_buffer_geojson(SOLAR_PROTECTED_GROUP_ID, buffer_m, layer_ids)
 
 
 def _h3_resolution_from_hex_ids(hex_ids: pd.Series) -> int | None:
@@ -6231,24 +6408,6 @@ def _solar_filter_buffer_frame(
     return share[["hex_id", "filter_group_id", "filter_buffer_m", "filter_buffer_share_pct"]].copy()
 
 
-def _solar_protected_buffer_frame(
-    region: dict[str, Any],
-    target_resolution: int,
-    buffer_m: float,
-    layer_ids: list[str] | tuple[str, ...] | None = None,
-) -> pd.DataFrame:
-    frame = _solar_filter_buffer_frame(region, target_resolution, SOLAR_PROTECTED_GROUP_ID, buffer_m, layer_ids)
-    if frame.empty:
-        return pd.DataFrame(columns=["hex_id", "protected_buffer_m", "protected_buffer_share_pct"])
-    out = frame.rename(
-        columns={
-            "filter_buffer_m": "protected_buffer_m",
-            "filter_buffer_share_pct": "protected_buffer_share_pct",
-        }
-    )
-    return out[["hex_id", "protected_buffer_m", "protected_buffer_share_pct"]].copy()
-
-
 def _solar_filter_union_buffer_frame(
     region: dict[str, Any],
     target_resolution: int,
@@ -6315,57 +6474,109 @@ def _solar_filter_union_buffer_frame(
 
 
 def _solar_filter_buffer_layer(
-    group_id: str,
+    region_id: str,
+    visual_group_id: str,
+    canonical_group_id: str,
     buffer_m: float,
     layer_ids: list[str] | tuple[str, ...] | None = None,
 ) -> dict[str, Any] | None:
-    spec = _solar_filter_spec(group_id)
-    selected_layer_ids = _solar_available_filter_layer_ids(group_id, layer_ids)
-    buffer_geojson = _solar_filter_buffer_geojson(group_id, float(buffer_m or 0.0), selected_layer_ids)
+    """Build the exact solar area-group geometry for map review."""
+
+    spec = SOLAR_FILTER_GROUP_SPECS.get(str(visual_group_id), {})
+    group_contract = _solar_manifest_group_contract(
+        str(region_id),
+        str(visual_group_id),
+        str(canonical_group_id),
+    )
+    allowed = {layer.id for layer in group_contract.layers if layer.ready}
+    requested = tuple(dict.fromkeys(str(value) for value in (layer_ids or ())))
+    unknown = set(requested) - allowed
+    if not requested or unknown:
+        raise ValueError(
+            f"Solar buffer review has invalid {canonical_group_id} layers: "
+            f"{sorted(unknown) if unknown else 'empty selection'}"
+        )
+    selected_layer_ids = tuple(
+        layer.id for layer in group_contract.layers if layer.id in set(requested)
+    )
+    preview = _cached_vector_buffer_preview(
+        str(region_id),
+        selected_layer_ids,
+        float(buffer_m or 0.0),
+        "solar",
+        str(canonical_group_id),
+    )
+    buffer_geojson = preview.get("geojson")
     if not buffer_geojson:
         return None
     features = buffer_geojson.get("features") if isinstance(buffer_geojson, dict) else None
     if not isinstance(features, list) or not features:
         return None
-    buffer_color = str(spec.get("buffer_color", "#16a34a"))
-    is_feasibility = str(spec.get("effect", "exclusion")) == "feasibility"
+    buffer_color = str(
+        spec.get("buffer_color") or _rgb_to_hex(group_contract.group_color)
+    )
+    group_label_text = str(spec.get("label") or group_contract.label)
+    buffer_label = str(
+        spec.get("buffer_label")
+        or (
+            f"Sol nära nät: {group_contract.label}"
+            if group_contract.analysis_kind == "proximity_feasibility"
+            else f"Solbuffert: {group_contract.label}"
+        )
+    )
+    is_feasibility = (
+        group_contract.analysis_kind == "proximity_feasibility"
+    )
     measure_label = "Max avstånd" if is_feasibility else "Buffert"
-    tooltip_body = (
-        f"Inom {float(buffer_m or 0.0):.0f} m"
+    preview_model_area_m2 = float(
+        preview.get("model_area_m2", preview["area_m2"])
+    )
+    preview_area_label = (
+        "Genomförbar modellarea inom analysdomänen"
         if is_feasibility
-        else f"{float(buffer_m or 0.0):.0f} m buffert"
+        else "Buffertyta inom analysdomänen"
+    )
+    tooltip_body = (
+        f"Inom {float(buffer_m or 0.0):.0f} m · "
+        f"{preview_model_area_m2 / 1_000_000.0:.1f} km²"
+        if is_feasibility
+        else f"{float(buffer_m or 0.0):.0f} m buffert · "
+        f"{preview_model_area_m2 / 1_000_000.0:.1f} km²"
     )
     legend_label = str(
         spec.get("buffer_legend_label")
         or (
-            f"Inom maxavstånd till {str(spec['label']).lower()}"
+            f"Inom maxavstånd till {group_label_text.lower()}"
             if is_feasibility
-            else f"Buffert runt {str(spec['label']).lower()}"
+            else f"Buffert runt {group_label_text.lower()}"
         )
     )
     for feature in features:
         props = feature.setdefault("properties", {})
         props["fill"] = buffer_color
         props["popup"] = (
-            f"<strong>{spec['buffer_label']}</strong><br>"
+            f"<strong>{buffer_label}</strong><br>"
             f"{measure_label}: {float(buffer_m or 0.0):.0f} m<br>"
-            f"{spec['caption']}"
+            f"{preview_area_label}: "
+            f"{preview_model_area_m2 / 1_000_000.0:.1f} km²<br>"
+            f"{group_contract.interpretation}"
         )
-        props["tooltip_title"] = str(spec["buffer_label"])
+        props["tooltip_title"] = buffer_label
         props["tooltip_body"] = tooltip_body
     return {
-        "name": str(spec["buffer_label"]),
+        "name": buffer_label,
         "buffer_layer_id": (
-            f"solar:{group_id}:buffer:{int(round(float(buffer_m or 0.0)))}:"
+            f"solar:{canonical_group_id}:buffer:"
+            f"{int(round(float(buffer_m or 0.0)))}:"
             f"{'_'.join(selected_layer_ids) if selected_layer_ids else 'none'}"
         ),
         "feature_collection": buffer_geojson,
         "fill_property": "fill",
         "legend_items": [{"label": legend_label, "color": buffer_color}],
-        "legend_id": f"solar_{group_id}_buffer",
+        "legend_id": f"solar_{visual_group_id}_buffer",
         "legend_title": "",
         "default_visible": False,
-        "stroke_color": str(spec.get("source_color", buffer_color)),
+        "stroke_color": str(spec.get("source_color") or buffer_color),
         "fill_color": buffer_color,
         "stroke_opacity": 0.56,
         "fill_opacity": 0.18,
@@ -6520,13 +6731,6 @@ def _wind_filter_buffer_layer(
         "z_index": 459,
         "layer_kind": "vector",
     }
-
-
-def _solar_protected_buffer_layer(
-    buffer_m: float,
-    layer_ids: list[str] | tuple[str, ...] | None = None,
-) -> dict[str, Any] | None:
-    return _solar_filter_buffer_layer(SOLAR_PROTECTED_GROUP_ID, buffer_m, layer_ids)
 
 
 @st.cache_data(show_spinner=False, max_entries=24)
@@ -14564,8 +14768,9 @@ def _unified_workspace_tab(
     }
     public_solar_filter_group_ids = {
         solar_public_group_by_canonical[group_id]
-        for group_id in public_wind_group_ids(
-            str(region.get("region_id") or "")
+        for group_id in area_applicable_group_ids(
+            str(region.get("region_id") or ""),
+            "solar",
         )
         if group_id in solar_public_group_by_canonical
     }
@@ -15044,23 +15249,75 @@ def _unified_workspace_tab(
         solar_large_polygon_geojson = None
         if solar_large_population_active:
             if _solar_visual_enabled(applied_solar_config, "source", SOLAR_LARGE_POPULATION_VISUAL_GROUP_ID):
-                _append_unique_layer(layers, _layer_visible_by_default(_solar_population_source_layer()))
+                try:
+                    solar_population_source_layers = _solar_filter_source_layers(
+                        str(region.get("region_id") or ""),
+                        SOLAR_LARGE_POPULATION_VISUAL_GROUP_ID,
+                        CANONICAL_POPULATION_GROUP_ID,
+                        [WIND_POPULATION_SOURCE_LAYER_ID],
+                    )
+                except Exception as exc:
+                    unified_notes.append(
+                        "Solens befolkningskälla kunde inte visas "
+                        f"({_safe_preview_error_code(exc)})."
+                    )
+                    solar_population_source_layers = []
+                for source_layer in solar_population_source_layers:
+                    _append_unique_layer(
+                        layers,
+                        _layer_visible_by_default(source_layer),
+                    )
             if _solar_visual_enabled(applied_solar_config, "buffer", SOLAR_LARGE_POPULATION_VISUAL_GROUP_ID):
+                try:
+                    solar_population_buffer_layer = _solar_filter_buffer_layer(
+                        str(region.get("region_id") or ""),
+                        SOLAR_LARGE_POPULATION_VISUAL_GROUP_ID,
+                        CANONICAL_POPULATION_GROUP_ID,
+                        large_population_buffer_m,
+                        [WIND_POPULATION_SOURCE_LAYER_ID],
+                    )
+                except Exception as exc:
+                    unified_notes.append(
+                        "Solens befolkningsbuffert kunde inte visas "
+                        f"({_safe_preview_error_code(exc)})."
+                    )
+                    solar_population_buffer_layer = None
                 _append_unique_layer(
                     layers,
-                    _layer_visible_by_default(_solar_population_buffer_layer(region, h3_resolution, large_population_buffer_m)),
+                    _layer_visible_by_default(solar_population_buffer_layer),
                 )
         for filter_config in solar_large_filter_configs:
             group_id = str(filter_config.get("group_id", ""))
+            canonical_group_id = SOLAR_AREA_CANONICAL_GROUP_IDS.get(group_id)
+            if canonical_group_id is None:
+                raise ValueError(
+                    "Solar map review does not support active legacy group "
+                    f"{group_id!r}"
+                )
             layer_ids = list(filter_config.get("layer_ids") or [])
             buffer_m = float(filter_config.get("buffer_m", 0.0) or 0.0)
             if _solar_visual_enabled(applied_solar_config, "source", group_id):
-                for source_layer in _solar_filter_source_layers(group_id, layer_ids):
+                try:
+                    solar_source_layers = _solar_filter_source_layers(
+                        str(region.get("region_id") or ""),
+                        group_id,
+                        canonical_group_id,
+                        layer_ids,
+                    )
+                except Exception as exc:
+                    unified_notes.append(
+                        f"Källvisning för {group_id} kunde inte byggas "
+                        f"({_safe_preview_error_code(exc)})."
+                    )
+                    solar_source_layers = []
+                for source_layer in solar_source_layers:
                     _append_unique_layer(layers, _layer_visible_by_default(source_layer))
             if _solar_visual_enabled(applied_solar_config, "buffer", group_id):
                 try:
                     solar_buffer_layer = _solar_filter_buffer_layer(
+                        str(region.get("region_id") or ""),
                         group_id,
+                        canonical_group_id,
                         buffer_m,
                         layer_ids,
                     )

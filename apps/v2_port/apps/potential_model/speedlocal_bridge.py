@@ -82,18 +82,24 @@ def _hex_color_to_rgb(value: str) -> tuple[int, int, int]:
     )
 
 
-def _validated_wind_analysis(region_id: str) -> AnalysisContract:
-    analysis = load_analysis(str(region_id), "wind")
+def _validated_analysis(
+    region_id: str,
+    analysis_id: str,
+) -> AnalysisContract:
+    analysis = load_analysis(str(region_id), str(analysis_id))
     validate_contract(analysis)
     return analysis
+
+
+def _validated_wind_analysis(region_id: str) -> AnalysisContract:
+    return _validated_analysis(region_id, "wind")
 
 
 def _validated_area_analysis(
     region_id: str,
     technology: str,
 ) -> AnalysisContract:
-    analysis = load_analysis(str(region_id), str(technology))
-    validate_contract(analysis)
+    analysis = _validated_analysis(region_id, technology)
     if analysis.area_result is None:
         raise ValueError(
             f"{region_id}/{technology} has no area-result contract"
@@ -222,6 +228,45 @@ def solar_area_result_frame(
     )
 
 
+def area_applicable_group_ids(
+    region_id: str,
+    technology: str,
+) -> tuple[str, ...]:
+    """Return one technology's manifest-declared area groups in order."""
+
+    analysis = _validated_area_analysis(region_id, technology)
+    return tuple(analysis.area_result.applicable_group_ids)
+
+
+def analysis_group_layer_ids(
+    region_id: str,
+    analysis_id: str,
+    group_id: str,
+) -> tuple[str, ...]:
+    """Return preview-compatible layers for one applicable area group."""
+
+    analysis = _validated_area_analysis(region_id, analysis_id)
+    canonical_group_id = str(group_id)
+    if canonical_group_id not in analysis.area_result.applicable_group_ids:
+        raise ValueError(
+            f"{region_id}/{analysis_id} does not apply group "
+            f"{canonical_group_id!r}"
+        )
+    layer_ids = tuple(
+        layer.id
+        for layer in analysis.layers.values()
+        if layer.group_id == canonical_group_id
+        and layer.operation in CANONICAL_DISTANCE_OPERATIONS
+        and layer.source.source_geometry_required
+    )
+    if not layer_ids:
+        raise ValueError(
+            f"{region_id}/{analysis_id} declares no preview-compatible "
+            f"{canonical_group_id} layers"
+        )
+    return layer_ids
+
+
 def public_wind_group_ids(region_id: str) -> tuple[str, ...]:
     """Return canonical ids for migrated groups and adapter ids for the rest."""
     analysis = _validated_wind_analysis(region_id)
@@ -296,14 +341,68 @@ def default_wind_layer_selection(region_id: str) -> dict[str, list[str]]:
     return selected
 
 
-def vector_preview_layer_ids(region_id: str) -> tuple[str, ...]:
-    """Return canonical layers that can produce a dynamic vector preview."""
-    analysis = _validated_wind_analysis(region_id)
+def vector_preview_layer_ids(
+    region_id: str,
+    analysis_id: str = "wind",
+    group_id: str | None = None,
+) -> tuple[str, ...]:
+    """Return manifest layers that can produce a dynamic vector preview."""
+
+    analysis = _validated_area_analysis(region_id, analysis_id)
+    applicable_group_ids = set(analysis.area_result.applicable_group_ids)
+    requested_group_id = str(group_id) if group_id is not None else None
+    if (
+        requested_group_id is not None
+        and requested_group_id not in applicable_group_ids
+    ):
+        raise ValueError(
+            f"{region_id}/{analysis_id} does not apply group "
+            f"{requested_group_id!r}"
+        )
     return tuple(
         layer.id
         for layer in analysis.layers.values()
-        if layer.operation in CANONICAL_DISTANCE_OPERATIONS
+        if layer.group_id in applicable_group_ids
+        and (
+            requested_group_id is None
+            or layer.group_id == requested_group_id
+        )
+        and layer.operation in CANONICAL_DISTANCE_OPERATIONS
         and layer.source.source_geometry_required
+    )
+
+
+def analysis_area_group_preview(
+    region_id: str,
+    analysis_id: str,
+    canonical_group_id: str,
+    layer_ids: Collection[str],
+    buffer_m: float,
+) -> VectorBufferPreview:
+    """Build one exact manifest area-group geometry for map review."""
+
+    requested = tuple(str(layer_id) for layer_id in layer_ids)
+    if not requested:
+        raise ValueError("An area-group preview requires at least one layer")
+    allowed = set(
+        analysis_group_layer_ids(
+            region_id,
+            analysis_id,
+            canonical_group_id,
+        )
+    )
+    unknown = set(requested) - allowed
+    if unknown:
+        raise ValueError(
+            f"{region_id}/{analysis_id} has no {canonical_group_id} "
+            f"preview layers: {sorted(unknown)}"
+        )
+    return build_area_group_preview(
+        region=str(region_id),
+        analysis=str(analysis_id),
+        group_id=str(canonical_group_id),
+        layers=requested,
+        buffer_m=float(buffer_m),
     )
 
 
@@ -332,11 +431,11 @@ def vector_buffer_preview(
             raise ValueError(
                 "A proximity preview requires one manifest-declared group"
             )
-        return build_area_group_preview(
-            region=str(region_id),
-            analysis="wind",
-            group_id=next(iter(group_ids)),
-            layers=list(requested),
+        return analysis_area_group_preview(
+            region_id=str(region_id),
+            analysis_id="wind",
+            canonical_group_id=next(iter(group_ids)),
+            layer_ids=requested,
             buffer_m=float(buffer_m),
         )
     return build_vector_buffer_preview(
@@ -402,23 +501,27 @@ def canonical_grid_layer_ids(region_id: str) -> tuple[str, ...]:
     )
 
 
-def wind_group_control_contract(
+def analysis_group_control_contract(
     region_id: str,
+    analysis_id: str,
     canonical_group_id: str,
     *,
     public_group_id: str | None = None,
 ) -> WindGroupControlContract:
-    """Build one public distance-group control from the wind manifest."""
-    analysis = _validated_wind_analysis(region_id)
+    """Build one public distance-group control from an area manifest."""
+
+    analysis = _validated_area_analysis(region_id, analysis_id)
     if analysis.ui is None:
-        raise ValueError(f"{region_id}/wind has no ui contract")
+        raise ValueError(f"{region_id}/{analysis_id} has no ui contract")
     group_ui = analysis.ui.groups.get(str(canonical_group_id))
     if group_ui is None:
         raise ValueError(
-            f"{region_id}/wind has no {canonical_group_id} ui descriptor"
+            f"{region_id}/{analysis_id} has no {canonical_group_id} "
+            "ui descriptor"
         )
-    parameter = wind_group_buffer_parameter_contract(
+    parameter = analysis_group_buffer_parameter_contract(
         region_id,
+        analysis_id,
         canonical_group_id,
     )
     if (
@@ -427,21 +530,24 @@ def wind_group_control_contract(
         or parameter.step is None
     ):
         raise ValueError(
-            f"{region_id}/wind {canonical_group_id} buffer must declare "
+            f"{region_id}/{analysis_id} {canonical_group_id} buffer must "
+            "declare "
             "minimum, maximum and step"
         )
 
     public_id = str(public_group_id or canonical_group_id)
     operations = {
         analysis.layers[layer_id].operation
-        for layer_id in canonical_wind_group_layer_ids(
+        for layer_id in analysis_group_layer_ids(
             region_id,
+            analysis_id,
             canonical_group_id,
         )
     }
     if len(operations) != 1:
         raise ValueError(
-            f"{region_id}/wind {canonical_group_id} layers must use one operation"
+            f"{region_id}/{analysis_id} {canonical_group_id} layers must "
+            "use one operation"
         )
     operation = operations.pop()
     analysis_kind = (
@@ -452,13 +558,16 @@ def wind_group_control_contract(
         else "distance_conflict"
     )
     layer_controls: list[WindLayerControlContract] = []
-    for layer_id in canonical_wind_group_layer_ids(
+    for layer_id in analysis_group_layer_ids(
         region_id,
+        analysis_id,
         canonical_group_id,
     ):
         layer = analysis.layers[layer_id]
         if layer.ui is None:
-            raise ValueError(f"{region_id}/wind layer {layer_id} has no ui")
+            raise ValueError(
+                f"{region_id}/{analysis_id} layer {layer_id} has no ui"
+            )
         ready = True
         message = layer.ui.note
         try:
@@ -495,6 +604,22 @@ def wind_group_control_contract(
         interpretation=group_ui.interpretation,
         expanded_by_default=group_ui.expanded_by_default,
         layers=tuple(layer_controls),
+    )
+
+
+def wind_group_control_contract(
+    region_id: str,
+    canonical_group_id: str,
+    *,
+    public_group_id: str | None = None,
+) -> WindGroupControlContract:
+    """Build one public distance-group control from the wind manifest."""
+
+    return analysis_group_control_contract(
+        region_id,
+        "wind",
+        canonical_group_id,
+        public_group_id=public_group_id,
     )
 
 
@@ -538,19 +663,23 @@ def grid_control_contract(region_id: str) -> WindGroupControlContract:
     )
 
 
-def wind_source_geojson(
+def analysis_source_geojson(
     region_id: str,
+    analysis_id: str,
     canonical_group_id: str,
     layer_id: str,
 ) -> dict:
-    """Read one canonical source through the shared provider resolver."""
-    analysis = _validated_wind_analysis(region_id)
-    if layer_id not in canonical_wind_group_layer_ids(
+    """Read one applicable analysis source through the provider resolver."""
+
+    analysis = _validated_area_analysis(region_id, analysis_id)
+    if layer_id not in analysis_group_layer_ids(
         region_id,
+        analysis_id,
         canonical_group_id,
     ):
         raise ValueError(
-            f"{region_id}/wind has no canonical {canonical_group_id} "
+            f"{region_id}/{analysis_id} has no canonical "
+            f"{canonical_group_id} "
             f"source: {layer_id}"
         )
     validated = validate_layer(analysis.layers[layer_id])
@@ -563,6 +692,21 @@ def wind_source_geojson(
             f"object: {layer_id}"
         )
     return payload
+
+
+def wind_source_geojson(
+    region_id: str,
+    canonical_group_id: str,
+    layer_id: str,
+) -> dict:
+    """Read one canonical wind source through the provider resolver."""
+
+    return analysis_source_geojson(
+        region_id,
+        "wind",
+        canonical_group_id,
+        layer_id,
+    )
 
 
 def road_source_geojson(region_id: str, layer_id: str) -> dict:
@@ -610,21 +754,24 @@ def grid_source_geojson(region_id: str, layer_id: str) -> dict:
     )
 
 
-def wind_group_buffer_parameter_contract(
+def analysis_group_buffer_parameter_contract(
     region_id: str,
+    analysis_id: str,
     canonical_group_id: str,
 ) -> ParameterContract:
-    """Return one canonical group's shared buffer contract."""
-    analysis = _validated_wind_analysis(region_id)
+    """Return one analysis group's shared manifest buffer contract."""
+
+    analysis = _validated_area_analysis(region_id, analysis_id)
     parameters: list[ParameterContract] = []
-    for layer_id in canonical_wind_group_layer_ids(
+    for layer_id in analysis_group_layer_ids(
         region_id,
+        analysis_id,
         canonical_group_id,
     ):
         layer = analysis.layers.get(layer_id)
         if layer is None:
             raise KeyError(
-                f"{region_id}/wind is missing canonical "
+                f"{region_id}/{analysis_id} is missing canonical "
                 f"{canonical_group_id} layer: {layer_id}"
             )
         if (
@@ -632,13 +779,16 @@ def wind_group_buffer_parameter_contract(
             or layer.operation not in CANONICAL_DISTANCE_OPERATIONS
         ):
             raise ValueError(
-                f"{region_id}/wind layer {layer_id} is not a canonical "
+                f"{region_id}/{analysis_id} layer {layer_id} is not a "
+                "canonical "
                 f"{canonical_group_id} "
                 "distance-based layer"
             )
         parameter = layer.parameters.get("buffer_m")
         if parameter is None:
-            raise KeyError(f"{region_id}/wind layer {layer_id} has no buffer_m")
+            raise KeyError(
+                f"{region_id}/{analysis_id} layer {layer_id} has no buffer_m"
+            )
         parameters.append(parameter)
 
     signatures = {
@@ -654,10 +804,24 @@ def wind_group_buffer_parameter_contract(
     }
     if len(signatures) != 1:
         raise ValueError(
-            f"{region_id}/wind {canonical_group_id} layers do not share one "
+            f"{region_id}/{analysis_id} {canonical_group_id} layers do not "
+            "share one "
             "buffer contract"
         )
     return parameters[0]
+
+
+def wind_group_buffer_parameter_contract(
+    region_id: str,
+    canonical_group_id: str,
+) -> ParameterContract:
+    """Return one canonical wind group's shared buffer contract."""
+
+    return analysis_group_buffer_parameter_contract(
+        region_id,
+        "wind",
+        canonical_group_id,
+    )
 
 
 def roads_buffer_parameter_contract(region_id: str) -> ParameterContract:

@@ -15,8 +15,9 @@ current Trøndelag group contains three independently selectable sources:
 
 The transitional registry also names `power_substations`, but Trøndelag has no
 verified source or runtime asset for it. It is not a public Trøndelag option
-and must fail closed if requested. Solar's separate `electrical` behavior is a
-later solar-slice concern and is not migrated here.
+and must fail closed if requested. Since 2026-08-05, solar retains
+`electrical` only as a public session/UI key and maps it to canonical
+`grid_infrastructure` for source review and exact domain-clipped buffer review.
 
 ## Accepted Trøndelag behavior
 

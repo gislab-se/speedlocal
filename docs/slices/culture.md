@@ -14,8 +14,10 @@ Trøndelag group contains two independently selectable polygon sources:
 
 The registry's third generic culture id, `cultural_conservation_values`, has
 no declared Trøndelag asset and remains outside the product contract. The two
-declared sources replace the wind flow's registry-backed culture behavior;
-solar keeps its separate culture behavior until the solar slice.
+declared sources replace the wind flow's registry-backed culture behavior.
+Since 2026-08-05, solar source/buffer map review resolves these same sources
+through canonical `culture` in the solar manifest; its public compatibility id
+does not select an algorithm.
 
 ## Accepted behavior
 
