@@ -7,13 +7,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from speedlocal.area_result import run_area_analysis
+from speedlocal.area_result import build_area_group_preview, run_area_analysis
 from speedlocal.catalogs import load_analysis, load_region
 from speedlocal.contracts import AnalysisContract, ParameterContract
 from speedlocal.engine import run_analysis
 from speedlocal.geometry import (
     VectorBufferPreview,
-    build_h3_proximity_preview,
     build_vector_buffer_preview,
 )
 from speedlocal.sources import resolve_analysis_domain_cell_areas_km2
@@ -329,35 +328,16 @@ def vector_buffer_preview(
     requested_layers = [analysis.layers[layer_id] for layer_id in requested]
     if all(layer.operation == "proximity_feasibility" for layer in requested_layers):
         group_ids = {layer.group_id for layer in requested_layers}
-        resolutions = {
-            layer.source.distance_h3_resolution for layer in requested_layers
-        }
-        if len(group_ids) != 1 or None in resolutions or len(resolutions) != 1:
+        if len(group_ids) != 1:
             raise ValueError(
-                "A proximity preview requires one group at one declared H3 resolution"
+                "A proximity preview requires one manifest-declared group"
             )
-        distance = float(buffer_m)
-        runtime = run_analysis(
+        return build_area_group_preview(
             region=str(region_id),
             analysis="wind",
+            group_id=next(iter(group_ids)),
             layers=list(requested),
-            parameters={
-                layer_id: {"buffer_m": distance} for layer_id in requested
-            },
-            target_resolution=int(next(iter(resolutions))),
-        )
-        if len(runtime.groups) != 1 or runtime.groups[0].group_id not in group_ids:
-            raise ValueError("The proximity preview did not produce one canonical group")
-        feasible_cell_ids = tuple(
-            cell.cell_id
-            for cell in runtime.groups[0].cells
-            if not cell.blocked and not cell.coverage_missing
-        )
-        return build_h3_proximity_preview(
-            requested_layers,
-            native_crs=native_crs,
-            buffer_m=distance,
-            feasible_cell_ids=feasible_cell_ids,
+            buffer_m=float(buffer_m),
         )
     return build_vector_buffer_preview(
         requested_layers,

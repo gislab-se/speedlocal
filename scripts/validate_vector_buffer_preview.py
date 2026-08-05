@@ -18,8 +18,14 @@ from speedlocal.catalogs import load_analysis, load_region
 
 GEOMETRY_IMPORT_ERROR: ModuleNotFoundError | None = None
 try:
+    from pyproj import Transformer
+    from shapely.geometry import shape
+    from shapely.ops import transform
+
     from apps.v2_port.apps.potential_model.speedlocal_bridge import (
+        solar_area_result_frame,
         vector_buffer_preview as build_manifest_vector_buffer_preview,
+        wind_area_result_frame,
     )
     from speedlocal.geometry import GeometryPreviewError, build_vector_buffer_preview
 except ModuleNotFoundError as exc:
@@ -213,6 +219,27 @@ def main() -> int:
     grid_at_15000 = build_manifest_vector_buffer_preview(
         "trondelag", grid_layer_ids, 15000
     )
+    wind_grid_at_2000 = wind_area_result_frame(
+        "trondelag",
+        grid_layer_ids,
+        {"grid_infrastructure": 2000.0},
+        7,
+    )
+    solar_grid_at_2000 = solar_area_result_frame(
+        "trondelag",
+        grid_layer_ids,
+        {"grid_infrastructure": 2000.0},
+        7,
+    )
+    wind_grid_rollups_at_2000 = {
+        resolution: wind_area_result_frame(
+            "trondelag",
+            grid_layer_ids,
+            {"grid_infrastructure": 2000.0},
+            resolution,
+        )
+        for resolution in (6, 5)
+    }
 
     report.check(
         zero.semantics == "dissolved_source_footprint"
@@ -372,12 +399,15 @@ def main() -> int:
         "The combined grid preview did not preserve its three-source contract.",
     )
     report.check(
-        grid_at_500.semantics == "analysis_cell_coverage"
+        grid_at_500.semantics == "exact_area_clip"
         and grid_at_500.geometry_type in {"Polygon", "MultiPolygon"}
         and grid_at_500.area_m2 < grid_at_2000.area_m2
-        < grid_at_15000.area_m2,
-        "The R7 grid-feasibility preview grows monotonically at 500/2000/15000 m.",
-        "The R7 grid-feasibility preview did not grow with maximum connection distance.",
+        < grid_at_15000.area_m2
+        and float(grid_at_500.model_area_m2 or 0.0)
+        < float(grid_at_2000.model_area_m2 or 0.0)
+        < float(grid_at_15000.model_area_m2 or 0.0),
+        "The exact domain-clipped grid preview grows monotonically at 500/2000/15000 m.",
+        "The exact grid preview did not grow with maximum connection distance.",
     )
     report.check(
         all(
@@ -388,9 +418,123 @@ def main() -> int:
         and grid_at_2000.geojson["features"][0]["properties"].get(
             "source_h3_resolution"
         )
-        == 7,
-        "The mixed grid line/point coverage serializes as R7 polygonal GeoJSON.",
-        "The mixed grid line/point coverage emitted an invalid analysis-cell preview.",
+        == 7
+        and grid_at_2000.geojson["features"][0]["properties"].get(
+            "operation"
+        )
+        == "proximity_feasibility"
+        and grid_at_2000.geojson["features"][0]["properties"].get(
+            "semantics"
+        )
+        == "exact_area_clip",
+        "The mixed grid line/point buffer serializes as exact clipped R7 GeoJSON.",
+        "The mixed grid line/point buffer emitted an invalid exact preview.",
+    )
+    preview_grid_areas = {
+        500: float(grid_at_500.model_area_m2 or 0.0) / 1_000_000.0,
+        2000: float(grid_at_2000.model_area_m2 or 0.0) / 1_000_000.0,
+        15000: float(grid_at_15000.model_area_m2 or 0.0) / 1_000_000.0,
+    }
+    expected_grid_areas = {
+        500: 8_992.417252706564,
+        2000: 23_137.469491933643,
+        15000: 43_995.63150207577,
+    }
+    report.check(
+        all(
+            math.isclose(
+                preview_grid_areas[distance],
+                expected_grid_areas[distance],
+                rel_tol=0.0,
+                abs_tol=1e-8,
+            )
+            for distance in expected_grid_areas
+        )
+        and math.isclose(
+            preview_grid_areas[2000],
+            float(wind_grid_at_2000["potential_area_km2"].sum()),
+            rel_tol=0.0,
+            abs_tol=1e-8,
+        ),
+        "The 500/2000/15000 m previews equal the accepted exact R7 model areas.",
+        "The grid preview and exact R7 technology-area calculation disagree.",
+    )
+    cell_counts = {
+        distance: (
+            int(preview.zero_cell_count or 0),
+            int(preview.partial_cell_count or 0),
+            int(preview.full_cell_count or 0),
+        )
+        for distance, preview in {
+            500: grid_at_500,
+            2000: grid_at_2000,
+            15000: grid_at_15000,
+        }.items()
+    }
+    report.check(
+        cell_counts
+        == {
+            500: (7565, 6160, 10),
+            2000: (5066, 3815, 4854),
+            15000: (277, 185, 13273),
+        },
+        "Exact grid feasibility retains accepted zero/partial/full R7 cells.",
+        "Grid feasibility cell classes drifted or collapsed to whole cells: "
+        f"{cell_counts}.",
+    )
+    rollup_areas = {
+        resolution: float(frame["potential_area_km2"].sum())
+        for resolution, frame in wind_grid_rollups_at_2000.items()
+    }
+    report.check(
+        all(
+            math.isclose(
+                area,
+                expected_grid_areas[2000],
+                rel_tol=0.0,
+                abs_tol=1e-8,
+            )
+            for area in rollup_areas.values()
+        )
+        and {
+            resolution: int(frame["potential_area_km2"].gt(0.0).sum())
+            for resolution, frame in wind_grid_rollups_at_2000.items()
+        }
+        == {6: 1611, 5: 311},
+        "The exact 2000 m R7 area is preserved through R6/R5 rollup.",
+        "The exact 2000 m grid area or positive-cell count drifted at R6/R5.",
+    )
+    report.check(
+        wind_grid_at_2000[
+            ["hex_id", "potential_area_km2", "potential_area_share_pct"]
+        ].equals(
+            solar_grid_at_2000[
+                ["hex_id", "potential_area_km2", "potential_area_share_pct"]
+            ]
+        ),
+        "Wind and solar consume the same exact 2000 m grid geometry per R7 cell.",
+        "Wind and solar grid geometry diverged at 2000 m.",
+    )
+    serialized_grid_geometry = shape(
+        grid_at_2000.geojson["features"][0]["geometry"]
+    )
+    to_native = Transformer.from_crs(
+        "EPSG:4326",
+        grid_at_2000.native_crs,
+        always_xy=True,
+    )
+    serialized_native_area_m2 = float(
+        transform(to_native.transform, serialized_grid_geometry).area
+    )
+    report.check(
+        math.isclose(
+            serialized_native_area_m2,
+            float(grid_at_2000.area_m2),
+            rel_tol=1e-8,
+            abs_tol=1.0,
+        ),
+        "The serialized exact grid GeoJSON round-trips to its clipped metric area.",
+        "The displayed grid geometry drifted from its exact clipped metric area.",
     )
     report.check(
         _failure_code(

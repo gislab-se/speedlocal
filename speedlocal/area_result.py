@@ -8,9 +8,9 @@ import h3
 import numpy as np
 import shapely
 from pyproj import Transformer
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, mapping
 from shapely.geometry.base import BaseGeometry
-from shapely.ops import transform
+from shapely.ops import transform, unary_union
 from shapely.strtree import STRtree
 
 from .catalogs import load_analysis, load_region
@@ -21,6 +21,8 @@ from .contracts import (
 )
 from .geometry import (
     GeometryPreviewError,
+    VectorBufferPreview,
+    WEB_CRS,
     _atomic_geometry_parts,
     _direct_distance_domain_geometries,
     _load_source_geometries,
@@ -54,6 +56,13 @@ class TechnologyAreaResult:
     remaining_area_km2: float
     potential_pct: float
     cells: tuple[AreaCellResult, ...]
+
+
+@dataclass(frozen=True)
+class _BufferedLayerGeometry:
+    parts: tuple[BaseGeometry, ...]
+    source_feature_count: int
+    declared_feature_count: int
 
 
 def _clip_cells_with_parts(
@@ -286,12 +295,12 @@ def _rollup_cells(
     return tuple(rows)
 
 
-def _layer_buffer_parts(
+def _buffered_layer_geometry(
     layer: LayerContract,
     *,
     native_crs: str,
     buffer_m: float,
-) -> tuple[BaseGeometry, ...]:
+) -> _BufferedLayerGeometry:
     validated = validate_layer(layer)
     parameter = layer.parameters.get("buffer_m")
     if parameter is None or parameter.unit != "m":
@@ -332,7 +341,233 @@ def _layer_buffer_parts(
             "area_result_empty",
             f"Layer {layer.id!r} produced no area geometry.",
         )
-    return usable
+    return _BufferedLayerGeometry(
+        parts=usable,
+        source_feature_count=len(source_geometries),
+        declared_feature_count=int(validated.assets.feature_count),
+    )
+
+
+def _layer_buffer_parts(
+    layer: LayerContract,
+    *,
+    native_crs: str,
+    buffer_m: float,
+) -> tuple[BaseGeometry, ...]:
+    return _buffered_layer_geometry(
+        layer,
+        native_crs=native_crs,
+        buffer_m=buffer_m,
+    ).parts
+
+
+def build_area_group_preview(
+    region: str,
+    analysis: str,
+    group_id: str,
+    layers: Iterable[str],
+    buffer_m: float,
+) -> VectorBufferPreview:
+    """Build the exact, analysis-domain-clipped geometry for one area group.
+
+    The preview uses the same validated source resolver, metric buffering,
+    R7 domain geometry and local overlap-safe clipping primitives as the
+    technology area calculation. It intentionally avoids the historical
+    whole-cell proximity proxy and the much slower global source dissolve.
+    """
+
+    contract = load_analysis(str(region), str(analysis))
+    validate_contract(contract)
+    area_contract = contract.area_result
+    if area_contract is None:
+        raise ValueError(f"{region}/{analysis} has no area_result contract")
+    canonical_group_id = str(group_id)
+    if canonical_group_id not in area_contract.applicable_group_ids:
+        raise ValueError(
+            f"{region}/{analysis} does not apply group {canonical_group_id!r}"
+        )
+    requested = tuple(str(layer_id) for layer_id in layers)
+    if not requested:
+        raise ValueError("An area-group preview requires at least one layer")
+    if len(requested) != len(set(requested)):
+        raise ValueError("Area-group preview layer ids must not contain duplicates")
+    unknown = set(requested) - set(contract.layers)
+    if unknown:
+        raise KeyError(
+            f"Layers are not configured for {region}/{analysis}: {sorted(unknown)}"
+        )
+    selected_layers = tuple(contract.layers[layer_id] for layer_id in requested)
+    if any(layer.group_id != canonical_group_id for layer in selected_layers):
+        raise ValueError(
+            "Every area-group preview layer must belong to the requested group"
+        )
+    operations = {layer.operation for layer in selected_layers}
+    if len(operations) != 1:
+        raise ValueError("An area-group preview requires one shared operation")
+    operation = operations.pop()
+
+    region_contract = load_region(str(region))
+    native_crs = str(region_contract.get("native_crs") or "").strip()
+    if not native_crs:
+        raise ValueError(f"{region} has no native_crs")
+    if contract.analysis_domain is None:
+        raise ValueError(f"{region}/{analysis} has no analysis-domain contract")
+    source_resolution = int(contract.analysis_domain.resolution)
+    domain_level = _domain_level(contract, source_resolution)
+    target_crs = _metric_crs(native_crs)
+    model_cells = _direct_distance_domain_geometries(domain_level, target_crs)
+
+    parts: list[BaseGeometry] = []
+    source_feature_count = 0
+    declared_feature_count = 0
+    thresholds: list[float] = []
+    for layer in selected_layers:
+        parameter = layer.parameters.get("buffer_m")
+        if parameter is None:
+            raise ValueError(f"Layer {layer.id} has no buffer_m contract")
+        threshold = parameter.validate_value(buffer_m)
+        thresholds.append(threshold)
+        buffered = _buffered_layer_geometry(
+            layer,
+            native_crs=native_crs,
+            buffer_m=threshold,
+        )
+        parts.extend(buffered.parts)
+        source_feature_count += buffered.source_feature_count
+        declared_feature_count += buffered.declared_feature_count
+    if not all(
+        math.isclose(value, thresholds[0], rel_tol=0.0, abs_tol=1e-9)
+        for value in thresholds
+    ):
+        raise ValueError("Area-group preview layers must share one threshold")
+    if (
+        operation == "proximity_feasibility"
+        and thresholds[0] >= FEASIBILITY_DISSOLVE_MIN_BUFFER_M
+        and len(parts) >= FEASIBILITY_DISSOLVE_MIN_PARTS
+    ):
+        dissolved = shapely.union_all(np.asarray(parts, dtype=object))
+        parts = [
+            part
+            for part in shapely.get_parts(dissolved)
+            if not part.is_empty
+        ]
+
+    clipped = _clip_cells_with_parts(
+        np.asarray(list(model_cells.values()), dtype=object),
+        np.asarray(parts, dtype=object),
+        keep_inside=True,
+    )
+    nonempty = [geometry for geometry in clipped if not geometry.is_empty]
+    if not nonempty:
+        raise GeometryPreviewError(
+            "area_group_preview_empty",
+            "The exact area-group preview contains no geometry.",
+        )
+    try:
+        native_result = unary_union(nonempty)
+    except Exception as exc:
+        raise GeometryPreviewError(
+            "area_group_preview_union_failed",
+            "The exact clipped area-group geometry could not be dissolved.",
+        ) from exc
+    if (
+        native_result.is_empty
+        or not native_result.is_valid
+        or not all(math.isfinite(float(value)) for value in native_result.bounds)
+    ):
+        raise GeometryPreviewError(
+            "area_group_preview_invalid",
+            "The exact clipped area-group geometry is invalid.",
+        )
+    area_m2 = float(native_result.area)
+    cell_ids = tuple(model_cells)
+    cell_geometry_areas = np.asarray(
+        shapely.area(np.asarray(list(model_cells.values()), dtype=object)),
+        dtype=float,
+    )
+    clipped_geometry_areas = np.asarray(shapely.area(clipped), dtype=float)
+    declared_cell_areas_km2 = resolve_analysis_domain_cell_areas_km2(
+        contract,
+        source_resolution,
+    )
+    if set(cell_ids) != set(declared_cell_areas_km2):
+        raise ValueError(
+            "Exact area-group preview cells do not match the declared domain"
+        )
+    fractions = np.divide(
+        clipped_geometry_areas,
+        cell_geometry_areas,
+        out=np.zeros_like(clipped_geometry_areas),
+        where=cell_geometry_areas > 0.0,
+    )
+    fractions = np.clip(fractions, 0.0, 1.0)
+    # The public percentages are reported on a 0–100 scale. A 1e-12
+    # percentage tolerance therefore corresponds to 1e-14 as a fraction.
+    zero_cell_count = int(np.count_nonzero(fractions <= 1e-14))
+    full_cell_count = int(np.count_nonzero(fractions >= 1.0 - 1e-14))
+    partial_cell_count = int(len(fractions) - zero_cell_count - full_cell_count)
+    model_area_m2 = math.fsum(
+        float(declared_cell_areas_km2[cell_id])
+        * float(fraction)
+        * 1_000_000.0
+        for cell_id, fraction in zip(cell_ids, fractions)
+    )
+    try:
+        to_web = Transformer.from_crs(target_crs, WEB_CRS, always_xy=True)
+        web_geometry = transform(to_web.transform, native_result)
+    except Exception as exc:
+        raise GeometryPreviewError(
+            "area_group_preview_transform_failed",
+            "The exact clipped area-group geometry could not be transformed.",
+        ) from exc
+    if not web_geometry.is_valid:
+        web_geometry = shapely.make_valid(web_geometry)
+        polygon_parts = [
+            part
+            for part in shapely.get_parts(web_geometry)
+            if "Polygon" in part.geom_type and not part.is_empty
+        ]
+        if polygon_parts:
+            web_geometry = unary_union(polygon_parts)
+    if web_geometry.is_empty or not web_geometry.is_valid:
+        raise GeometryPreviewError(
+            "area_group_preview_web_invalid",
+            "The transformed exact area-group geometry is invalid.",
+        )
+    distance = float(thresholds[0])
+    return VectorBufferPreview(
+        geojson={
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {
+                        "analysis_id": str(analysis),
+                        "group_id": canonical_group_id,
+                        "layer_ids": list(requested),
+                        "native_crs": target_crs.to_string(),
+                        "buffer_m": distance,
+                        "operation": operation,
+                        "source_h3_resolution": source_resolution,
+                        "semantics": "exact_area_clip",
+                    },
+                    "geometry": mapping(web_geometry),
+                }
+            ],
+        },
+        layer_ids=requested,
+        native_crs=target_crs.to_string(),
+        buffer_m=distance,
+        semantics="exact_area_clip",
+        geometry_type=web_geometry.geom_type,
+        source_feature_count=source_feature_count,
+        declared_feature_count=declared_feature_count,
+        area_m2=area_m2,
+        model_area_m2=model_area_m2,
+        zero_cell_count=zero_cell_count,
+        partial_cell_count=partial_cell_count,
+        full_cell_count=full_cell_count,
+    )
 
 
 def run_area_analysis(

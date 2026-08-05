@@ -32,12 +32,15 @@ later solar-slice concern and is not migrated here.
 
 The vector sources are valid non-empty CRS84 `MultiLineString`,
 `MultiLineString`, and `MultiPoint` geometries. The source preview renders
-those exact vectors. The buffer-review layer renders the dissolved set of
-source-resolution R7 cells that the canonical engine classifies as feasible
-at the selected maximum distance. This keeps the review layer identical to
-the model's binary feasibility boundary and avoids a second full-network
-vector buffer; the numeric acceptance inside each cell still comes from the
-declared distance observations.
+those exact vectors. The original locally promoted buffer review rendered
+whole feasible R7 cells as a fast diagnostic of the soft-distance group
+engine. Review on 2026-08-05 established that this was visually inconsistent
+with the already promoted public wind/solar area contract. The correction
+candidate now buffers the selected vectors in the native metric CRS, clips the
+result locally to every R7 analysis cell, and dissolves those exact clipped
+parts for display. The same fractions and manifest-declared cell areas drive
+technology potential, hover, table, and allocation; the five-group
+soft-distance metric and its frozen anchors remain unchanged.
 
 ## Frozen numeric anchors
 
@@ -56,6 +59,22 @@ The anchors are independent calculations over the accepted distance tables
 and the manifest-declared `display_area_m2` domain. They are frozen behavior
 evidence, not a claim of literal cable-connection engineering capacity.
 
+## Exact technology-area anchors
+
+These separate anchors describe the literal geometric feasibility area used
+by both wind and solar. They must not replace or be compared as though they
+were the soft-distance group scores above.
+
+| Sources | Resolution | Maximum distance | Exact model area (km²) | Exact share | Positive cells |
+|---|---:|---:|---:|---:|---:|
+| All three | R7 | 500 m | 8,992.417252706564 | 19.888925162056% | 6,170 |
+| All three | R7 | 2,000 m | 23,137.469491933643 | 51.174159987506% | 8,669 |
+| All three | R7 | 15,000 m | 43,995.631502075770 | 97.307075262638% | 13,458 |
+
+At 2,000 m the exact total is unchanged when R7 is rolled to R6/R5;
+positive-cell counts are 8,669/1,611/311. Wind and solar have identical
+per-cell grid geometry under the shared manifest contract.
+
 ## Generic contract
 
 The slice adds `proximity_feasibility` as a distance-based operation. Runtime
@@ -71,7 +90,7 @@ direction is explicitly opposite to distance exclusion.
   source composition, form-batched controls, map-review behavior, and
   downstream result consumers.
 - **Extract:** generic proximity operation, canonical group bridge, and shared
-  analysis-cell feasibility preview.
+  exact area-group preview built from the technology-area primitives.
 - **Configure:** group/layer ids, line/point representations, source paths,
   R7 distance resolution, labels, colors, ordering, and slider contract.
 - **Rewrite:** wind selection, controls, calculation, source/buffer previews,
@@ -89,8 +108,9 @@ direction is explicitly opposite to distance exclusion.
   selections fail before registry loading.
 - Prove V2 Final calculation and wind allocation ranking never load a migrated
   electrical source through the legacy registry.
-- Validate exact line/point source previews and monotonically growing combined
-  R7 feasibility coverage at 500/2,000/15,000 m.
+- Validate exact line/point source previews and monotonically growing,
+  domain-clipped metric buffers at 500/2,000/15,000 m; require partial cells
+  and equality with the accepted exact technology-area anchors.
 - Validate direct manifest controls, form batching, map-review toggles, and
   R7/R6/R5 values in the real Streamlit app.
 - Preserve every promoted roads, population, nature, and culture gate.
@@ -98,4 +118,6 @@ direction is explicitly opposite to distance exclusion.
 All automated gates above pass on 2026-08-04. The user approved the corrected
 clean-process localhost controls, calculation, source preview, and feasibility
 review on the same date, so the complete current slice is locally promoted.
-Publication remains a separate checkpoint.
+The 2026-08-05 exact-preview correction remains a candidate until its updated
+automated gates and clean-process localhost review pass. Publication remains a
+separate checkpoint.

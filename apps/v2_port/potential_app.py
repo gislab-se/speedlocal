@@ -6058,6 +6058,14 @@ def _cached_vector_buffer_preview(
         "geometry_type": str(preview.geometry_type),
         "source_feature_count": int(preview.source_feature_count),
         "area_m2": float(preview.area_m2),
+        "model_area_m2": float(
+            preview.model_area_m2
+            if preview.model_area_m2 is not None
+            else preview.area_m2
+        ),
+        "zero_cell_count": preview.zero_cell_count,
+        "partial_cell_count": preview.partial_cell_count,
+        "full_cell_count": preview.full_cell_count,
     }
 
 
@@ -6445,13 +6453,25 @@ def _wind_filter_buffer_layer(
         else str(spec.get("buffer_color", "#c4322b"))
     )
     buffer_color = group_color
-    is_feasibility = str(spec.get("effect", "exclusion")) == "feasibility"
+    is_feasibility = (
+        str(group_meta.analysis_kind) == "proximity_feasibility"
+        if is_manifest_group and group_meta is not None
+        else str(spec.get("effect", "exclusion")) == "feasibility"
+    )
     layer_name = f"Vind nära nät: {label}" if is_feasibility else f"Vindbuffert: {label}"
     measure_label = "Max avstånd" if is_feasibility else "Buffert"
+    preview_model_area_m2 = float(
+        preview.get("model_area_m2", preview["area_m2"])
+    )
+    preview_area_label = (
+        "Modellarea inom analysdomänen"
+        if str(preview.get("semantics")) == "exact_area_clip"
+        else "Buffertyta före klippning"
+    )
     tooltip_body = (
-        f"Inom {float(buffer_m or 0.0):.0f} m · {float(preview['area_m2']) / 1_000_000.0:.1f} km²"
+        f"Inom {float(buffer_m or 0.0):.0f} m · {preview_model_area_m2 / 1_000_000.0:.1f} km²"
         if is_feasibility
-        else f"{float(buffer_m or 0.0):.0f} m buffert · {float(preview['area_m2']) / 1_000_000.0:.1f} km²"
+        else f"{float(buffer_m or 0.0):.0f} m buffert · {preview_model_area_m2 / 1_000_000.0:.1f} km²"
     )
     legend_label = (
         f"Inom maxavstånd till {label.lower()}"
@@ -6473,7 +6493,7 @@ def _wind_filter_buffer_layer(
         props["popup"] = (
             f"<strong>{layer_name}</strong><br>"
             f"{measure_label}: {float(buffer_m or 0.0):.0f} m<br>"
-            f"Buffertyta före klippning: {float(preview['area_m2']) / 1_000_000.0:.1f} km²<br>"
+            f"{preview_area_label}: {preview_model_area_m2 / 1_000_000.0:.1f} km²<br>"
             f"{caption}"
         )
         props["tooltip_title"] = layer_name
