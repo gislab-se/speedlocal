@@ -4931,6 +4931,7 @@ def _prime_solar_draft_state(config: dict[str, Any]) -> None:
 
 
 def _reset_solar_filter_state() -> None:
+    """Clear solar widgets before Streamlit instantiates them on the rerun."""
     config = dict(DEFAULT_SOLAR_APPLIED_CONFIG)
     config["panel_area_m2_per_person"] = (
         _solar_rooftop_panel_area_default()
@@ -4960,6 +4961,7 @@ def _reset_solar_filter_state() -> None:
             st.session_state[
                 _solar_filter_layer_control_key(group_id, layer_id)
             ] = False
+    _invalidate_workspace_cache("solar filters reset")
 
 
 def _solar_draft_config_from_session() -> dict[str, Any]:
@@ -14979,16 +14981,13 @@ def _unified_workspace_tab(
                         st.caption("Storskalig sol använder hela landskapsunderlaget som kandidatbas. Valda skydds-/avståndsfilter drar bort yta, medan nära nät begränsar ytan till platser inom valt maxavstånd.")
                         st.caption("Ingen bonitets- eller jordklassvariabel finns i nuvarande solunderlag; jordart/prekvartär beskriver geologi, inte jordbruksmarkens kvalitet.")
                     apply_solar = st.form_submit_button(_t("Använd ändringar"), type="primary", width="stretch")
-                reset_solar = st.button(
+                st.button(
                     "Nollställ solfilter",
                     key="solar_landscape_potential_reset_filters",
                     icon=":material/filter_alt_off:",
                     width="stretch",
+                    on_click=_reset_solar_filter_state,
                 )
-                if reset_solar:
-                    _reset_solar_filter_state()
-                    _invalidate_workspace_cache("solar filters reset")
-                    st.rerun()
                 if apply_solar:
                     region_id = str(region.get("region_id", "region"))
                     scenario_manifest = scenario_state.get("manifest") or {}

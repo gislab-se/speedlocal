@@ -2012,6 +2012,64 @@ def _check_solar_manifest_map_review(report: Report) -> None:
         f"analysis_equal={rooftop_analysis_config == reviewed_rooftop_analysis_config}.",
     )
 
+    try:
+        reset_button = _by_key(
+            app.button,
+            "solar_landscape_potential_reset_filters",
+        )
+        reset_button.click()
+        app.run(timeout=180)
+        reset_exceptions, reset_errors = _app_failures(app)
+        reset_config = _session_state_value(app, SOLAR_APPLIED_CONFIG_KEY)
+        reset_panel_area = _session_state_value(
+            app,
+            "solar_draft_area_m2_per_person",
+        )
+        reset_small_active = _session_state_value(
+            app,
+            "solar_draft_small_population_active",
+        )
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            f"trondelag: solar reset callback could not run: {exc!r}.",
+        )
+        return
+
+    reset_group_keys = (
+        "large_population_active",
+        "large_protected_active",
+        "large_land_use_active",
+        "large_road_active",
+        "large_electrical_active",
+        "large_culture_active",
+        "large_reindeer_active",
+        "large_coastal_active",
+    )
+    report.check(
+        not reset_exceptions
+        and not reset_errors
+        and isinstance(reset_config, dict)
+        and reset_config.get("small_population_active") is False
+        and all(reset_config.get(key) is False for key in reset_group_keys)
+        and reset_config.get("visible_source_groups") == []
+        and reset_config.get("visible_buffer_groups") == []
+        and reset_small_active is False
+        and math.isclose(
+            float(reset_panel_area),
+            10.0,
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        ),
+        "trondelag: the solar reset callback clears applied and draft filters "
+        "before keyed widgets are instantiated.",
+        "trondelag: solar reset failed or raised after widget creation: "
+        f"exceptions={reset_exceptions}, errors={reset_errors}, "
+        f"config={reset_config}, small_active={reset_small_active}, "
+        f"panel_area={reset_panel_area}.",
+    )
+
 
 def main() -> int:
     report = Report()
