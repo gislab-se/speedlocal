@@ -25,8 +25,9 @@ from speedlocal.geometry import (
     build_vector_buffer_preview,
 )
 from speedlocal.sources import (
-    resolve_analysis_domain_cell_areas_km2,
     resolve_analysis_domain_cell_ids,
+    resolve_eligible_surface_cell_areas_km2,
+    resolve_eligible_surface_path,
 )
 from speedlocal.validation import validate_contract, validate_layer
 
@@ -125,20 +126,45 @@ def _validated_area_analysis(
 
 
 def wind_analysis_domain_resolution(region_id: str) -> int:
-    """Return the canonical wind-analysis resolution from its manifest."""
+    """Return the canonical wind eligible-surface resolution."""
     analysis = _validated_wind_analysis(region_id)
-    if analysis.analysis_domain is None:
-        raise ValueError(f"{region_id}/wind has no analysis-domain contract")
-    return int(analysis.analysis_domain.resolution)
+    if analysis.area_result is None:
+        raise ValueError(f"{region_id}/wind has no area-result contract")
+    surface = analysis.eligible_surfaces.get(
+        analysis.area_result.eligible_surface_id
+    )
+    if surface is None:
+        raise ValueError(f"{region_id}/wind has no eligible-surface contract")
+    return int(surface.resolution)
 
 
 def wind_analysis_domain_cell_areas_km2(
     region_id: str,
     resolution: int | None = None,
 ) -> dict[str, float]:
-    """Return validated manifest-domain cell areas in square kilometres."""
+    """Return validated wind eligible areas in square kilometres."""
     analysis = _validated_wind_analysis(region_id)
-    return resolve_analysis_domain_cell_areas_km2(analysis, resolution)
+    return resolve_eligible_surface_cell_areas_km2(analysis, resolution)
+
+
+def shared_area_display_geometry_path(
+    region_id: str,
+    resolution: int,
+) -> str:
+    """Return one verified eligible geometry shared by wind and solar."""
+
+    paths: list[Path] = []
+    for technology in ("wind", "solar"):
+        analysis = _validated_area_analysis(region_id, technology)
+        paths.append(
+            resolve_eligible_surface_path(analysis, int(resolution)).resolve()
+        )
+    if paths[0] != paths[1]:
+        raise ValueError(
+            f"{region_id} combined result requires one shared wind/solar "
+            "eligible surface"
+        )
+    return str(paths[0])
 
 
 def technology_area_result_frame(

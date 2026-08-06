@@ -136,6 +136,21 @@ review was approved on 2026-08-04. The package has not been uploaded or
 externally verified. The current public
 45-file Release remains authoritative until a publication window.
 
+The eligible-surface candidate additionally pins
+`data/runtime/manifests/trondelag/v2-final-runtime-r7-2026-08-06.1.json`:
+
+- 53 files and 118,149,644 expanded bytes;
+- archive name `speedlocal-v2-final-runtime-trondelag-r7-2026-08-06.1.zip`;
+- 19,145,804 archive bytes;
+- archive SHA-256
+  `5e0f83b65e74c1a58c40c72d3b7840391a48e9def7207ce1e02f908c43ae74fa`.
+
+It preserves the 48-file direct-R7 package and adds the reviewed land/region
+mask, deterministic R7/R6/R5 eligible-surface geometries, and build evidence.
+Its full package gate passes 25/25. The package remains local and unpublished
+until clean localhost review and a later publication window. The public
+45-file Release remains authoritative.
+
 With `SPEEDLOCAL_V2_SOURCE_ROOT` unset, `app.py` downloads that public Release
 asset over HTTPS, verifies its exact byte count and outer checksum, safely
 extracts only the declared files, verifies every inner checksum, caches the

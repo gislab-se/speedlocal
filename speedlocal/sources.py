@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import math
 import operator
@@ -14,6 +15,8 @@ from .contracts import (
     AnalysisContract,
     AnalysisDomainContract,
     AnalysisDomainRollupContract,
+    EligibleSurfaceContract,
+    EligibleSurfaceRollupContract,
     LayerContract,
 )
 from .paths import resolve_source_path
@@ -40,7 +43,12 @@ def _declared_geometry_family(value: Any) -> str:
 
 def _domain_level_area_to_km2(
     raw_value: Any,
-    level: AnalysisDomainContract | AnalysisDomainRollupContract,
+    level: (
+        AnalysisDomainContract
+        | AnalysisDomainRollupContract
+        | EligibleSurfaceContract
+        | EligibleSurfaceRollupContract
+    ),
     feature_index: int,
     path: Path,
 ) -> float:
@@ -71,11 +79,19 @@ def _domain_level_area_to_km2(
 
 
 def _resolve_domain_level_cell_areas_km2(
-    level: AnalysisDomainContract | AnalysisDomainRollupContract,
+    level: (
+        AnalysisDomainContract
+        | AnalysisDomainRollupContract
+        | EligibleSurfaceContract
+        | EligibleSurfaceRollupContract
+    ),
 ) -> dict[str, float]:
     path = resolve_source_path(level.provider, level.path)
     if not path.is_file():
         raise FileNotFoundError(f"Analysis-domain source is missing: {path}")
+    expected_sha256 = str(getattr(level, "sha256", "") or "").strip().lower()
+    if expected_sha256:
+        verify_source_sha256(path, expected_sha256, "Analysis-domain source")
     with path.open("r", encoding="utf-8") as handle:
         payload = json.load(handle)
     if payload.get("type") != "FeatureCollection":
@@ -126,6 +142,143 @@ def _resolve_domain_level_cell_areas_km2(
             f"expected {level.expected_cell_count}"
         )
     return cell_areas
+
+
+def verify_source_sha256(path: Path, expected_sha256: str, label: str) -> None:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    actual = digest.hexdigest()
+    if actual != str(expected_sha256).lower():
+        raise ValueError(
+            f"{label} checksum does not match its manifest: {path} "
+            f"({actual} != {expected_sha256})"
+        )
+
+
+def eligible_surface_contract_for_analysis(
+    contract: AnalysisContract,
+) -> EligibleSurfaceContract:
+    area_result = contract.area_result
+    if area_result is None:
+        raise ValueError(
+            f"{contract.region_id}/{contract.id} has no area-result contract"
+        )
+    surface_id = area_result.eligible_surface_id
+    surface = contract.eligible_surfaces.get(surface_id)
+    if surface is None:
+        raise ValueError(
+            f"{contract.region_id}/{contract.id} has no eligible surface "
+            f"{surface_id!r}"
+        )
+    return surface
+
+
+def eligible_surface_level(
+    contract: AnalysisContract,
+    resolution: int | None = None,
+) -> EligibleSurfaceContract | EligibleSurfaceRollupContract:
+    surface = eligible_surface_contract_for_analysis(contract)
+    requested = surface.resolution if resolution is None else int(resolution)
+    if requested == surface.resolution:
+        return surface
+    rollup = surface.rollups.get(requested)
+    if rollup is None:
+        raise ValueError(
+            f"{contract.region_id}/{contract.id} eligible surface has no "
+            f"R{requested} rollup"
+        )
+    return rollup
+
+
+def resolve_eligible_surface_path(
+    contract: AnalysisContract,
+    resolution: int | None = None,
+) -> Path:
+    surface = eligible_surface_contract_for_analysis(contract)
+    source_path = resolve_source_path(
+        surface.source.provider,
+        surface.source.path,
+    )
+    if not source_path.is_file():
+        raise FileNotFoundError(
+            f"Eligible-surface source is missing: {source_path}"
+        )
+    verify_source_sha256(
+        source_path,
+        surface.source.sha256,
+        "Eligible-surface source",
+    )
+    level = eligible_surface_level(contract, resolution)
+    path = resolve_source_path(level.provider, level.path)
+    if not path.is_file():
+        raise FileNotFoundError(f"Eligible-surface artifact is missing: {path}")
+    verify_source_sha256(
+        path,
+        level.sha256,
+        "Eligible-surface artifact",
+    )
+    return path
+
+
+def resolve_eligible_surface_cell_areas_km2(
+    contract: AnalysisContract,
+    resolution: int | None = None,
+) -> dict[str, float]:
+    surface = eligible_surface_contract_for_analysis(contract)
+    requested = surface.resolution if resolution is None else int(resolution)
+    level = eligible_surface_level(contract, requested)
+    resolve_eligible_surface_path(contract, requested)
+    areas = _resolve_domain_level_cell_areas_km2(level)
+    domain_ids = resolve_analysis_domain_cell_ids(contract, requested)
+    extra_ids = set(areas) - set(domain_ids)
+    if extra_ids:
+        raise ValueError(
+            f"{contract.region_id}/{contract.id} eligible-surface R{requested} "
+            "contains cells outside the canonical analysis domain: "
+            f"{sorted(extra_ids)[:5]}"
+        )
+    expected_total = float(level.expected_total_area_km2)
+    actual_total = math.fsum(areas.values())
+    if not math.isclose(
+        actual_total,
+        expected_total,
+        rel_tol=0.0,
+        abs_tol=1e-6,
+    ):
+        raise ValueError(
+            f"{contract.region_id}/{contract.id} eligible-surface R{requested} "
+            f"area changed ({actual_total} != {expected_total})"
+        )
+    if requested < surface.resolution:
+        source_areas = resolve_eligible_surface_cell_areas_km2(
+            contract,
+            surface.resolution,
+        )
+        expected_parent_areas: dict[str, float] = {}
+        for cell_id, area_km2 in source_areas.items():
+            parent_id = str(h3.cell_to_parent(cell_id, requested))
+            expected_parent_areas[parent_id] = (
+                expected_parent_areas.get(parent_id, 0.0) + area_km2
+            )
+        if set(areas) != set(expected_parent_areas):
+            raise ValueError(
+                f"Eligible-surface R{requested} cells do not match R"
+                f"{surface.resolution} parents"
+            )
+        for cell_id, expected_area in expected_parent_areas.items():
+            if not math.isclose(
+                areas[cell_id],
+                expected_area,
+                rel_tol=0.0,
+                abs_tol=1e-6,
+            ):
+                raise ValueError(
+                    f"Eligible-surface R{requested} cell {cell_id} does not "
+                    f"derive from R{surface.resolution}"
+                )
+    return areas
 
 
 def resolve_analysis_domain_cell_areas_km2(

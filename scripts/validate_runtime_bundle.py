@@ -46,7 +46,7 @@ RELEASE_CONTRACT = (
     / "runtime"
     / "manifests"
     / "trondelag"
-    / "v2-final-runtime-r7-2026-08-04.1.json"
+    / "v2-final-runtime-r7-2026-08-06.1.json"
 )
 
 
@@ -656,7 +656,7 @@ def main() -> int:
                 }
                 release_valid = (
                     actual_paths == expected_paths
-                    and len(actual_paths) == 48
+                    and len(actual_paths) == int(release_contract["file_count"])
                     and environment.get("SPEEDLOCAL_V2_SOURCE_ROOT")
                     == str(installed)
                     and environment.get("SPEEDLOCAL_GENERATED_ROOT")
@@ -708,7 +708,7 @@ def main() -> int:
                 root_app_valid = False
             report.check(
                 release_valid,
-                "The real 48-file release ZIP safely materializes from its tracked contract.",
+                "The real release ZIP safely materializes from its tracked contract.",
                 "The real release ZIP does not match or safely materialize from its contract.",
             )
             report.check(

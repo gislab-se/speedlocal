@@ -27,8 +27,12 @@ def _full_h3_geometry(hex_id: str) -> dict[str, Any] | None:
     return {"type": "Polygon", "coordinates": [ring]}
 
 
-@st.cache_data(show_spinner=False)
-def load_h3_display_geometries(path_str: str) -> dict[str, dict[str, Any]]:
+@st.cache_data(show_spinner=False, max_entries=24)
+def load_h3_display_geometries(
+    path_str: str,
+    *,
+    preserve_source_geometry: bool = False,
+) -> dict[str, dict[str, Any]]:
     path = Path(path_str)
     data = json.loads(path.read_text(encoding="utf-8"))
     geometries: dict[str, dict[str, Any]] = {}
@@ -37,7 +41,11 @@ def load_h3_display_geometries(path_str: str) -> dict[str, dict[str, Any]]:
         hex_id = properties.get("hex_id") or properties.get("h3_address")
         geometry = feature.get("geometry")
         if hex_id and geometry and geometry.get("coordinates"):
-            geometries[str(hex_id)] = _full_h3_geometry(str(hex_id)) or geometry
+            geometries[str(hex_id)] = (
+                geometry
+                if preserve_source_geometry
+                else _full_h3_geometry(str(hex_id)) or geometry
+            )
     return geometries
 
 

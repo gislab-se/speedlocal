@@ -28,7 +28,7 @@ DEFAULT_CONTRACT_PATH = (
     / "runtime"
     / "manifests"
     / "trondelag"
-    / "v2-final-runtime-r7-2026-08-04.1.json"
+    / "v2-final-runtime-r7-2026-08-06.1.json"
 )
 
 MAX_ARCHIVE_BYTES = 512 * 1024 * 1024

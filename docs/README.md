@@ -2,6 +2,9 @@
 
 ## Current
 
+- `ELIGIBLE_SURFACE_CONTRACT.md` — wind/solar establishment-surface semantics,
+  evidence, limitations, and promotion gate.
+
 - `GENERAL_PROGRAM_PLAN.md` — authoritative product and implementation plan.
 - `DELIVERY_PLAN.md` — dated milestones from current work to acceptance review.
 - `DAILY_WORKFLOW.md` — required daily planning and handoff routine.

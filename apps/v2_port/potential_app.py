@@ -119,6 +119,7 @@ from potential_model.speedlocal_bridge import (  # noqa: E402
     road_source_geojson,
     roads_acceptance_frame,
     roads_control_contract,
+    shared_area_display_geometry_path,
     solar_rooftop_accounting,
     solar_rooftop_contract,
     solar_rooftop_population_frame,
@@ -3864,6 +3865,16 @@ def _h3_display_geometry_path(region: dict[str, Any], resolution: int) -> str | 
     if path is None or not path.exists():
         return None
     return str(path)
+
+
+def _area_display_geometry_path(
+    region: dict[str, Any],
+    resolution: int,
+) -> str:
+    region_id = str(region.get("region_id") or "").strip()
+    if not region_id:
+        raise ValueError("Combined area display requires a region id")
+    return shared_area_display_geometry_path(region_id, int(resolution))
 
 
 @st.cache_data(show_spinner=False)
@@ -11494,10 +11505,13 @@ def _combined_establishment_frame(
     target_resolution: int,
     source_resolution: int,
 ) -> pd.DataFrame:
-    display_geometry_path = _h3_display_geometry_path(region, int(target_resolution))
+    display_geometry_path = _area_display_geometry_path(region, int(target_resolution))
     if not display_geometry_path:
         return pd.DataFrame()
-    display_geometries = load_h3_display_geometries(display_geometry_path)
+    display_geometries = load_h3_display_geometries(
+        display_geometry_path,
+        preserve_source_geometry=True,
+    )
     base = pd.DataFrame({"hex_id": sorted(str(hex_id) for hex_id in display_geometries)})
     if base.empty:
         return base
@@ -11588,10 +11602,13 @@ def _rollup_potential_establishment_frame(
     source_resolution: int,
     target_cell_areas_km2: Mapping[str, float],
 ) -> pd.DataFrame:
-    display_geometry_path = _h3_display_geometry_path(region, int(target_resolution))
+    display_geometry_path = _area_display_geometry_path(region, int(target_resolution))
     if not display_geometry_path:
         return pd.DataFrame()
-    display_geometries = load_h3_display_geometries(display_geometry_path)
+    display_geometries = load_h3_display_geometries(
+        display_geometry_path,
+        preserve_source_geometry=True,
+    )
     base = pd.DataFrame({"hex_id": sorted(str(hex_id) for hex_id in display_geometries)})
     if base.empty:
         return base
@@ -11725,10 +11742,13 @@ def _combined_potential_establishment_frame(
     target_resolution: int,
     source_resolution: int,
 ) -> pd.DataFrame:
-    display_geometry_path = _h3_display_geometry_path(region, int(target_resolution))
+    display_geometry_path = _area_display_geometry_path(region, int(target_resolution))
     if not display_geometry_path:
         return pd.DataFrame()
-    display_geometries = load_h3_display_geometries(display_geometry_path)
+    display_geometries = load_h3_display_geometries(
+        display_geometry_path,
+        preserve_source_geometry=True,
+    )
     base = pd.DataFrame({"hex_id": sorted(str(hex_id) for hex_id in display_geometries)})
     if base.empty:
         return base
@@ -12161,8 +12181,14 @@ def _outside_lp_need_feature_collection(
     if wind_area <= 0 and solar_area <= 0:
         return {"type": "FeatureCollection", "features": features}
 
-    display_geometry_path = _h3_display_geometry_path(region, int(target_resolution))
-    display_geometries = load_h3_display_geometries(display_geometry_path) if display_geometry_path else {}
+    display_geometry_path = _area_display_geometry_path(
+        region,
+        int(target_resolution),
+    )
+    display_geometries = load_h3_display_geometries(
+        display_geometry_path,
+        preserve_source_geometry=True,
+    )
     land_cells = set(str(cell) for cell in display_geometries)
     land_bbox = _geometry_bbox_from_geometries(display_geometries)
     map_bounds = _region_bounds_tuple(region, land_bbox)
@@ -12579,7 +12605,10 @@ def _combined_establishment_feature_collection(
     display_geometry_path: str,
     target_resolution: int,
 ) -> dict[str, Any]:
-    display_geometries = load_h3_display_geometries(display_geometry_path)
+    display_geometries = load_h3_display_geometries(
+        display_geometry_path,
+        preserve_source_geometry=True,
+    )
     features: list[dict[str, Any]] = []
 
     def _potential_percent(row: Any, technology: str) -> int:
@@ -12739,7 +12768,11 @@ def _combined_establishment_family_layers(
             int(resolution),
             float(social_acceptance_impact_pct),
         )
-        return _combined_establishment_layer(frame, _h3_display_geometry_path(region, int(resolution)), int(resolution))
+        return _combined_establishment_layer(
+            frame,
+            _area_display_geometry_path(region, int(resolution)),
+            int(resolution),
+        )
 
     return _hex_family_layers(
         region,
@@ -12785,7 +12818,11 @@ def _combined_potential_establishment_family_layers(
             int(resolution),
             float(social_acceptance_impact_pct),
         )
-        return _combined_establishment_layer(frame, _h3_display_geometry_path(region, int(resolution)), int(resolution))
+        return _combined_establishment_layer(
+            frame,
+            _area_display_geometry_path(region, int(resolution)),
+            int(resolution),
+        )
 
     return _hex_family_layers(
         region,

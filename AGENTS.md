@@ -99,6 +99,14 @@
   or a `<1%` display is explicitly deferred. The wind-and-solar phase is next,
   beginning with the remaining technology-specific potential and continuous-
   allocation paths.
+- The 2026-08-06 eligible-surface correction is an active candidate, not yet
+  locally promoted. Onshore wind and large-scale land solar declare one
+  checksum-pinned `onshore_land` surface: canonical R7 cells intersect the
+  reviewed Trøndelag land/region mask, while R6/R5 derive from R7. The current
+  water policy excludes sea but retains inland water. The candidate changes
+  technology-area denominators, map geometry, tables, and allocation, but the
+  five promoted group metrics and their source/buffer previews must remain
+  unchanged. See `docs/ELIGIBLE_SURFACE_CONTRACT.md`.
 - Bornholm source and engine contracts may validate in parallel as onboarding
   diagnostics, but they do not block Trøndelag slice promotion.
 - Do not implement regional exceptions yet.

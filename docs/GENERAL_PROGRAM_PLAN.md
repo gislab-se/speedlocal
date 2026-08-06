@@ -152,7 +152,7 @@ area-derived percentage per technology and display hex:
 ```text
 technology potential % =
     remaining establishment area after active applicable restrictions
-    / manifest-declared model land area in the hex
+    / manifest-declared eligible establishment-surface area in the hex
     * 100
 ```
 
@@ -163,6 +163,14 @@ technology potential % =
 - Technology applicability, denominator, analysis resolution, and effect
   semantics are validated manifest contracts. Region ids do not select an
   algorithm.
+- The eligible establishment surface is a separate contract from the canonical
+  H3 analysis domain. Group distance and exclusion metrics keep their reviewed
+  domain, while technology area, hover, table, and allocation use the clipped
+  surface.
+- Eligible R7 geometry is precomputed from a checksum-pinned polygon source;
+  R6/R5 geometry and declared area derive from the R7 children. Runtime code
+  validates and reads those artifacts instead of clipping on each Streamlit
+  rerun.
 - Point, grid, polygon, and line sources feed a common fine analysis surface
   or equivalent area calculation chosen from declared data characteristics.
 - Expensive source normalization and distance surfaces are precomputed or
@@ -171,9 +179,13 @@ technology potential % =
 
 The locally promoted Trøndelag roads slice keeps its frozen-V2 soft-distance
 cell proxy. The locally promoted population correction measures the declared R7
-domain directly and derives R6/R5 from R7, but it remains a soft-distance cell
-proxy rather than exact polygon-clipped free land. The planned combined-result
-and wind/solar phases still own literal technology-specific area percentages.
+domain directly and derives R6/R5 from R7, but the group result remains a
+soft-distance cell proxy. The combined result owns the literal technology-
+specific area percentage. Its current onshore eligible-surface candidate clips
+full coastal H3 cells to the reviewed regional land mask, excludes sea and area
+outside that mask, and explicitly retains inland water pending a separate
+hydrographic source review. Offshore technologies require their own future
+eligible-surface contract; water is never enabled implicitly.
 
 ## Data-driven rules
 
@@ -254,9 +266,10 @@ Current slice status:
   still come from the region-manifest-declared legacy
   registry. That bounded adapter is not canonical manifest layer availability
   and not a solar analysis contract;
-- wind potential, establishment rollups, and scenario allocation use validated
-  per-cell `display_area_m2`; Frozen V2's unweighted cell mean remains the
-  parity oracle, and exact polygon-clipped land area remains later work;
+- wind potential, establishment rollups, and scenario allocation use the
+  validated technology eligible-surface area. Frozen V2's unweighted cell mean
+  remains the group-contract parity oracle and is not reused as the technology
+  area denominator;
 - the R7/R6/R5 `roads_large` and verification-cleanup checkpoint is locally
   approved but remains unpublished;
 - `roads_medium` alone and medium-plus-large now pass exact frozen-V2 cell,
@@ -340,7 +353,17 @@ Current slice status:
   confirmed the corrected mixed-technology classes. A 0.5% wind cell can still
   remain wind-only while the integer hover rounds to 0%; the minimum
   suitability/display threshold is deliberately deferred. The wind-and-solar
-  phase and continuous allocation acceptance are next.
+  phase and continuous allocation acceptance are next;
+- the eligible-surface correction is an active candidate on 2026-08-06. Wind
+  and large-scale land solar declare one `onshore_land` surface generated as
+  the intersection of canonical R7 cells and the checksum-pinned Trøndelag
+  land/region mask. The candidate contains 41,826.930636 km² at R7/R6/R5 and
+  removes 3,386.258008 km² of sea/outside-region area from full coastal cells.
+  Map geometry, hover, result table, and allocation now share that same
+  denominator. Calculation, app, and 53-file runtime-package gates pass; clean
+  localhost visual review and the subsequent tracked checkpoint are still
+  required before local promotion. See
+  `docs/ELIGIBLE_SURFACE_CONTRACT.md`.
 
 ## Definition of done for a slice
 

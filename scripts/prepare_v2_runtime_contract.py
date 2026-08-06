@@ -14,7 +14,7 @@ BASE_CONTRACT = (
     / "runtime"
     / "manifests"
     / "trondelag"
-    / "v2-final-runtime-r7-2026-07-30.1.json"
+    / "v2-final-runtime-r7-2026-08-04.1.json"
 )
 OUTPUT_CONTRACT = (
     ROOT
@@ -22,13 +22,17 @@ OUTPUT_CONTRACT = (
     / "runtime"
     / "manifests"
     / "trondelag"
-    / "v2-final-runtime-r7-2026-08-04.1.json"
+    / "v2-final-runtime-r7-2026-08-06.1.json"
 )
-VERSION = "2026-08-04.1"
+VERSION = "2026-08-06.1"
 GENERATED_PATHS = (
-    "data/generated/population_r7/population_points.csv",
-    "data/generated/population_r7/built_centre.csv",
-    "data/generated/population_r7/built_low_selection.csv",
+    "data/generated/eligible_surface/trondelag_onshore_land_r7.geojson",
+    "data/generated/eligible_surface/trondelag_onshore_land_r6.geojson",
+    "data/generated/eligible_surface/trondelag_onshore_land_r5.geojson",
+    "data/generated/eligible_surface/trondelag_onshore_land_metadata.json",
+)
+SOURCE_PATHS = (
+    "data/processed/trondelag/mask/trondelag_land_region_mask_wgs84.geojson",
 )
 
 
@@ -50,15 +54,28 @@ def _aggregate(files: list[dict[str, Any]]) -> str:
     return digest.hexdigest()
 
 
+def _file_entry(root: Path, relative: str, role: str) -> dict[str, Any]:
+    source = root.joinpath(*Path(relative).parts)
+    if not source.is_file():
+        raise SystemExit(f"Runtime file is missing: {relative}")
+    return {
+        "role": role,
+        "path": relative,
+        "bytes": source.stat().st_size,
+        "sha256": _sha256(source),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Prepare the tracked Trøndelag runtime contract from the prior "
-            "reviewed bundle plus generated direct-R7 population tables."
+            "reviewed bundle plus the eligible-surface source and artifacts."
         )
     )
     parser.add_argument("--base-contract", type=Path, default=BASE_CONTRACT)
     parser.add_argument("--generated-root", type=Path, required=True)
+    parser.add_argument("--source-root", type=Path, required=True)
     parser.add_argument("--output-contract", type=Path, default=OUTPUT_CONTRACT)
     parser.add_argument(
         "--archive",
@@ -71,11 +88,16 @@ def main() -> int:
 
     base_path = args.base_contract.expanduser().resolve()
     generated_root = args.generated_root.expanduser().resolve()
+    source_root = args.source_root.expanduser().resolve()
     output_path = args.output_contract.expanduser().resolve()
     if output_path.exists() and not args.overwrite:
         raise SystemExit(f"Refusing to overwrite contract: {output_path}")
-    if not generated_root.is_dir():
-        raise SystemExit(f"Generated root does not exist: {generated_root}")
+    for label, root in (
+        ("Generated root", generated_root),
+        ("Source root", source_root),
+    ):
+        if not root.is_dir():
+            raise SystemExit(f"{label} does not exist: {root}")
 
     contract = json.loads(base_path.read_text(encoding="utf-8"))
     identity = f"speedlocal-v2-final-runtime-trondelag-r7-{VERSION}"
@@ -85,9 +107,7 @@ def main() -> int:
     contract["release"].update(
         {
             "tag": release_tag,
-            "title": (
-                "SpeedLocal V2 Final — Trøndelag R7 runtime — " + VERSION
-            ),
+            "title": f"SpeedLocal V2 Final — Trøndelag R7 runtime — {VERSION}",
             "url": f"https://github.com/gislab-se/speedlocal/releases/tag/{release_tag}",
             "asset_download_base_url": (
                 "https://github.com/gislab-se/speedlocal/releases/download/"
@@ -102,26 +122,24 @@ def main() -> int:
     }
     contract["archive"]["root_prefix"] = identity
 
-    generated_set = set(GENERATED_PATHS)
+    replaced_paths = set(GENERATED_PATHS) | set(SOURCE_PATHS)
     files = [
         dict(item)
         for item in contract["files"]
-        if str(item.get("path")) not in generated_set
+        if str(item.get("path")) not in replaced_paths
     ]
     for relative in GENERATED_PATHS:
-        source = generated_root.joinpath(*Path(relative).parts)
-        if not source.is_file():
-            raise SystemExit(f"Generated runtime file is missing: {relative}")
-        files.append(
-            {
-                "role": "generated_distance_table",
-                "path": relative,
-                "bytes": source.stat().st_size,
-                "sha256": _sha256(source),
-            }
+        role = (
+            "eligible_surface_evidence"
+            if relative.endswith("_metadata.json")
+            else "eligible_surface_geometry"
         )
-    contract["files"] = files
+        files.append(_file_entry(generated_root, relative, role))
+    for relative in SOURCE_PATHS:
+        files.append(_file_entry(source_root, relative, "eligible_surface_source"))
+
     total_bytes = sum(int(item["bytes"]) for item in files)
+    contract["files"] = files
     contract["file_count"] = len(files)
     contract["total_uncompressed_bytes"] = total_bytes
     contract["archive"]["file_count"] = len(files)
@@ -129,22 +147,26 @@ def main() -> int:
     contract["archive"]["bytes"] = None
     contract["archive"]["sha256"] = ""
     contract["content_aggregate"]["sha256"] = _aggregate(files)
-    contract["source"]["reviewed_utc_date"] = "2026-08-04"
+    contract["source"]["reviewed_utc_date"] = "2026-08-06"
     contract["source"]["note"] = (
-        "The 2026-07-30 reviewed runtime remains the byte authority for its "
-        "45 files. This revision adds three reproducible direct-R7 population "
-        "distance tables; R6 and R5 are derived from that declared R7 domain."
+        "The 2026-08-04 reviewed runtime remains the byte authority for its "
+        "48 files. This revision adds the checksum-pinned Trøndelag onshore "
+        "land mask plus reproducible R7/R6/R5 eligible-surface artifacts."
     )
-    contract["population_distance_evidence"] = {
+    contract["eligible_surface_evidence"] = {
+        "surface_id": "onshore_land",
+        "technologies": ["wind", "solar"],
         "analysis_resolution": 7,
         "derived_resolutions": [6, 5],
-        "semantics": (
-            "representative-point distance plus full-cell source intersection"
-        ),
+        "geometry_operation": "analysis_cell intersection onshore_land_mask",
+        "water_policy": "exclude_sea_retain_inland_water",
+        "outside_region_policy": "exclude",
+        "source_paths": list(SOURCE_PATHS),
         "generated_paths": list(GENERATED_PATHS),
-        "accepted_drift": (
-            "intentional replacement of frozen-V2 R8-to-R7 aggregation; "
-            "quantified by scripts/analyze_direct_distance_drift.py"
+        "expected_total_area_km2": 41826.93063562673,
+        "known_limitation": (
+            "The reviewed mask excludes sea but retains inland water; a later "
+            "hydrographic refinement may exclude lakes and rivers."
         ),
     }
 

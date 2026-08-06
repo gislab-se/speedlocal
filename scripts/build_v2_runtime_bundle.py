@@ -19,7 +19,7 @@ DEFAULT_CONTRACT = (
     / "runtime"
     / "manifests"
     / "trondelag"
-    / "v2-final-runtime-r7-2026-08-04.1.json"
+    / "v2-final-runtime-r7-2026-08-06.1.json"
 )
 SOURCE_ROOT_ENV = "SPEEDLOCAL_V2_SOURCE_ROOT"
 OVERLAY_ROOT_ENV = "SPEEDLOCAL_GENERATED_ROOT"

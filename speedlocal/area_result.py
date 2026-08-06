@@ -28,7 +28,12 @@ from .geometry import (
     _load_source_geometries,
     _metric_crs,
 )
-from .sources import resolve_analysis_domain_cell_areas_km2
+from .sources import (
+    eligible_surface_contract_for_analysis,
+    eligible_surface_level,
+    resolve_analysis_domain_cell_areas_km2,
+    resolve_eligible_surface_cell_areas_km2,
+)
 from .validation import validate_contract, validate_layer
 
 
@@ -241,6 +246,7 @@ def _requested_resolution(
             f"or rolled up to a coarser declared resolution, not R{resolution}"
         )
     _domain_level(contract, resolution)
+    eligible_surface_level(contract, resolution)
     return resolution
 
 
@@ -670,18 +676,17 @@ def run_area_analysis(
             )
         active_group_ids.append(group_id)
 
-    if contract.analysis_domain is None:
-        raise ValueError(f"{region}/{analysis} has no analysis-domain contract")
-    source_resolution = int(contract.analysis_domain.resolution)
-    domain_level = _domain_level(contract, source_resolution)
+    surface = eligible_surface_contract_for_analysis(contract)
+    source_resolution = int(surface.resolution)
+    surface_level = eligible_surface_level(contract, source_resolution)
     target_crs = _metric_crs(native_crs)
-    model_cells = _direct_distance_domain_geometries(
-        domain_level,
-        target_crs,
-    )
-    source_model_areas_km2 = resolve_analysis_domain_cell_areas_km2(
+    source_model_areas_km2 = resolve_eligible_surface_cell_areas_km2(
         contract,
         source_resolution,
+    )
+    model_cells = _direct_distance_domain_geometries(
+        surface_level,
+        target_crs,
     )
     source_cells = calculate_remaining_area_cells(
         model_cells,
@@ -693,7 +698,7 @@ def run_area_analysis(
     if resolution < source_resolution:
         cells = _rollup_cells(
             source_cells,
-            resolve_analysis_domain_cell_areas_km2(contract, resolution),
+            resolve_eligible_surface_cell_areas_km2(contract, resolution),
             resolution,
         )
     model_area_km2 = math.fsum(cell.model_area_km2 for cell in cells)

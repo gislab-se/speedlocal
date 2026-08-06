@@ -54,7 +54,10 @@ runtime-package, and clean-process localhost gates on 4 August and is locally
 promoted. The combined-result slice then integrated literal wind and solar
 area through map, hover, table, acceptance, and allocation and passed local
 promotion on 4 August. The wind-and-solar phase, including continuous
-technology-mix acceptance, is the next planned slice.
+technology-mix acceptance, is the next planned slice. A bounded eligible-
+surface correction began on 6 August after coastal review showed that full H3
+cells still counted sea and area outside the region. It is part of the wind-
+and-solar area contract and does not reopen the five promoted standard groups.
 The later slice order and final delivery date remain unchanged.
 
 ## Branch and publication cadence
@@ -176,10 +179,15 @@ Current milestone status:
   is visibly caution-flagged and recorded as a known data-quality limitation.
 - Shared potential-area semantics: decision recorded on 2026-08-03. Roads
   retain the frozen-V2 proxy; the population correction uses direct R7 but is
-  still a soft-distance cell proxy. The planned combined-result and wind/solar
-  phases replace both with technology-specific remaining area divided by the common
-  manifest-declared model land area. This does not change the current dates or
-  thematic slice order.
+  still a soft-distance cell proxy. The combined-result and wind/solar phases
+  use technology-specific remaining area divided by a manifest-declared
+  eligible establishment surface. The 2026-08-06 candidate introduces a
+  checksum-pinned `onshore_land` surface for wind and large-scale land solar:
+  41,826.930636 km² at R7/R6/R5 after 3,386.258008 km² of sea/outside-region
+  area is removed. Inland water remains explicit in the current source policy.
+  Calculation, app, and 53-file runtime-package gates pass; clean localhost
+  review and the tracked checkpoint are pending before local promotion. This
+  correction does not change the current dates or thematic slice order.
 
 ## Slice gates
 

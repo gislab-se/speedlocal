@@ -26,7 +26,7 @@ REQUIRED_PATHS = [
     "status_app.py",
     "requirements.txt",
     "speedlocal/runtime_bundle.py",
-    "data/runtime/manifests/trondelag/v2-final-runtime-r7-2026-08-04.1.json",
+    "data/runtime/manifests/trondelag/v2-final-runtime-r7-2026-08-06.1.json",
     "site/landskapspotential/index.html",
     "apps/landskapspotential/app.py",
     "apps/landskapspotential/catalog.py",
@@ -44,6 +44,7 @@ REQUIRED_PATHS = [
     "scripts/validate_v2_final_baseline_parity.py",
     "scripts/validate_bornholm_v2_diagnostics.py",
     "scripts/validate_generic_engine.py",
+    "scripts/validate_eligible_surface.py",
     "scripts/validate_vector_buffer_preview.py",
     "scripts/validate_frozen_v2_reference.py",
     "scripts/validate_runtime_bundle.py",
@@ -66,7 +67,7 @@ REQUIRED_PATHS = [
 RELEASE_CRITICAL_TRACKED_PATHS = [
     "app.py",
     "speedlocal/runtime_bundle.py",
-    "data/runtime/manifests/trondelag/v2-final-runtime-r7-2026-08-04.1.json",
+    "data/runtime/manifests/trondelag/v2-final-runtime-r7-2026-08-06.1.json",
     "scripts/build_v2_runtime_bundle.py",
     "scripts/validate_runtime_bundle.py",
 ]

@@ -90,9 +90,9 @@ def validate_contract(contract: AnalysisContract) -> None:
                 "Analysis area_result operation_order must be "
                 "'feasibility_then_exclusion'"
             )
-        if area_result.denominator != "analysis_domain":
+        if area_result.denominator != "eligible_surface":
             raise ValueError(
-                "Analysis area_result denominator must be 'analysis_domain'"
+                "Analysis area_result denominator must be 'eligible_surface'"
             )
         if area_result.geometry_semantics != "exact_vector_clip":
             raise ValueError(
@@ -102,6 +102,22 @@ def validate_contract(contract: AnalysisContract) -> None:
         if contract.analysis_domain is None:
             raise ValueError(
                 "Analysis area_result requires an analysis-domain contract"
+            )
+        surface_id = area_result.eligible_surface_id.strip()
+        if not surface_id:
+            raise ValueError(
+                "Analysis area_result eligible_surface_id is required"
+            )
+        surface = contract.eligible_surfaces.get(surface_id)
+        if surface is None:
+            raise ValueError(
+                "Analysis area_result references an undeclared eligible "
+                f"surface: {surface_id}"
+            )
+        if area_result.technology not in surface.technologies:
+            raise ValueError(
+                f"Eligible surface {surface_id} does not support "
+                f"{area_result.technology}"
             )
 
     distributed_generation = contract.distributed_generation
@@ -290,6 +306,179 @@ def validate_contract(contract: AnalysisContract) -> None:
                 raise ValueError(
                     "Unsupported analysis-domain "
                     f"R{resolution} area unit: {rollup.area_unit}"
+                )
+    for surface_id, surface in contract.eligible_surfaces.items():
+        if surface.id != surface_id or not surface_id.strip():
+            raise ValueError(
+                "Eligible-surface ids must be non-blank and match their keys"
+            )
+        if not surface.label.strip():
+            raise ValueError(f"Eligible surface {surface_id} label is required")
+        if (
+            not surface.technologies
+            or len(surface.technologies) != len(set(surface.technologies))
+            or any(item not in {"wind", "solar"} for item in surface.technologies)
+        ):
+            raise ValueError(
+                f"Eligible surface {surface_id} technologies must be unique "
+                "wind/solar ids"
+            )
+        if surface.geometry_operation != "intersection":
+            raise ValueError(
+                f"Eligible surface {surface_id} geometry_operation must be "
+                "'intersection'"
+            )
+        if surface.surface_scope not in {
+            "onshore_land",
+            "offshore_water",
+            "land_and_water",
+        }:
+            raise ValueError(
+                f"Eligible surface {surface_id} has unsupported surface_scope"
+            )
+        if surface.water_policy not in {
+            "exclude_sea_retain_inland_water",
+            "exclude_all_water",
+            "include_water",
+        }:
+            raise ValueError(
+                f"Eligible surface {surface_id} has unsupported water_policy"
+            )
+        if surface.outside_region_policy != "exclude":
+            raise ValueError(
+                f"Eligible surface {surface_id} outside_region_policy must "
+                "be 'exclude'"
+            )
+        if surface.source.geometry_family != "polygon":
+            raise ValueError(
+                f"Eligible surface {surface_id} source must be polygonal"
+            )
+        for label, value in (
+            ("source provider", surface.source.provider),
+            ("source path", surface.source.path),
+            ("provider", surface.provider),
+            ("path", surface.path),
+            ("id field", surface.id_field),
+            ("area field", surface.area_field),
+        ):
+            if not value.strip():
+                raise ValueError(
+                    f"Eligible surface {surface_id} {label} is required"
+                )
+        for label, digest in (
+            ("source", surface.source.sha256),
+            ("R" + str(surface.resolution), surface.sha256),
+        ):
+            if len(digest) != 64 or any(
+                character not in "0123456789abcdef" for character in digest
+            ):
+                raise ValueError(
+                    f"Eligible surface {surface_id} {label} sha256 is invalid"
+                )
+        if surface.cell_kind != "h3":
+            raise ValueError(
+                f"Eligible surface {surface_id} cell_kind must be 'h3'"
+            )
+        if surface.resolution < 0 or surface.resolution > 15:
+            raise ValueError(
+                f"Eligible surface {surface_id} resolution is invalid"
+            )
+        if surface.area_unit not in {"m2", "km2"}:
+            raise ValueError(
+                f"Eligible surface {surface_id} area unit is invalid"
+            )
+        if surface.expected_cell_count <= 0:
+            raise ValueError(
+                f"Eligible surface {surface_id} cell count must be positive"
+            )
+        if (
+            not math.isfinite(surface.expected_total_area_km2)
+            or surface.expected_total_area_km2 <= 0.0
+        ):
+            raise ValueError(
+                f"Eligible surface {surface_id} total area must be positive"
+            )
+        if domain is None:
+            raise ValueError(
+                f"Eligible surface {surface_id} requires an analysis domain"
+            )
+        if (
+            surface.resolution != domain.resolution
+            or surface.expected_cell_count > domain.expected_cell_count
+        ):
+            raise ValueError(
+                f"Eligible surface {surface_id} must be a subset of the "
+                "canonical analysis cells at the same resolution"
+            )
+        if set(surface.rollups) != set(domain.rollups):
+            raise ValueError(
+                f"Eligible surface {surface_id} rollups must match the "
+                "analysis domain"
+            )
+        for resolution, rollup in surface.rollups.items():
+            if resolution != rollup.resolution:
+                raise ValueError(
+                    f"Eligible surface {surface_id} R{resolution} key mismatch"
+                )
+            if resolution >= surface.resolution:
+                raise ValueError(
+                    f"Eligible surface {surface_id} rollups must be coarser "
+                    f"than R{surface.resolution}"
+                )
+            for label, value in (
+                ("provider", rollup.provider),
+                ("path", rollup.path),
+                ("id field", rollup.id_field),
+                ("area field", rollup.area_field),
+            ):
+                if not value.strip():
+                    raise ValueError(
+                        f"Eligible surface {surface_id} R{resolution} "
+                        f"{label} is required"
+                    )
+            if rollup.expected_cell_count <= 0:
+                raise ValueError(
+                    f"Eligible surface {surface_id} R{resolution} cell count "
+                    "must be positive"
+                )
+            if (
+                rollup.expected_cell_count
+                > domain.rollups[resolution].expected_cell_count
+            ):
+                raise ValueError(
+                    f"Eligible surface {surface_id} R{resolution} cell count "
+                    "exceeds the canonical analysis domain"
+                )
+            if rollup.area_unit not in {"m2", "km2"}:
+                raise ValueError(
+                    f"Eligible surface {surface_id} R{resolution} area unit "
+                    "is invalid"
+                )
+            if len(rollup.sha256) != 64 or any(
+                character not in "0123456789abcdef"
+                for character in rollup.sha256
+            ):
+                raise ValueError(
+                    f"Eligible surface {surface_id} R{resolution} sha256 is "
+                    "invalid"
+                )
+            if (
+                not math.isfinite(rollup.expected_total_area_km2)
+                or rollup.expected_total_area_km2 <= 0.0
+            ):
+                raise ValueError(
+                    f"Eligible surface {surface_id} R{resolution} total area "
+                    "must be positive"
+                )
+            if not math.isclose(
+                rollup.expected_total_area_km2,
+                surface.expected_total_area_km2,
+                rel_tol=0.0,
+                abs_tol=1e-6,
+            ):
+                raise ValueError(
+                    f"Eligible surface {surface_id} R{resolution} total must "
+                    f"derive from R{surface.resolution}"
                 )
     unknown_groups = set(contract.groups) - set(STANDARD_GROUP_IDS)
     if unknown_groups:

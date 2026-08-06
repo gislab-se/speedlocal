@@ -481,6 +481,7 @@ def main() -> int:
         2000: 23_137.469491933643,
         15000: 43_995.63150207577,
     }
+    eligible_grid_area_at_2000 = 20_663.00385309043
     report.check(
         all(
             math.isclose(
@@ -492,13 +493,15 @@ def main() -> int:
             for distance in expected_grid_areas
         )
         and math.isclose(
-            preview_grid_areas[2000],
             float(wind_grid_at_2000["potential_area_km2"].sum()),
+            eligible_grid_area_at_2000,
             rel_tol=0.0,
             abs_tol=1e-8,
-        ),
-        "The 500/2000/15000 m previews equal the accepted exact R7 model areas.",
-        "The grid preview and exact R7 technology-area calculation disagree.",
+        )
+        and eligible_grid_area_at_2000 < preview_grid_areas[2000],
+        "The canonical grid preview is unchanged while technology area clips "
+        "the same buffer to the eligible surface.",
+        "The grid preview or eligible-surface technology area drifted.",
     )
     cell_counts = {
         distance: (
@@ -531,7 +534,7 @@ def main() -> int:
         all(
             math.isclose(
                 area,
-                expected_grid_areas[2000],
+                eligible_grid_area_at_2000,
                 rel_tol=0.0,
                 abs_tol=1e-8,
             )
@@ -541,7 +544,7 @@ def main() -> int:
             resolution: int(frame["potential_area_km2"].gt(0.0).sum())
             for resolution, frame in wind_grid_rollups_at_2000.items()
         }
-        == {6: 1611, 5: 311},
+        == {6: 1608, 5: 311},
         "The exact 2000 m R7 area is preserved through R6/R5 rollup.",
         "The exact 2000 m grid area or positive-cell count drifted at R6/R5.",
     )

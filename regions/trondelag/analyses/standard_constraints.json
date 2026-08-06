@@ -85,6 +85,56 @@
       }
     ]
   },
+  "eligible_surfaces": {
+    "onshore_land": {
+      "label": "Landbaserad etableringsyta",
+      "technologies": ["wind", "solar"],
+      "surface_scope": "onshore_land",
+      "water_policy": "exclude_sea_retain_inland_water",
+      "outside_region_policy": "exclude",
+      "geometry_operation": "intersection",
+      "source": {
+        "provider": "v2_archive",
+        "path": "data/processed/trondelag/mask/trondelag_land_region_mask_wgs84.geojson",
+        "sha256": "af5b48b7b99a77eaf3d480386e4c2ca8fe327b07b235d5ab9d39578d6bac1e1a",
+        "geometry_family": "polygon"
+      },
+      "provider": "generated_runtime",
+      "path": "data/generated/eligible_surface/trondelag_onshore_land_r7.geojson",
+      "sha256": "5892183d17edfbf08007c57943acbe8781b94c613f6b9de42cff6caf7aadadb5",
+      "id_field": "hex_id",
+      "area_field": "eligible_area_m2",
+      "area_unit": "m2",
+      "cell_kind": "h3",
+      "resolution": 7,
+      "expected_cell_count": 13735,
+      "expected_total_area_km2": 41826.93063562673,
+      "rollups": [
+        {
+          "provider": "generated_runtime",
+          "path": "data/generated/eligible_surface/trondelag_onshore_land_r6.geojson",
+          "sha256": "c1b8169f299dc61e290f632bb33d685fc4ee4da32d872afd083c1be4e304c9d7",
+          "id_field": "hex_id",
+          "area_field": "eligible_area_m2",
+          "area_unit": "m2",
+          "resolution": 6,
+          "expected_cell_count": 2163,
+          "expected_total_area_km2": 41826.93063562673
+        },
+        {
+          "provider": "generated_runtime",
+          "path": "data/generated/eligible_surface/trondelag_onshore_land_r5.geojson",
+          "sha256": "e45a53b77d2f42bd4a458449843609820de71a1966a9c67d286a842f56b4c486",
+          "id_field": "hex_id",
+          "area_field": "eligible_area_m2",
+          "area_unit": "m2",
+          "resolution": 5,
+          "expected_cell_count": 365,
+          "expected_total_area_km2": 41826.93063562673
+        }
+      ]
+    }
+  },
   "layers": [
     {
       "id": "roads_medium",

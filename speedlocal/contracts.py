@@ -189,6 +189,50 @@ class AnalysisDomainContract:
 
 
 @dataclass(frozen=True)
+class EligibleSurfaceSourceContract:
+    provider: str
+    path: str
+    sha256: str
+    geometry_family: str
+
+
+@dataclass(frozen=True)
+class EligibleSurfaceRollupContract:
+    provider: str
+    path: str
+    sha256: str
+    id_field: str
+    area_field: str
+    area_unit: str
+    resolution: int
+    expected_cell_count: int
+    expected_total_area_km2: float
+
+
+@dataclass(frozen=True)
+class EligibleSurfaceContract:
+    id: str
+    label: str
+    technologies: tuple[str, ...]
+    surface_scope: str
+    water_policy: str
+    outside_region_policy: str
+    geometry_operation: str
+    source: EligibleSurfaceSourceContract
+    provider: str
+    path: str
+    sha256: str
+    id_field: str
+    area_field: str
+    area_unit: str
+    cell_kind: str
+    resolution: int
+    expected_cell_count: int
+    expected_total_area_km2: float
+    rollups: dict[int, EligibleSurfaceRollupContract] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class ParameterContract:
     id: str
     value_type: str
@@ -295,6 +339,7 @@ class AreaResultContract:
     operation_order: str
     denominator: str
     geometry_semantics: str
+    eligible_surface_id: str
 
 
 @dataclass(frozen=True)
@@ -564,6 +609,7 @@ class AnalysisContract:
     layers: dict[str, LayerContract]
     default_request: DefaultRequestContract | None = None
     analysis_domain: AnalysisDomainContract | None = None
+    eligible_surfaces: dict[str, EligibleSurfaceContract] = field(default_factory=dict)
     area_result: AreaResultContract | None = None
     ui: AnalysisUIContract | None = None
     distributed_generation: DistributedGenerationContract | None = None
@@ -672,6 +718,75 @@ def analysis_domain_contract(
     )
 
 
+def eligible_surface_contract(
+    surface_id: str,
+    raw: dict[str, Any],
+) -> EligibleSurfaceContract:
+    if not isinstance(raw, dict):
+        raise ValueError(f"Eligible surface {surface_id!r} must be an object")
+    raw_technologies = raw.get("technologies")
+    if not isinstance(raw_technologies, list):
+        raise ValueError(
+            f"Eligible surface {surface_id!r} technologies must be a list"
+        )
+    source = raw.get("source")
+    if not isinstance(source, dict):
+        raise ValueError(f"Eligible surface {surface_id!r} source is required")
+    rollups: dict[int, EligibleSurfaceRollupContract] = {}
+    for item in raw.get("rollups") or []:
+        if not isinstance(item, dict):
+            raise ValueError(
+                f"Eligible surface {surface_id!r} rollups must be objects"
+            )
+        raw_resolution = item.get("resolution")
+        if isinstance(raw_resolution, bool) or not isinstance(raw_resolution, int):
+            raise ValueError(
+                f"Eligible surface {surface_id!r} rollup resolution must be an integer"
+            )
+        if raw_resolution in rollups:
+            raise ValueError(
+                f"Eligible surface {surface_id!r} contains duplicate "
+                f"R{raw_resolution} rollups"
+            )
+        rollups[raw_resolution] = EligibleSurfaceRollupContract(
+            provider=str(item["provider"]),
+            path=str(item["path"]),
+            sha256=str(item["sha256"]).lower(),
+            id_field=str(item["id_field"]),
+            area_field=str(item["area_field"]),
+            area_unit=str(item["area_unit"]),
+            resolution=raw_resolution,
+            expected_cell_count=int(item["expected_cell_count"]),
+            expected_total_area_km2=float(item["expected_total_area_km2"]),
+        )
+    return EligibleSurfaceContract(
+        id=str(surface_id),
+        label=str(raw["label"]),
+        technologies=tuple(str(item) for item in raw_technologies),
+        surface_scope=str(raw["surface_scope"]),
+        water_policy=str(raw["water_policy"]),
+        outside_region_policy=str(raw["outside_region_policy"]),
+        geometry_operation=str(raw["geometry_operation"]),
+        source=EligibleSurfaceSourceContract(
+            provider=str(source["provider"]),
+            path=str(source["path"]),
+            sha256=str(source["sha256"]).lower(),
+            geometry_family=str(source["geometry_family"]),
+        ),
+        provider=str(raw["provider"]),
+        path=str(raw["path"]),
+        sha256=str(raw["sha256"]).lower(),
+        id_field=str(raw["id_field"]),
+        area_field=str(raw["area_field"]),
+        area_unit=str(raw["area_unit"]),
+        cell_kind=str(raw["cell_kind"]),
+        resolution=int(raw["resolution"]),
+        expected_cell_count=int(raw["expected_cell_count"]),
+        expected_total_area_km2=float(raw["expected_total_area_km2"]),
+        rollups=rollups,
+    )
+
+
 def parameter_contract(parameter_id: str, raw: dict[str, Any]) -> ParameterContract:
     return ParameterContract(
         id=parameter_id,
@@ -771,6 +886,7 @@ def area_result_contract(
         operation_order=str(raw["operation_order"]),
         denominator=str(raw["denominator"]),
         geometry_semantics=str(raw["geometry_semantics"]),
+        eligible_surface_id=str(raw.get("eligible_surface_id") or ""),
     )
 
 
@@ -1015,6 +1131,10 @@ def analysis_contract(raw: dict[str, Any]) -> AnalysisContract:
         layers=layers,
         default_request=default_request_contract(raw.get("default_request")),
         analysis_domain=analysis_domain_contract(raw.get("analysis_domain")),
+        eligible_surfaces={
+            str(surface_id): eligible_surface_contract(str(surface_id), value)
+            for surface_id, value in (raw.get("eligible_surfaces") or {}).items()
+        },
         area_result=area_result_contract(raw.get("area_result")),
         ui=analysis_ui_contract(raw.get("ui")),
         distributed_generation=distributed_generation_contract(

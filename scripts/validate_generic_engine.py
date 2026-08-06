@@ -39,6 +39,7 @@ from speedlocal.validation import select_processing_adapter, validate_contract, 
 from speedlocal.sources import (
     resolve_analysis_domain_cell_areas_km2,
     resolve_analysis_domain_cell_ids,
+    resolve_eligible_surface_cell_areas_km2,
     resolve_layer_assets,
 )
 
@@ -60,6 +61,7 @@ TRONDELAG_DISPLAY_PATHS = {
 }
 TRONDELAG_DISPLAY_COUNTS = {7: 13_735, 6: 2_163, 5: 365}
 TRONDELAG_ANALYSIS_DOMAIN_AREA_KM2 = 45_213.18864360976
+TRONDELAG_ELIGIBLE_SURFACE_AREA_KM2 = 41_826.93063562673
 ROAD_SELECTION_EXPECTATIONS = {
     ("roads_large",): {
         7: {300.0: (0.968838733163451, 428), 1000.0: (0.9554751146705496, 434)},
@@ -1829,13 +1831,13 @@ def main() -> int:
     assert len(direct_population_area.cells) == 13_735
     assert math.isclose(
         direct_population_area.model_area_km2,
-        TRONDELAG_ANALYSIS_DOMAIN_AREA_KM2,
+        TRONDELAG_ELIGIBLE_SURFACE_AREA_KM2,
         rel_tol=0.0,
         abs_tol=1e-9,
     )
     assert math.isclose(
         direct_population_area.potential_pct,
-        93.1071645226975,
+        92.93645404112695,
         rel_tol=0.0,
         abs_tol=1e-9,
     )
@@ -2053,13 +2055,13 @@ def main() -> int:
     assert direct_solar_population_area.cells == direct_population_area.cells
     assert math.isclose(
         direct_solar_population_area.model_area_km2,
-        TRONDELAG_ANALYSIS_DOMAIN_AREA_KM2,
+        TRONDELAG_ELIGIBLE_SURFACE_AREA_KM2,
         rel_tol=0.0,
         abs_tol=1e-9,
     )
     assert math.isclose(
         direct_solar_population_area.potential_pct,
-        93.1071645226975,
+        92.93645404112695,
         rel_tol=0.0,
         abs_tol=1e-9,
     )
@@ -2073,7 +2075,7 @@ def main() -> int:
             {"population_points": {"buffer_m": 100.0}},
             target_resolution=rollup_resolution,
         )
-        target_areas = resolve_analysis_domain_cell_areas_km2(
+        target_areas = resolve_eligible_surface_cell_areas_km2(
             trondelag,
             rollup_resolution,
         )

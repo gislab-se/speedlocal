@@ -14,7 +14,8 @@
     ],
     "restriction_combination": "geometry_union",
     "operation_order": "feasibility_then_exclusion",
-    "denominator": "analysis_domain",
-    "geometry_semantics": "exact_vector_clip"
+    "denominator": "eligible_surface",
+    "geometry_semantics": "exact_vector_clip",
+    "eligible_surface_id": "onshore_land"
   }
 }

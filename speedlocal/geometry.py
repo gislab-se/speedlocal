@@ -15,7 +15,12 @@ from shapely.ops import transform, unary_union
 from shapely.strtree import STRtree
 from shapely.validation import explain_validity
 
-from .contracts import AnalysisDomainContract, LayerContract
+from .contracts import (
+    AnalysisDomainContract,
+    EligibleSurfaceContract,
+    EligibleSurfaceRollupContract,
+    LayerContract,
+)
 from .paths import resolve_source_path
 from .validation import validate_layer
 
@@ -425,7 +430,11 @@ def _atomic_geometry_parts(
 
 
 def _direct_distance_domain_geometries(
-    domain: AnalysisDomainContract,
+    domain: (
+        AnalysisDomainContract
+        | EligibleSurfaceContract
+        | EligibleSurfaceRollupContract
+    ),
     target_crs: CRS,
 ) -> dict[str, BaseGeometry]:
     """Load the exact manifest-declared source-resolution analysis geometry."""
