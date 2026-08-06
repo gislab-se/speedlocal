@@ -163,3 +163,17 @@ AppTest 75/75, vector preview 29/29, V2 port guardrails 17/17, delivery
 repository 82/82, and runtime bundle 20/20. Clean-process localhost review was
 approved on 2026-08-04, including the corrected mixed-technology classes, so
 the complete two-technology combined-result slice is locally promoted.
+
+## Rooftop-demand accounting candidate
+
+The 2026-08-05 rooftop increment preserves this exact geographic result. A
+manifest-pinned population and annual-yield planning proxy may satisfy part of
+the gross solar-energy target before ground allocation. The table therefore
+shows the gross solar TWh together with the residual ground-solar area need;
+the two energy components must always sum to the unchanged gross target.
+
+Rooftop output never enters the large-scale potential frame, hover, acceptance
+capacity, landscape distribution, or ground-establishment candidate set. It
+only reduces how much of that unchanged ground potential the scenario must
+allocate. The candidate remains subject to the complete regression set and a
+clean-process localhost review before local promotion.

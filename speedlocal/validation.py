@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass
 
@@ -102,6 +103,131 @@ def validate_contract(contract: AnalysisContract) -> None:
             raise ValueError(
                 "Analysis area_result requires an analysis-domain contract"
             )
+
+    distributed_generation = contract.distributed_generation
+    if distributed_generation is not None:
+        rooftop = distributed_generation.rooftop_solar
+        if rooftop is not None:
+            if area_result is None or area_result.technology != "solar":
+                raise ValueError(
+                    "Rooftop solar requires a solar area-result contract"
+                )
+            if rooftop.status != "planning_proxy":
+                raise ValueError(
+                    "Rooftop-solar status must be 'planning_proxy'"
+                )
+            if rooftop.technology_key != "solar":
+                raise ValueError(
+                    "Rooftop-solar technology_key must be 'solar'"
+                )
+            if rooftop.panel_area_m2_per_person.unit != "m2/person":
+                raise ValueError(
+                    "Rooftop-solar panel area must use m2/person"
+                )
+            if any(
+                value is None
+                for value in (
+                    rooftop.panel_area_m2_per_person.minimum,
+                    rooftop.panel_area_m2_per_person.maximum,
+                    rooftop.panel_area_m2_per_person.step,
+                )
+            ):
+                raise ValueError(
+                    "Rooftop-solar panel area must declare min, max, and step"
+                )
+            panel_parameter = rooftop.panel_area_m2_per_person
+            if (
+                float(panel_parameter.minimum) < 0.0
+                or float(panel_parameter.default) < 0.0
+                or float(panel_parameter.maximum) <= 0.0
+                or float(panel_parameter.step) <= 0.0
+            ):
+                raise ValueError(
+                    "Rooftop-solar panel area must use a non-negative range "
+                    "and a positive maximum and step"
+                )
+            if contract.analysis_domain is None:
+                raise ValueError(
+                    "Rooftop solar requires an analysis-domain contract"
+                )
+            if (
+                rooftop.population_source.analysis_h3_resolution
+                != contract.analysis_domain.resolution
+            ):
+                raise ValueError(
+                    "Rooftop-solar population analysis resolution must match "
+                    "the solar analysis domain"
+                )
+            map_review = rooftop.map_review
+            if map_review.canonical_group_id not in (
+                area_result.applicable_group_ids
+            ):
+                raise ValueError(
+                    "Rooftop-solar map review must reference an applicable "
+                    "solar group"
+                )
+            unknown_review_layers = set(map_review.layer_ids) - set(
+                contract.layers
+            )
+            if unknown_review_layers:
+                raise ValueError(
+                    "Rooftop-solar map review references unknown layers: "
+                    f"{sorted(unknown_review_layers)}"
+                )
+            for layer_id in map_review.layer_ids:
+                layer = contract.layers[layer_id]
+                if layer.group_id != map_review.canonical_group_id:
+                    raise ValueError(
+                        "Rooftop-solar map-review layer belongs to the wrong "
+                        f"group: {layer_id}"
+                    )
+                buffer_parameter = layer.parameters.get("buffer_m")
+                if buffer_parameter is None:
+                    raise ValueError(
+                        "Rooftop-solar map-review layer has no canonical "
+                        f"buffer parameter: {layer_id}"
+                    )
+            expected_domain_resolutions = {
+                contract.analysis_domain.resolution,
+                *contract.analysis_domain.rollups,
+            }
+            declared_domain_totals = (
+                rooftop.population_source.expected_analysis_domain_totals
+            )
+            if set(declared_domain_totals) != expected_domain_resolutions:
+                raise ValueError(
+                    "Rooftop-solar mapped population totals must cover the "
+                    "analysis domain and every declared rollup"
+                )
+            canonical_mapped_total = declared_domain_totals[
+                contract.analysis_domain.resolution
+            ]
+            if any(
+                not math.isclose(
+                    total,
+                    canonical_mapped_total,
+                    rel_tol=0.0,
+                    abs_tol=1e-6,
+                )
+                for total in declared_domain_totals.values()
+            ):
+                raise ValueError(
+                    "Rooftop-solar mapped population must clip at the "
+                    "canonical analysis resolution before parent rollup"
+                )
+            accounting = rooftop.accounting
+            if not accounting.cap_at_solar_target:
+                raise ValueError(
+                    "Rooftop-solar accounting must cap output at the solar target"
+                )
+            if accounting.affects_geographic_potential:
+                raise ValueError(
+                    "Rooftop solar must not affect geographic potential"
+                )
+            if accounting.adds_establishment_candidates:
+                raise ValueError(
+                    "Rooftop solar must not add establishment candidates"
+                )
 
     domain = contract.analysis_domain
     if domain is not None:

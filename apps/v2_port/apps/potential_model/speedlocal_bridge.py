@@ -9,13 +9,25 @@ import pandas as pd
 
 from speedlocal.area_result import build_area_group_preview, run_area_analysis
 from speedlocal.catalogs import load_analysis, load_region
-from speedlocal.contracts import AnalysisContract, ParameterContract
+from speedlocal.contracts import (
+    AnalysisContract,
+    ParameterContract,
+    RooftopSolarContract,
+)
+from speedlocal.distributed_generation import (
+    RooftopSolarAccountingResult,
+    calculate_rooftop_solar_accounting,
+    load_rooftop_population_counts,
+)
 from speedlocal.engine import run_analysis
 from speedlocal.geometry import (
     VectorBufferPreview,
     build_vector_buffer_preview,
 )
-from speedlocal.sources import resolve_analysis_domain_cell_areas_km2
+from speedlocal.sources import (
+    resolve_analysis_domain_cell_areas_km2,
+    resolve_analysis_domain_cell_ids,
+)
 from speedlocal.validation import validate_contract, validate_layer
 
 
@@ -225,6 +237,70 @@ def solar_area_result_frame(
         layer_ids,
         group_buffer_m,
         target_resolution,
+    )
+
+
+def solar_rooftop_contract(region_id: str) -> RooftopSolarContract:
+    """Return the validated manifest-declared rooftop planning proxy."""
+
+    analysis = _validated_area_analysis(region_id, "solar")
+    distributed_generation = analysis.distributed_generation
+    rooftop = (
+        distributed_generation.rooftop_solar
+        if distributed_generation is not None
+        else None
+    )
+    if rooftop is None:
+        raise ValueError(
+            f"{region_id}/solar has no rooftop-solar accounting contract"
+        )
+    return rooftop
+
+
+def solar_rooftop_population_frame(
+    region_id: str,
+    target_resolution: int | None = None,
+) -> pd.DataFrame:
+    """Load the rooftop proxy's manifest-pinned population counts."""
+
+    analysis = _validated_area_analysis(region_id, "solar")
+    distributed_generation = analysis.distributed_generation
+    rooftop = (
+        distributed_generation.rooftop_solar
+        if distributed_generation is not None
+        else None
+    )
+    if rooftop is None:
+        raise ValueError(
+            f"{region_id}/solar has no rooftop-solar accounting contract"
+        )
+    canonical_resolution = rooftop.population_source.analysis_h3_resolution
+    domain_ids = resolve_analysis_domain_cell_ids(
+        analysis,
+        canonical_resolution,
+    )
+    return load_rooftop_population_counts(
+        rooftop.population_source,
+        domain_ids,
+        target_resolution,
+    )
+
+
+def solar_rooftop_accounting(
+    region_id: str,
+    population: float,
+    panel_area_m2_per_person: float,
+    gross_solar_target_twh: float,
+    ground_km2_per_twh: float,
+) -> RooftopSolarAccountingResult:
+    """Calculate residual ground-solar demand from the canonical contract."""
+
+    return calculate_rooftop_solar_accounting(
+        solar_rooftop_contract(region_id),
+        population,
+        panel_area_m2_per_person,
+        gross_solar_target_twh,
+        ground_km2_per_twh,
     )
 
 

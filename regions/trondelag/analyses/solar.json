@@ -16,5 +16,71 @@
     "operation_order": "feasibility_then_exclusion",
     "denominator": "analysis_domain",
     "geometry_semantics": "exact_vector_clip"
+  },
+  "distributed_generation": {
+    "rooftop_solar": {
+      "status": "planning_proxy",
+      "technology_key": "solar",
+      "population_source": {
+        "provider": "v2_archive",
+        "path": "docs/geocontext/acceptance_framework/data/trondelag_prototype_assets/population_tables/trondelag_population_250m_h3_r8.csv",
+        "sha256": "3392f78f15b5d0cb455ff5917b107f13be7f1eb7a25e42337185f947fbae17e1",
+        "format": "csv",
+        "h3_id_field": "hex_id",
+        "value_field": "population",
+        "source_h3_resolution": 8,
+        "analysis_h3_resolution": 7,
+        "aggregation": "sum_to_analysis_then_parent_rollup",
+        "expected_row_count": 10667,
+        "expected_total": 477978,
+        "accounting_total_policy": "source_total_before_domain_clip",
+        "expected_analysis_domain_totals": [
+          {"resolution": 7, "total": 477755},
+          {"resolution": 6, "total": 477755},
+          {"resolution": 5, "total": 477755}
+        ],
+        "semantics": "250_m_population_grid_centroid_proxy"
+      },
+      "map_review": {
+        "canonical_group_id": "population",
+        "layer_ids": ["population_points"],
+        "buffer_value_source": "canonical_layer_default"
+      },
+      "panel_area_m2_per_person": {
+        "type": "number",
+        "unit": "m2/person",
+        "default": 10,
+        "minimum": 0,
+        "maximum": 25,
+        "step": 1
+      },
+      "annual_yield": {
+        "method": "pvgis_specific_yield_times_stc_efficiency",
+        "specific_yield_kwh_per_kwp": 762.041667,
+        "module_efficiency_stc_fraction": 0.22,
+        "expected_kwh_per_m2": 167.649167,
+        "pvgis_version": "5.3",
+        "radiation_database": "PVGIS-SARAH3",
+        "data_period": "2005-2023",
+        "pv_technology": "crystSi2025",
+        "mounting_place": "building",
+        "slope_deg": 35,
+        "aspect_deg": 0,
+        "system_loss_pct": 14,
+        "use_horizon": true,
+        "site_aggregation": "unweighted_mean",
+        "sample_site_count": 6,
+        "reference_urls": [
+          "https://re.jrc.ec.europa.eu/api/v5_3/PVcalc?lat=63.4305&lon=10.3951&peakpower=1&loss=14&pvtechchoice=crystSi2025&mountingplace=building&angle=35&aspect=0&usehorizon=1&raddatabase=PVGIS-SARAH3&outputformat=json",
+          "https://joint-research-centre.ec.europa.eu/photovoltaic-geographical-information-system-pvgis/using-pvgis-5/api-non-interactive-service_en",
+          "https://joint-research-centre.ec.europa.eu/jrc-news-and-updates/rooftop-solar-could-meet-40-eus-long-term-electricity-demand-2026-01-21_en"
+        ]
+      },
+      "accounting": {
+        "cap_at_solar_target": true,
+        "affects_geographic_potential": false,
+        "adds_establishment_candidates": false
+      }
+    }
   }
 }

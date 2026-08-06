@@ -298,6 +298,265 @@ class AreaResultContract:
 
 
 @dataclass(frozen=True)
+class PopulationCountSourceContract:
+    provider: str
+    path: str
+    sha256: str
+    format: str
+    h3_id_field: str
+    value_field: str
+    source_h3_resolution: int
+    analysis_h3_resolution: int
+    aggregation: str
+    expected_row_count: int
+    expected_total: float
+    accounting_total_policy: str
+    expected_analysis_domain_totals: dict[int, float]
+    semantics: str
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "provider",
+            "path",
+            "sha256",
+            "format",
+            "h3_id_field",
+            "value_field",
+            "aggregation",
+            "accounting_total_policy",
+            "semantics",
+        ):
+            if not str(getattr(self, field_name)).strip():
+                raise ValueError(
+                    f"Population count source {field_name} must not be blank"
+                )
+        if len(self.sha256) != 64 or any(
+            character not in "0123456789abcdef"
+            for character in self.sha256
+        ):
+            raise ValueError(
+                "Population count source sha256 must be a lowercase SHA256 digest"
+            )
+        if self.format != "csv":
+            raise ValueError("Population count source format must be 'csv'")
+        for field_name in (
+            "source_h3_resolution",
+            "analysis_h3_resolution",
+        ):
+            resolution = getattr(self, field_name)
+            if isinstance(resolution, bool) or not isinstance(resolution, int):
+                raise ValueError(
+                    f"Population count source {field_name} must be an integer"
+                )
+            if resolution < 0 or resolution > 15:
+                raise ValueError(
+                    f"Population count source {field_name} must be between 0 and 15"
+                )
+        if self.analysis_h3_resolution > self.source_h3_resolution:
+            raise ValueError(
+                "Population count analysis resolution must not be finer than "
+                "its source resolution"
+            )
+        if self.aggregation != "sum_to_analysis_then_parent_rollup":
+            raise ValueError(
+                "Population count source aggregation must be "
+                "'sum_to_analysis_then_parent_rollup'"
+            )
+        if self.accounting_total_policy != "source_total_before_domain_clip":
+            raise ValueError(
+                "Population count accounting_total_policy must be "
+                "'source_total_before_domain_clip'"
+            )
+        if (
+            isinstance(self.expected_row_count, bool)
+            or not isinstance(self.expected_row_count, int)
+            or self.expected_row_count <= 0
+        ):
+            raise ValueError(
+                "Population count source expected_row_count must be positive"
+            )
+        if not math.isfinite(self.expected_total) or self.expected_total <= 0:
+            raise ValueError(
+                "Population count source expected_total must be positive and finite"
+            )
+        if self.analysis_h3_resolution not in self.expected_analysis_domain_totals:
+            raise ValueError(
+                "Population count source must declare the canonical "
+                "analysis-domain total"
+            )
+        for resolution, total in self.expected_analysis_domain_totals.items():
+            if (
+                isinstance(resolution, bool)
+                or not isinstance(resolution, int)
+                or resolution < 0
+                or resolution > self.analysis_h3_resolution
+            ):
+                raise ValueError(
+                    "Population count expected-domain resolutions must be "
+                    "valid rollups of the analysis resolution"
+                )
+            if (
+                not math.isfinite(total)
+                or total <= 0
+                or total > self.expected_total
+            ):
+                raise ValueError(
+                    "Population count expected analysis-domain totals must "
+                    "be positive and no greater than the source total"
+                )
+
+
+@dataclass(frozen=True)
+class RooftopSolarYieldContract:
+    method: str
+    specific_yield_kwh_per_kwp: float
+    module_efficiency_stc_fraction: float
+    expected_kwh_per_m2: float
+    pvgis_version: str
+    radiation_database: str
+    data_period: str
+    pv_technology: str
+    mounting_place: str
+    slope_deg: float
+    aspect_deg: float
+    system_loss_pct: float
+    use_horizon: bool
+    site_aggregation: str
+    sample_site_count: int
+    reference_urls: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        if self.method != "pvgis_specific_yield_times_stc_efficiency":
+            raise ValueError("Unsupported rooftop-solar annual-yield method")
+        for field_name in (
+            "specific_yield_kwh_per_kwp",
+            "module_efficiency_stc_fraction",
+            "expected_kwh_per_m2",
+            "slope_deg",
+            "aspect_deg",
+            "system_loss_pct",
+        ):
+            value = getattr(self, field_name)
+            if not math.isfinite(value):
+                raise ValueError(
+                    f"Rooftop-solar annual yield {field_name} must be finite"
+                )
+        if self.specific_yield_kwh_per_kwp <= 0:
+            raise ValueError(
+                "Rooftop-solar specific yield must be positive"
+            )
+        if not 0 < self.module_efficiency_stc_fraction <= 1:
+            raise ValueError(
+                "Rooftop-solar module efficiency must be in (0, 1]"
+            )
+        if self.expected_kwh_per_m2 <= 0:
+            raise ValueError(
+                "Rooftop-solar expected kWh per m2 must be positive"
+            )
+        derived_kwh_per_m2 = (
+            self.specific_yield_kwh_per_kwp
+            * self.module_efficiency_stc_fraction
+        )
+        if not math.isclose(
+            self.expected_kwh_per_m2,
+            derived_kwh_per_m2,
+            rel_tol=0.0,
+            abs_tol=1e-6,
+        ):
+            raise ValueError(
+                "Rooftop-solar expected kWh per m2 does not match its "
+                "specific yield and module efficiency"
+            )
+        if not 0 <= self.slope_deg <= 90:
+            raise ValueError("Rooftop-solar slope must be between 0 and 90")
+        if not -180 <= self.aspect_deg <= 180:
+            raise ValueError(
+                "Rooftop-solar aspect must be between -180 and 180"
+            )
+        if not 0 <= self.system_loss_pct < 100:
+            raise ValueError(
+                "Rooftop-solar system loss must be in [0, 100)"
+            )
+        for field_name in (
+            "pvgis_version",
+            "radiation_database",
+            "data_period",
+            "pv_technology",
+            "mounting_place",
+            "site_aggregation",
+        ):
+            if not str(getattr(self, field_name)).strip():
+                raise ValueError(
+                    f"Rooftop-solar annual yield {field_name} must not be blank"
+                )
+        if (
+            isinstance(self.sample_site_count, bool)
+            or not isinstance(self.sample_site_count, int)
+            or self.sample_site_count <= 0
+        ):
+            raise ValueError(
+                "Rooftop-solar sample_site_count must be positive"
+            )
+        if not self.reference_urls or any(
+            not str(value).strip() for value in self.reference_urls
+        ):
+            raise ValueError(
+                "Rooftop-solar annual yield must declare reference URLs"
+            )
+
+
+@dataclass(frozen=True)
+class RooftopSolarAccountingContract:
+    cap_at_solar_target: bool
+    affects_geographic_potential: bool
+    adds_establishment_candidates: bool
+
+
+@dataclass(frozen=True)
+class RooftopSolarMapReviewContract:
+    canonical_group_id: str
+    layer_ids: tuple[str, ...]
+    buffer_value_source: str
+
+    def __post_init__(self) -> None:
+        if not self.canonical_group_id.strip():
+            raise ValueError(
+                "Rooftop-solar map-review group must not be blank"
+            )
+        if not self.layer_ids or any(
+            not layer_id.strip() for layer_id in self.layer_ids
+        ):
+            raise ValueError(
+                "Rooftop-solar map review must declare non-blank layers"
+            )
+        if len(set(self.layer_ids)) != len(self.layer_ids):
+            raise ValueError(
+                "Rooftop-solar map-review layers must be unique"
+            )
+        if self.buffer_value_source != "canonical_layer_default":
+            raise ValueError(
+                "Rooftop-solar map-review buffer must use the canonical "
+                "layer default"
+            )
+
+
+@dataclass(frozen=True)
+class RooftopSolarContract:
+    status: str
+    technology_key: str
+    population_source: PopulationCountSourceContract
+    map_review: RooftopSolarMapReviewContract
+    panel_area_m2_per_person: ParameterContract
+    annual_yield: RooftopSolarYieldContract
+    accounting: RooftopSolarAccountingContract
+
+
+@dataclass(frozen=True)
+class DistributedGenerationContract:
+    rooftop_solar: RooftopSolarContract | None = None
+
+
+@dataclass(frozen=True)
 class AnalysisContract:
     id: str
     region_id: str
@@ -307,6 +566,7 @@ class AnalysisContract:
     analysis_domain: AnalysisDomainContract | None = None
     area_result: AreaResultContract | None = None
     ui: AnalysisUIContract | None = None
+    distributed_generation: DistributedGenerationContract | None = None
 
 
 def distance_coverage_contract(raw: dict[str, Any] | None) -> DistanceCoverageContract:
@@ -514,6 +774,224 @@ def area_result_contract(
     )
 
 
+def population_count_source_contract(
+    raw: dict[str, Any],
+) -> PopulationCountSourceContract:
+    if not isinstance(raw, dict):
+        raise ValueError("Population count source must be an object")
+    for field_name in (
+        "source_h3_resolution",
+        "analysis_h3_resolution",
+        "expected_row_count",
+    ):
+        if isinstance(raw.get(field_name), bool) or not isinstance(
+            raw.get(field_name), int
+        ):
+            raise ValueError(
+                f"Population count source {field_name} must be an integer"
+            )
+    expected_total = raw.get("expected_total")
+    if isinstance(expected_total, bool) or not isinstance(
+        expected_total, (int, float)
+    ):
+        raise ValueError(
+            "Population count source expected_total must be numeric"
+        )
+    raw_domain_totals = raw.get("expected_analysis_domain_totals")
+    if not isinstance(raw_domain_totals, list) or not raw_domain_totals:
+        raise ValueError(
+            "Population count source expected_analysis_domain_totals must "
+            "be a non-empty list"
+        )
+    domain_totals: dict[int, float] = {}
+    for item in raw_domain_totals:
+        if not isinstance(item, dict):
+            raise ValueError(
+                "Population count expected-domain total must be an object"
+            )
+        resolution = item.get("resolution")
+        total = item.get("total")
+        if isinstance(resolution, bool) or not isinstance(resolution, int):
+            raise ValueError(
+                "Population count expected-domain resolution must be an integer"
+            )
+        if isinstance(total, bool) or not isinstance(total, (int, float)):
+            raise ValueError(
+                "Population count expected-domain total must be numeric"
+            )
+        if resolution in domain_totals:
+            raise ValueError(
+                f"Duplicate population expected-domain R{resolution} total"
+            )
+        domain_totals[resolution] = float(total)
+    return PopulationCountSourceContract(
+        provider=str(raw["provider"]),
+        path=str(raw["path"]),
+        sha256=str(raw["sha256"]),
+        format=str(raw["format"]),
+        h3_id_field=str(raw["h3_id_field"]),
+        value_field=str(raw["value_field"]),
+        source_h3_resolution=raw["source_h3_resolution"],
+        analysis_h3_resolution=raw["analysis_h3_resolution"],
+        aggregation=str(raw["aggregation"]),
+        expected_row_count=raw["expected_row_count"],
+        expected_total=float(expected_total),
+        accounting_total_policy=str(raw["accounting_total_policy"]),
+        expected_analysis_domain_totals=domain_totals,
+        semantics=str(raw["semantics"]),
+    )
+
+
+def rooftop_solar_yield_contract(
+    raw: dict[str, Any],
+) -> RooftopSolarYieldContract:
+    if not isinstance(raw, dict):
+        raise ValueError("Rooftop-solar annual yield must be an object")
+    references = raw.get("reference_urls")
+    if not isinstance(references, list):
+        raise ValueError(
+            "Rooftop-solar annual yield reference_urls must be a list"
+        )
+    numeric_fields = (
+        "specific_yield_kwh_per_kwp",
+        "module_efficiency_stc_fraction",
+        "expected_kwh_per_m2",
+        "slope_deg",
+        "aspect_deg",
+        "system_loss_pct",
+    )
+    for field_name in numeric_fields:
+        if isinstance(raw.get(field_name), bool) or not isinstance(
+            raw.get(field_name), (int, float)
+        ):
+            raise ValueError(
+                f"Rooftop-solar annual yield {field_name} must be numeric"
+            )
+    sample_site_count = raw.get("sample_site_count")
+    if isinstance(sample_site_count, bool) or not isinstance(
+        sample_site_count, int
+    ):
+        raise ValueError(
+            "Rooftop-solar sample_site_count must be an integer"
+        )
+    if not isinstance(raw.get("use_horizon"), bool):
+        raise ValueError(
+            "Rooftop-solar use_horizon must be an explicit boolean"
+        )
+    return RooftopSolarYieldContract(
+        method=str(raw["method"]),
+        specific_yield_kwh_per_kwp=float(
+            raw["specific_yield_kwh_per_kwp"]
+        ),
+        module_efficiency_stc_fraction=float(
+            raw["module_efficiency_stc_fraction"]
+        ),
+        expected_kwh_per_m2=float(raw["expected_kwh_per_m2"]),
+        pvgis_version=str(raw["pvgis_version"]),
+        radiation_database=str(raw["radiation_database"]),
+        data_period=str(raw["data_period"]),
+        pv_technology=str(raw["pv_technology"]),
+        mounting_place=str(raw["mounting_place"]),
+        slope_deg=float(raw["slope_deg"]),
+        aspect_deg=float(raw["aspect_deg"]),
+        system_loss_pct=float(raw["system_loss_pct"]),
+        use_horizon=raw["use_horizon"],
+        site_aggregation=str(raw["site_aggregation"]),
+        sample_site_count=sample_site_count,
+        reference_urls=tuple(str(value) for value in references),
+    )
+
+
+def rooftop_solar_accounting_contract(
+    raw: dict[str, Any],
+) -> RooftopSolarAccountingContract:
+    if not isinstance(raw, dict):
+        raise ValueError("Rooftop-solar accounting must be an object")
+    required = (
+        "cap_at_solar_target",
+        "affects_geographic_potential",
+        "adds_establishment_candidates",
+    )
+    if any(not isinstance(raw.get(key), bool) for key in required):
+        raise ValueError(
+            "Rooftop-solar accounting flags must be explicit booleans"
+        )
+    return RooftopSolarAccountingContract(
+        cap_at_solar_target=raw["cap_at_solar_target"],
+        affects_geographic_potential=raw[
+            "affects_geographic_potential"
+        ],
+        adds_establishment_candidates=raw[
+            "adds_establishment_candidates"
+        ],
+    )
+
+
+def rooftop_solar_map_review_contract(
+    raw: dict[str, Any],
+) -> RooftopSolarMapReviewContract:
+    if not isinstance(raw, dict):
+        raise ValueError("Rooftop-solar map_review must be an object")
+    layer_ids = raw.get("layer_ids")
+    if not isinstance(layer_ids, list):
+        raise ValueError(
+            "Rooftop-solar map-review layer_ids must be a list"
+        )
+    return RooftopSolarMapReviewContract(
+        canonical_group_id=str(raw["canonical_group_id"]),
+        layer_ids=tuple(str(value) for value in layer_ids),
+        buffer_value_source=str(raw["buffer_value_source"]),
+    )
+
+
+def distributed_generation_contract(
+    raw: dict[str, Any] | None,
+) -> DistributedGenerationContract | None:
+    if raw is None:
+        return None
+    if not isinstance(raw, dict):
+        raise ValueError("Analysis distributed_generation must be an object")
+    rooftop_raw = raw.get("rooftop_solar")
+    if rooftop_raw is None:
+        return DistributedGenerationContract()
+    if not isinstance(rooftop_raw, dict):
+        raise ValueError("Analysis rooftop_solar must be an object")
+    panel_area_raw = rooftop_raw.get("panel_area_m2_per_person")
+    if not isinstance(panel_area_raw, dict):
+        raise ValueError(
+            "Rooftop-solar panel_area_m2_per_person must be an object"
+        )
+    for field_name in ("default", "minimum", "maximum", "step"):
+        if isinstance(panel_area_raw.get(field_name), bool) or not isinstance(
+            panel_area_raw.get(field_name), (int, float)
+        ):
+            raise ValueError(
+                "Rooftop-solar panel-area parameter values must be numeric"
+            )
+    return DistributedGenerationContract(
+        rooftop_solar=RooftopSolarContract(
+            status=str(rooftop_raw["status"]),
+            technology_key=str(rooftop_raw["technology_key"]),
+            population_source=population_count_source_contract(
+                rooftop_raw["population_source"]
+            ),
+            map_review=rooftop_solar_map_review_contract(
+                rooftop_raw["map_review"]
+            ),
+            panel_area_m2_per_person=parameter_contract(
+                "panel_area_m2_per_person",
+                panel_area_raw,
+            ),
+            annual_yield=rooftop_solar_yield_contract(
+                rooftop_raw["annual_yield"]
+            ),
+            accounting=rooftop_solar_accounting_contract(
+                rooftop_raw["accounting"]
+            ),
+        )
+    )
+
+
 def analysis_contract(raw: dict[str, Any]) -> AnalysisContract:
     layers: dict[str, LayerContract] = {}
     for item in raw.get("layers") or []:
@@ -539,4 +1017,7 @@ def analysis_contract(raw: dict[str, Any]) -> AnalysisContract:
         analysis_domain=analysis_domain_contract(raw.get("analysis_domain")),
         area_result=area_result_contract(raw.get("area_result")),
         ui=analysis_ui_contract(raw.get("ui")),
+        distributed_generation=distributed_generation_contract(
+            raw.get("distributed_generation")
+        ),
     )

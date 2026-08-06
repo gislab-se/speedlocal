@@ -2266,6 +2266,133 @@ def main() -> int:
         f"score_missing={int(exact_solar_score.isna().sum())}.",
     )
 
+    landscape_manifest = app.load_region_context(trondelag_region).get(
+        "landscape_manifest"
+    )
+    ground_solar_candidates = app._solar_establishment_potential_source_frame(
+        trondelag_region,
+        landscape_manifest,
+        7,
+        exact_solar_summary,
+    )
+    ground_solar_by_hex = ground_solar_candidates.set_index("hex_id")
+    exact_summary_by_hex = exact_solar_summary.set_index("hex_id")
+    ground_score_error = float(
+        (
+            pd.to_numeric(
+                ground_solar_by_hex.loc[
+                    exact_summary_by_hex.index,
+                    "potential_area_share_pct",
+                ],
+                errors="raise",
+            )
+            - pd.to_numeric(
+                exact_summary_by_hex["potential_area_share_pct"],
+                errors="raise",
+            )
+        ).abs().max()
+    )
+    ground_area_error = abs(
+        float(
+            pd.to_numeric(
+                ground_solar_candidates["potential_area_km2"],
+                errors="raise",
+            ).sum()
+        )
+        - float(
+            pd.to_numeric(
+                exact_solar_summary["potential_area_km2"],
+                errors="raise",
+            ).sum()
+        )
+    )
+    rooftop_population = app.solar_rooftop_population_frame(
+        "trondelag",
+        7,
+    )
+    rooftop_accounting = app.solar_rooftop_accounting(
+        "trondelag",
+        477_978.0,
+        10.0,
+        31.05,
+        28.571429,
+    )
+    zero_rooftop_accounting = app.solar_rooftop_accounting(
+        "trondelag",
+        477_978.0,
+        0.0,
+        31.05,
+        28.571429,
+    )
+    report.check(
+        len(ground_solar_candidates) == DISPLAY_COUNTS[7]
+        and ground_score_error <= 1e-12
+        and ground_area_error <= 1e-9
+        and not any(
+            "solar_v1" in str(column)
+            for column in ground_solar_candidates.columns
+        )
+        and len(rooftop_population) == 3_630
+        and abs(float(rooftop_population["population"].sum()) - 477_755.0)
+        <= 1e-6
+        and abs(
+            rooftop_accounting.rooftop_contribution_twh
+            - 0.8013261342005171
+        )
+        <= 1e-9
+        and abs(
+            rooftop_accounting.ground_solar_twh
+            + rooftop_accounting.rooftop_contribution_twh
+            - 31.05
+        )
+        <= 1e-12
+        and zero_rooftop_accounting.rooftop_contribution_twh == 0.0
+        and zero_rooftop_accounting.ground_solar_twh == 31.05,
+        "Rooftop solar reduces only residual ground demand while the exact "
+        "solar candidate surface and zero-selection baseline remain unchanged.",
+        "Rooftop accounting leaked into geographic solar potential or drifted "
+        "from its manifest source: "
+        f"cells={len(ground_solar_candidates)}, "
+        f"score_error={ground_score_error:.12f}, "
+        f"area_error={ground_area_error:.12f}, "
+        f"mapped_population={float(rooftop_population['population'].sum()):.6f}, "
+        f"rooftop_twh={rooftop_accounting.rooftop_contribution_twh:.12f}.",
+    )
+    duplicate_ground_rejected = False
+    rooftop_column_rejected = False
+    try:
+        app._solar_establishment_potential_source_frame(
+            trondelag_region,
+            landscape_manifest,
+            7,
+            pd.concat(
+                [exact_solar_summary, exact_solar_summary.head(1)],
+                ignore_index=True,
+            ),
+        )
+    except ValueError as exc:
+        duplicate_ground_rejected = "duplicate" in str(exc).lower()
+    rooftop_leak = exact_solar_summary.copy()
+    rooftop_leak["solar_v1_area_m2"] = 0.0
+    try:
+        app._solar_establishment_potential_source_frame(
+            trondelag_region,
+            landscape_manifest,
+            7,
+            rooftop_leak,
+        )
+    except ValueError as exc:
+        rooftop_column_rejected = "rooftop schematic" in str(exc).lower()
+    report.check(
+        duplicate_ground_rejected and rooftop_column_rejected,
+        "Ground-solar candidates fail closed on duplicate cells and rooftop "
+        "schematic column leakage.",
+        "Ground-solar candidate hardening did not reject duplicate cells or "
+        "rooftop columns: "
+        f"duplicate={duplicate_ground_rejected}, "
+        f"rooftop={rooftop_column_rejected}.",
+    )
+
     classification_hex_ids = list(r7_model_areas)[:5]
     classification_model_areas = pd.Series(
         {

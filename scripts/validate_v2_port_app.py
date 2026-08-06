@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import os
 import sys
 from copy import deepcopy
@@ -31,6 +32,7 @@ WIND_VISUAL_BUFFER_KEY_PREFIX = "wind_control__visual_buffer__"
 SOLAR_APPLIED_CONFIG_KEY = "solar_applied_config"
 SOLAR_VISUAL_SOURCE_KEY_PREFIX = "solar_draft_visual_source__"
 SOLAR_VISUAL_BUFFER_KEY_PREFIX = "solar_draft_visual_buffer__"
+WORKSPACE_RENDER_CACHE_KEY = "potential_workspace_render_cache_v2"
 SOLAR_REVIEW_GROUP_IDS = (
     "large_population",
     "transport",
@@ -1761,6 +1763,15 @@ def _check_solar_manifest_map_review(report: Report) -> None:
     baseline_config = deepcopy(
         _session_state_value(app, SOLAR_APPLIED_CONFIG_KEY)
     )
+    baseline_workspace = _session_state_value(
+        app,
+        WORKSPACE_RENDER_CACHE_KEY,
+    )
+    baseline_energy_state = (
+        baseline_workspace.get("energy_model_state")
+        if isinstance(baseline_workspace, dict)
+        else None
+    )
     try:
         source_toggles = {
             group_id: _by_key(
@@ -1832,6 +1843,173 @@ def _check_solar_manifest_map_review(report: Report) -> None:
         "trondelag: solar map review failed or changed analysis state: "
         f"exceptions={review_exceptions}, errors={review_errors}, "
         f"analysis_equal={baseline_analysis == review_analysis}.",
+    )
+
+    rooftop_config = (
+        deepcopy(review_config)
+        if isinstance(review_config, dict)
+        else {}
+    )
+    rooftop_config["small_population_active"] = True
+    rooftop_config["panel_area_m2_per_person"] = 10.0
+    app.session_state[SOLAR_APPLIED_CONFIG_KEY] = rooftop_config
+    app.run(timeout=180)
+    rooftop_exceptions, rooftop_errors = _app_failures(app)
+    rooftop_workspace = _session_state_value(
+        app,
+        WORKSPACE_RENDER_CACHE_KEY,
+    )
+    rooftop_energy_state = (
+        rooftop_workspace.get("energy_model_state")
+        if isinstance(rooftop_workspace, dict)
+        else None
+    )
+    baseline_energy_state = (
+        baseline_energy_state
+        if isinstance(baseline_energy_state, dict)
+        else {}
+    )
+    rooftop_energy_state = (
+        rooftop_energy_state
+        if isinstance(rooftop_energy_state, dict)
+        else {}
+    )
+    rooftop_accounting = rooftop_energy_state.get("rooftop_solar")
+    rooftop_accounting = (
+        rooftop_accounting
+        if isinstance(rooftop_accounting, dict)
+        else {}
+    )
+    solar_proposal = rooftop_energy_state.get("solar_proposal_frame")
+    proposal_has_rooftop = bool(
+        hasattr(solar_proposal, "columns")
+        and "source_group" in solar_proposal.columns
+        and solar_proposal["source_group"].astype(str).str.contains(
+            "Småskalig",
+            regex=False,
+        ).any()
+    )
+    report.check(
+        not rooftop_exceptions
+        and not rooftop_errors
+        and math.isclose(
+            float(rooftop_energy_state.get("solar_twh", 0.0) or 0.0),
+            float(baseline_energy_state.get("solar_twh", 0.0) or 0.0),
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        )
+        and math.isclose(
+            float(rooftop_accounting.get("rooftop_contribution_twh", 0.0) or 0.0),
+            0.8013261342005171,
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        )
+        and math.isclose(
+            float(rooftop_energy_state.get("solar_twh", 0.0) or 0.0),
+            float(rooftop_energy_state.get("solar_rooftop_twh", 0.0) or 0.0)
+            + float(rooftop_energy_state.get("solar_ground_twh", 0.0) or 0.0),
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        )
+        and float(rooftop_energy_state.get("solar_area_need_km2", 0.0) or 0.0)
+        < float(baseline_energy_state.get("solar_area_need_km2", 0.0) or 0.0)
+        and rooftop_energy_state.get("solar_area_result_stats")
+        == baseline_energy_state.get("solar_area_result_stats")
+        and not proposal_has_rooftop,
+        "trondelag: manifest rooftop output reduces only residual ground-solar "
+        "demand while gross energy, exact geographic potential, and land "
+        "candidate semantics remain unchanged.",
+        "trondelag: rooftop accounting did not stay separated from ground "
+        "potential/allocation: "
+        f"exceptions={rooftop_exceptions}, errors={rooftop_errors}, "
+        f"baseline_need={baseline_energy_state.get('solar_area_need_km2')}, "
+        f"rooftop_need={rooftop_energy_state.get('solar_area_need_km2')}, "
+        f"accounting={rooftop_accounting}, proposal_has_rooftop={proposal_has_rooftop}.",
+    )
+
+    try:
+        rooftop_source_toggle = _by_key(
+            app.toggle,
+            f"{SOLAR_VISUAL_SOURCE_KEY_PREFIX}small_population",
+        )
+        rooftop_buffer_toggle = _by_key(
+            app.toggle,
+            f"{SOLAR_VISUAL_BUFFER_KEY_PREFIX}small_population",
+        )
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            "trondelag: rooftop manifest map-review controls are unavailable: "
+            f"{exc!r}.",
+        )
+        return
+    report.check(
+        not rooftop_source_toggle.disabled
+        and not rooftop_buffer_toggle.disabled,
+        "trondelag: rooftop source and buffer review controls resolve from "
+        "the solar manifest.",
+        "trondelag: rooftop map-review controls are not enabled by their "
+        "manifest contract.",
+    )
+    if rooftop_source_toggle.disabled or rooftop_buffer_toggle.disabled:
+        return
+
+    rooftop_source_toggle.set_value(True)
+    rooftop_buffer_toggle.set_value(True)
+    app.run(timeout=180)
+    rooftop_review_exceptions, rooftop_review_errors = _app_failures(app)
+    rooftop_review_config = _session_state_value(
+        app,
+        SOLAR_APPLIED_CONFIG_KEY,
+    )
+    rooftop_review_workspace = _session_state_value(
+        app,
+        WORKSPACE_RENDER_CACHE_KEY,
+    )
+    rooftop_review_layers = (
+        rooftop_review_workspace.get("layers", [])
+        if isinstance(rooftop_review_workspace, dict)
+        else []
+    )
+    rooftop_source_ids = {
+        str(layer.get("source_layer_id", "") or "")
+        for layer in rooftop_review_layers
+        if isinstance(layer, dict)
+    }
+    rooftop_buffer_ids = {
+        str(layer.get("buffer_layer_id", "") or "")
+        for layer in rooftop_review_layers
+        if isinstance(layer, dict)
+    }
+    rooftop_analysis_config = {
+        key: value
+        for key, value in rooftop_config.items()
+        if key not in {"visible_source_groups", "visible_buffer_groups"}
+    }
+    reviewed_rooftop_analysis_config = {
+        key: value
+        for key, value in (rooftop_review_config or {}).items()
+        if key not in {"visible_source_groups", "visible_buffer_groups"}
+    }
+    report.check(
+        not rooftop_review_exceptions
+        and not rooftop_review_errors
+        and rooftop_analysis_config == reviewed_rooftop_analysis_config
+        and "small_population"
+        in set((rooftop_review_config or {}).get("visible_source_groups", []))
+        and "small_population"
+        in set((rooftop_review_config or {}).get("visible_buffer_groups", []))
+        and "solar:population:population_points" in rooftop_source_ids
+        and "solar:population:buffer:100:population_points"
+        in rooftop_buffer_ids,
+        "trondelag: rooftop map review renders the manifest population source "
+        "and exact 100 m canonical buffer without changing analysis state.",
+        "trondelag: rooftop map review drifted from its manifest contract: "
+        f"exceptions={rooftop_review_exceptions}, "
+        f"errors={rooftop_review_errors}, source_ids={rooftop_source_ids}, "
+        f"buffer_ids={rooftop_buffer_ids}, "
+        f"analysis_equal={rooftop_analysis_config == reviewed_rooftop_analysis_config}.",
     )
 
 

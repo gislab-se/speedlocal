@@ -30,6 +30,10 @@ from speedlocal.contracts import (
     DefaultRequestContract,
 )
 from speedlocal.engine import _distance_rows, _rollup_distance_rows
+from speedlocal.distributed_generation import (
+    calculate_rooftop_solar_accounting,
+    load_rooftop_population_counts,
+)
 from speedlocal.geometry import build_direct_distance_artifact
 from speedlocal.validation import select_processing_adapter, validate_contract, validate_layer
 from speedlocal.sources import (
@@ -1843,6 +1847,201 @@ def main() -> int:
     assert solar_contract.groups == trondelag.groups
     assert tuple(solar_contract.layers) == tuple(trondelag.layers)
     assert solar_contract.analysis_domain == trondelag.analysis_domain
+    assert solar_contract.distributed_generation is not None
+    rooftop = solar_contract.distributed_generation.rooftop_solar
+    assert rooftop is not None
+    assert rooftop.status == "planning_proxy"
+    assert rooftop.technology_key == "solar"
+    assert rooftop.population_source.expected_total == 477_978
+    assert rooftop.population_source.expected_analysis_domain_totals == {
+        7: 477_755.0,
+        6: 477_755.0,
+        5: 477_755.0,
+    }
+    assert rooftop.map_review.canonical_group_id == "population"
+    assert rooftop.map_review.layer_ids == ("population_points",)
+    assert rooftop.map_review.buffer_value_source == "canonical_layer_default"
+    assert (
+        solar_contract.layers["population_points"]
+        .parameters["buffer_m"]
+        .default
+        == 100.0
+    )
+    assert rooftop.panel_area_m2_per_person.default == 10.0
+    assert math.isclose(
+        rooftop.annual_yield.expected_kwh_per_m2,
+        167.649167,
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    )
+    canonical_rooftop_domain_ids = resolve_analysis_domain_cell_ids(
+        solar_contract,
+        7,
+    )
+    rooftop_frames = {
+        resolution: load_rooftop_population_counts(
+            rooftop.population_source,
+            canonical_rooftop_domain_ids,
+            resolution,
+        )
+        for resolution in (7, 6, 5)
+    }
+    assert {resolution: len(frame) for resolution, frame in rooftop_frames.items()} == {
+        7: 3_630,
+        6: 1_082,
+        5: 272,
+    }
+    assert all(
+        math.isclose(
+            float(frame["population"].sum()),
+            477_755.0,
+            rel_tol=0.0,
+            abs_tol=1e-9,
+        )
+        for frame in rooftop_frames.values()
+    )
+    rooftop_r7 = rooftop_frames[7]
+    for resolution in (6, 5):
+        expected_rollup = rooftop_r7.copy()
+        expected_rollup["hex_id"] = expected_rollup["hex_id"].map(
+            lambda cell_id: h3.cell_to_parent(str(cell_id), resolution)
+        )
+        expected_rollup = (
+            expected_rollup.groupby("hex_id", as_index=False)["population"]
+            .sum()
+            .sort_values("hex_id")
+            .reset_index(drop=True)
+        )
+        assert rooftop_frames[resolution].equals(expected_rollup)
+
+    rooftop_zero = calculate_rooftop_solar_accounting(
+        rooftop,
+        477_978,
+        0.0,
+        31.052363,
+        28.571429,
+    )
+    rooftop_ten = calculate_rooftop_solar_accounting(
+        rooftop,
+        477_978,
+        10.0,
+        31.052363,
+        28.571429,
+    )
+    rooftop_twenty_five = calculate_rooftop_solar_accounting(
+        rooftop,
+        477_978,
+        25.0,
+        31.052363,
+        28.571429,
+    )
+    assert rooftop_zero.rooftop_contribution_twh == 0.0
+    assert math.isclose(
+        rooftop_zero.ground_area_need_km2,
+        rooftop_zero.gross_ground_area_need_km2,
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    )
+    assert math.isclose(
+        rooftop_ten.rooftop_contribution_twh,
+        0.8013261342005171,
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    )
+    assert math.isclose(
+        rooftop_ten.ground_area_need_km2,
+        864.3153519875724,
+        rel_tol=0.0,
+        abs_tol=1e-9,
+    )
+    assert (
+        rooftop_zero.ground_area_need_km2
+        > rooftop_ten.ground_area_need_km2
+        > rooftop_twenty_five.ground_area_need_km2
+    )
+    assert math.isclose(
+        rooftop_ten.gross_solar_target_twh,
+        rooftop_ten.rooftop_contribution_twh
+        + rooftop_ten.ground_solar_twh,
+        rel_tol=0.0,
+        abs_tol=1e-12,
+    )
+    rooftop_other_intensity = calculate_rooftop_solar_accounting(
+        rooftop,
+        477_978,
+        10.0,
+        31.052363,
+        5.0,
+    )
+    assert rooftop_other_intensity.rooftop_contribution_twh == (
+        rooftop_ten.rooftop_contribution_twh
+    )
+    rooftop_capped = calculate_rooftop_solar_accounting(
+        rooftop,
+        477_978,
+        25.0,
+        0.1,
+        28.571429,
+    )
+    assert rooftop_capped.rooftop_contribution_twh == 0.1
+    assert rooftop_capped.ground_solar_twh == 0.0
+    assert rooftop_capped.ground_area_need_km2 == 0.0
+    try:
+        load_rooftop_population_counts(
+            replace(rooftop.population_source, sha256="0" * 64),
+            canonical_rooftop_domain_ids,
+            7,
+        )
+    except ValueError as exc:
+        assert "checksum" in str(exc)
+    else:
+        raise AssertionError("Rooftop population checksum drift must fail")
+    try:
+        load_rooftop_population_counts(
+            replace(rooftop.population_source, path="../escape.csv"),
+            canonical_rooftop_domain_ids,
+            7,
+        )
+    except ValueError as exc:
+        assert "escapes provider root" in str(exc)
+    else:
+        raise AssertionError("Rooftop population path escape must fail")
+    negative_panel_parameter = replace(
+        rooftop.panel_area_m2_per_person,
+        default=-1.0,
+        minimum=-1.0,
+    )
+    negative_rooftop = replace(
+        rooftop,
+        panel_area_m2_per_person=negative_panel_parameter,
+    )
+    try:
+        validate_contract(
+            replace(
+                solar_contract,
+                distributed_generation=replace(
+                    solar_contract.distributed_generation,
+                    rooftop_solar=negative_rooftop,
+                ),
+            )
+        )
+    except ValueError as exc:
+        assert "non-negative range" in str(exc)
+    else:
+        raise AssertionError("Negative rooftop panel range must fail")
+    try:
+        calculate_rooftop_solar_accounting(
+            negative_rooftop,
+            477_978,
+            -1.0,
+            31.052363,
+            28.571429,
+        )
+    except ValueError as exc:
+        assert "non-negative" in str(exc)
+    else:
+        raise AssertionError("Negative rooftop panel input must fail")
+    checks += 36
     direct_solar_population_area = run_area_analysis(
         "trondelag",
         "solar",
