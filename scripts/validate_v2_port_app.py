@@ -2180,6 +2180,65 @@ def _check_continuous_mix_control(report: Report) -> None:
         f"{endpoint_results}.",
     )
 
+    try:
+        mix_slider = _by_key(app.slider, mix_slider_key)
+        mix_slider.set_value(80)
+        app.run(timeout=120)
+        protected_group = _by_key(
+            app.checkbox,
+            "solar_draft_protected_active",
+        )
+        protected_layer = _by_key(
+            app.checkbox,
+            "solar_draft_protected_layer__protected_areas",
+        )
+        solar_apply = _by_key(
+            app.button,
+            "FormSubmitter:solar_landscape_potential_controls_unified-Använd ändringar",
+        )
+        protected_group.set_value(True)
+        protected_layer.set_value(True)
+        solar_apply.click()
+        app.run(timeout=180)
+        apply_exceptions, apply_errors = _app_failures(app)
+        applied_mix = _session_state_value(app, mix_slider_key)
+        applied_text = _rendered_text(app)
+
+        solar_reset = _by_key(
+            app.button,
+            "solar_landscape_potential_reset_filters",
+        )
+        solar_reset.click()
+        app.run(timeout=180)
+        reset_exceptions, reset_errors = _app_failures(app)
+        reset_mix = _session_state_value(app, mix_slider_key)
+        reset_text = _rendered_text(app)
+    except Exception as exc:
+        report.check(
+            False,
+            "",
+            "trondelag: solar-filter mix-persistence probe could not run: "
+            f"{exc!r}.",
+        )
+        return
+
+    report.check(
+        not apply_exceptions
+        and not apply_errors
+        and int(applied_mix) == 80
+        and "Energimix: 20% vind / 80% sol." in applied_text
+        and not reset_exceptions
+        and not reset_errors
+        and int(reset_mix) == 80
+        and "Energimix: 20% vind / 80% sol." in reset_text,
+        "trondelag: applying or resetting solar filters preserves the selected "
+        "continuous wind/solar mix across the interrupted widget rerun.",
+        "trondelag: solar controls reset the continuous mix: "
+        f"applied_mix={applied_mix}, reset_mix={reset_mix}, "
+        f"apply_exceptions={apply_exceptions}, apply_errors={apply_errors}, "
+        f"reset_exceptions={reset_exceptions}, reset_errors={reset_errors}.",
+    )
+
 
 def _check_disabled_bornholm_route(report: Report) -> None:
     bornholm = load_region("bornholm")

@@ -3292,6 +3292,7 @@ def _render_energy_mix_card(panel: Any, region: dict[str, Any], energy_model_sta
                 max_value=100,
                 step=1,
                 key=mix_key,
+                persist_state="session",
                 format="%d%% sol",
                 help=(
                     "Balans mellan sol och vind i valt framtidsscenario. "
