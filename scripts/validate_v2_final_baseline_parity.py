@@ -2478,7 +2478,7 @@ def main() -> int:
         f"solar={reviewed_solar_scores}.",
     )
 
-    tooltip_hex_ids = list(r7_model_areas)[:3]
+    tooltip_hex_ids = list(r7_model_areas)[:5]
     tooltip_frame = pd.DataFrame(
         {
             "hex_id": tooltip_hex_ids,
@@ -2486,16 +2486,22 @@ def main() -> int:
                 "solar_only",
                 "wind_and_solar",
                 "wind_only",
+                "wind_only",
+                "solar_only",
             ],
             "establishment_label": [
                 "Endast sol",
                 "Vind och sol",
                 "Endast vind",
+                "Endast vind",
+                "Endast sol",
             ],
-            "wind_suitable": [False, True, True],
-            "solar_suitable": [True, True, False],
-            "wind_potential_score": [0.0, 17.4, 100.0],
-            "solar_potential_score": [100.0, 82.6, 0.0],
+            "wind_suitable": [False, True, True, True, False],
+            "solar_suitable": [True, True, False, False, True],
+            "wind_potential_score": [0.0, 17.4, 100.0, 0.0, 0.0],
+            "solar_potential_score": [100.0, 82.6, 0.0, 0.0, 0.0],
+            "wind_potential_area_km2": [0.0, 0.4, 1.0, 0.0004, 0.0],
+            "solar_potential_area_km2": [1.0, 0.6, 0.0, 0.0, 0.0004],
         }
     )
     tooltip_layer = app._combined_establishment_layer(
@@ -2512,12 +2518,18 @@ def main() -> int:
         feature.get("properties") or {}
         for feature in tooltip_features
     ]
+    tooltip_popups = [
+        str((feature.get("properties") or {}).get("popup") or "")
+        for feature in tooltip_features
+    ]
     report.check(
         tooltip_bodies
         == [
             "Vindpotential: 0 % · Solpotential: 100 %",
             "Vindpotential: 17 % · Solpotential: 83 %",
             "Vindpotential: 100 % · Solpotential: 0 %",
+            "Vindpotential: 0 % · Solpotential: 0 %",
+            "Vindpotential: 0 % · Solpotential: 0 %",
         ]
         and all(
             "wind_potential_score" not in properties
@@ -2529,6 +2541,28 @@ def main() -> int:
         "Combined-potential hover or payload drifted: "
         f"bodies={tooltip_bodies}, keys="
         f"{[sorted(properties) for properties in tooltip_properties]}.",
+    )
+    report.check(
+        len(tooltip_popups) == 5
+        and (
+            "<strong>Vind</strong><br>Potential efter filter: nej<br>"
+            "Vindpotential: 0.0%<br>Potentiell yta: 0.000 km²<br>"
+        )
+        in tooltip_popups[0]
+        and (
+            "<strong>Vind</strong><br>Potential efter filter: ja<br>"
+            "Vindpotential: &lt;0.1%<br>Potentiell yta: &lt;0.001 km²<br>"
+        )
+        in tooltip_popups[3]
+        and (
+            "<strong>Sol</strong><br>Potential efter filter: ja<br>"
+            "Solpotential: &lt;0.1%<br>Potentiell yta: &lt;0.001 km²<br>"
+        )
+        in tooltip_popups[4],
+        "Combined-potential detail popups distinguish exact zero from a "
+        "positive value below the displayed precision without rounding up.",
+        "Combined-potential small-positive popup formatting drifted: "
+        f"popups={tooltip_popups}.",
     )
     report.check(
         bool(tooltip_layer)

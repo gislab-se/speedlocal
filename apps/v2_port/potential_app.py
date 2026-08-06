@@ -12548,6 +12548,31 @@ def _scenario_allocation_marker_family_layers(
     )
 
 
+def _potential_popup_percent(
+    potential_score: float,
+    potential_area_km2: float,
+) -> str:
+    score = float(potential_score or 0.0)
+    area = float(potential_area_km2 or 0.0)
+    if not math.isfinite(score):
+        score = 0.0
+    if not math.isfinite(area):
+        area = 0.0
+    score = max(0.0, min(100.0, score))
+    if area > 0.0 and score < 0.1:
+        return "&lt;0.1%"
+    return f"{score:.1f}%"
+
+
+def _potential_popup_area(potential_area_km2: float) -> str:
+    area = float(potential_area_km2 or 0.0)
+    if not math.isfinite(area) or area <= 0.0:
+        return "0.000 km²"
+    if area < 0.001:
+        return "&lt;0.001 km²"
+    return f"{area:.3f} km²"
+
+
 def _combined_establishment_feature_collection(
     frame: pd.DataFrame,
     display_geometry_path: str,
@@ -12579,8 +12604,8 @@ def _combined_establishment_feature_collection(
         lines = [
             f"<strong>{label}</strong>",
             f"Potential efter filter: {'ja' if suitable else 'nej'}",
-            f"{score_label}: {potential_score:.1f}%",
-            f"Potentiell yta: {potential_area:.3f} km²",
+            f"{score_label}: {_potential_popup_percent(potential_score, potential_area)}",
+            f"Potentiell yta: {_potential_popup_area(potential_area)}",
         ]
         if allocated_area > 0:
             rank_label = f" · prioritet {rank}" if rank > 0 else ""
