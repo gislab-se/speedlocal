@@ -185,9 +185,10 @@ Current milestone status:
   checksum-pinned `onshore_land` surface for wind and large-scale land solar:
   41,826.930636 km² at R7/R6/R5 after 3,386.258008 km² of sea/outside-region
   area is removed. Inland water remains explicit in the current source policy.
-  Calculation, app, and 53-file runtime-package gates pass; clean localhost
-  review and the tracked checkpoint are pending before local promotion. This
-  correction does not change the current dates or thematic slice order.
+  Calculation, app, and 53-file runtime-package gates pass. The user approved
+  the clean coastal localhost review on 2026-08-07, so the correction is
+  locally promoted but unpublished. This correction does not change the
+  current dates or thematic slice order.
 
 ## Slice gates
 

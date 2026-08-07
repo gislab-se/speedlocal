@@ -1,7 +1,7 @@
 # Eligible establishment surface
 
-Status: active candidate, not locally promoted or published  
-Date: 2026-08-06
+Status: locally promoted on 2026-08-07, not published
+Date: 2026-08-06; localhost approval recorded 2026-08-07
 
 ## Decision
 

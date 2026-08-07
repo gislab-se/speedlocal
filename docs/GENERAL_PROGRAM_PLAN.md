@@ -181,7 +181,7 @@ The locally promoted Trøndelag roads slice keeps its frozen-V2 soft-distance
 cell proxy. The locally promoted population correction measures the declared R7
 domain directly and derives R6/R5 from R7, but the group result remains a
 soft-distance cell proxy. The combined result owns the literal technology-
-specific area percentage. Its current onshore eligible-surface candidate clips
+specific area percentage. Its locally promoted onshore eligible surface clips
 full coastal H3 cells to the reviewed regional land mask, excludes sea and area
 outside that mask, and explicitly retains inland water pending a separate
 hydrographic source review. Offshore technologies require their own future
@@ -354,15 +354,17 @@ Current slice status:
   remain wind-only while the integer hover rounds to 0%; the minimum
   suitability/display threshold is deliberately deferred. The wind-and-solar
   phase and continuous allocation acceptance are next;
-- the eligible-surface correction is an active candidate on 2026-08-06. Wind
+- the eligible-surface correction is locally promoted on 2026-08-07. Wind
   and large-scale land solar declare one `onshore_land` surface generated as
   the intersection of canonical R7 cells and the checksum-pinned Trøndelag
-  land/region mask. The candidate contains 41,826.930636 km² at R7/R6/R5 and
+  land/region mask. The surface contains 41,826.930636 km² at R7/R6/R5 and
   removes 3,386.258008 km² of sea/outside-region area from full coastal cells.
   Map geometry, hover, result table, and allocation now share that same
-  denominator. Calculation, app, and 53-file runtime-package gates pass; clean
-  localhost visual review and the subsequent tracked checkpoint are still
-  required before local promotion. See
+  denominator. Calculation, app, and 53-file runtime-package gates pass. The
+  user approved the clean localhost coastal review on 2026-08-07, so the
+  correction is locally promoted but remains unpublished. The next bounded
+  continuous-allocation replacement is characterized in
+  `docs/slices/wind_solar_allocation.md`. See also
   `docs/ELIGIBLE_SURFACE_CONTRACT.md`.
 
 ## Definition of done for a slice
