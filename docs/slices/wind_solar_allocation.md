@@ -114,3 +114,31 @@ V2 Final flow.
 Open the pure mix, demand, and allocation functions named above together with
 `speedlocal/contracts.py`. Define a technology-neutral typed result and
 synthetic endpoint/capacity oracle before changing the Streamlit call sites.
+
+## First engine checkpoint candidate — 2026-08-07
+
+`speedlocal/allocation.py` now defines immutable, pandas-free types for energy,
+demand, allocation candidates, selected cells, technology results, and parent
+rollups. Its pure operations:
+
+- rebalance any declared technology set while conserving its combined TWh;
+- convert TWh to area through explicit positive km²/TWh factors;
+- select positive-potential capacity before explicitly classified
+  outside-potential capacity;
+- cap every selection by declared eligible area;
+- preserve accepted co-use ordering by treating the other technology's
+  reservation as the final tie-break after supplied priority fields; and
+- sum selected fine children to parents without reranking.
+
+The existing V2 Final pandas functions now adapt mix and area-demand inputs to
+this engine. Their duplicate arithmetic is removed. Solar and wind candidate
+preparation and selection loops remain unchanged and are the next integration
+boundary; this checkpoint is therefore a validated candidate, not local
+promotion of the complete allocation slice.
+
+Candidate evidence: independent allocation validator 12/12; exact legacy
+adapter compatibility at 0/50/100; eligible-surface gate PASS; generic engine
+PASS; accepted baseline PASS; real Streamlit app PASS with no blockers,
+including all continuous-mix and cross-control reruns; delivery repository
+84/84. No standard-group metric, source/buffer preview, manifest, runtime
+transport, or eligible-surface geometry changed.

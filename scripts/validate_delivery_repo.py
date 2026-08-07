@@ -45,6 +45,7 @@ REQUIRED_PATHS = [
     "scripts/validate_bornholm_v2_diagnostics.py",
     "scripts/validate_generic_engine.py",
     "scripts/validate_eligible_surface.py",
+    "scripts/validate_allocation.py",
     "scripts/validate_vector_buffer_preview.py",
     "scripts/validate_frozen_v2_reference.py",
     "scripts/validate_runtime_bundle.py",

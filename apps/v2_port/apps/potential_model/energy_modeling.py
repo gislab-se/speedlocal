@@ -9,6 +9,12 @@ from typing import Any
 
 import pandas as pd
 
+from speedlocal.allocation import (
+    TechnologyEnergy,
+    calculate_technology_demands,
+    rebalance_energy_mix,
+)
+
 try:
     import duckdb
 except Exception:  # pragma: no cover - optional runtime dependency
@@ -412,16 +418,23 @@ def rebalance_wind_solar_mix(
     ):
         return adjusted
 
-    solar_share = max(0.0, min(100.0, float(solar_share_pct))) / 100.0
+    solar_share_pct = max(0.0, min(100.0, float(solar_share_pct)))
     wind_twh = energy_mix_twh(adjusted, "wind")
     solar_twh = energy_mix_twh(adjusted, "solar")
     total_twh = wind_twh + solar_twh
     if total_twh <= 0.0:
         return adjusted
 
+    mix_result = rebalance_energy_mix(
+        (
+            TechnologyEnergy("wind", wind_twh),
+            TechnologyEnergy("solar", solar_twh),
+        ),
+        {"wind": 100.0 - solar_share_pct, "solar": solar_share_pct},
+    )
     targets = {
-        "solar": total_twh * solar_share,
-        "wind": total_twh * (1.0 - solar_share),
+        technology: mix_result.energy_twh(technology)
+        for technology in ("wind", "solar")
     }
     for energy_key, target_twh in targets.items():
         mask = adjusted["energy_key"].astype(str) == energy_key
@@ -917,18 +930,33 @@ def calculate_area_demand(
     technology_to_times: dict[str, str],
 ) -> pd.DataFrame:
     factors = area_bundle.factors_by_scenario.get(str(area_scenario_id), {})
+    energies = tuple(
+        TechnologyEnergy(
+            str(energy_key),
+            float(
+                times_mix.loc[
+                    times_mix["energy_key"].astype(str) == str(energy_key),
+                    "value_twh",
+                ].sum()
+            ),
+        )
+        for energy_key in technology_to_times
+    )
+    factor_by_technology = {
+        str(energy_key): factors.get(str(times_tech))
+        for energy_key, times_tech in technology_to_times.items()
+    }
+    demands = calculate_technology_demands(energies, factor_by_technology)
     rows: list[dict[str, object]] = []
-    for energy_key, times_tech in technology_to_times.items():
-        twh = float(times_mix.loc[times_mix["energy_key"].astype(str) == str(energy_key), "value_twh"].sum())
-        factor = factors.get(str(times_tech))
-        km2_per_twh = float(factor) if factor is not None else math.nan
+    for demand in demands:
+        times_tech = technology_to_times[demand.technology]
         rows.append(
             {
-                "energy_key": energy_key,
+                "energy_key": demand.technology,
                 "times_tech": times_tech,
-                "twh": twh,
-                "km2_per_twh": km2_per_twh,
-                "area_need_km2": twh * km2_per_twh if math.isfinite(km2_per_twh) else math.nan,
+                "twh": demand.twh,
+                "km2_per_twh": demand.km2_per_twh,
+                "area_need_km2": demand.area_need_km2,
             }
         )
     return pd.DataFrame(rows)
