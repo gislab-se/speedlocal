@@ -31,6 +31,11 @@ if str(REPO_ROOT) not in sys.path:
 if str(APPS_DIR) not in sys.path:
     sys.path.insert(0, str(APPS_DIR))
 
+from speedlocal.allocation import (  # noqa: E402
+    AllocationCandidate,
+    TechnologyDemand,
+    allocate_technology_area,
+)
 from potential_model.geometry import geometry_for_hex, load_h3_display_geometries  # noqa: E402
 import potential_model.landscape as landscape_model  # noqa: E402
 from potential_model.manifests import (  # noqa: E402
@@ -7116,6 +7121,10 @@ def _solar_establishment_frame(
         return pd.Series(default, index=frame.index, dtype="float64")
 
     if not large_frame.empty:
+        if "display_area_km2" not in large_frame.columns:
+            raise ValueError(
+                "Solar allocation requires declared eligible display_area_km2"
+            )
         large = large_frame[_numeric_frame_column(large_frame, "solar_score").gt(0.0)].copy()
         for row in large.itertuples(index=False):
             potential_area_km2 = float(getattr(row, "potential_area_km2", 0.0) or 0.0)
@@ -7123,12 +7132,24 @@ def _solar_establishment_frame(
                 potential_area_km2 = float(getattr(row, "potential_area_m2", 0.0) or 0.0) / 1_000_000.0
             if potential_area_km2 <= 0:
                 continue
+            eligible_area_km2 = float(
+                getattr(row, "display_area_km2", 0.0) or 0.0
+            )
+            if not math.isfinite(eligible_area_km2) or eligible_area_km2 <= 0:
+                raise ValueError(
+                    "Solar allocation eligible cell areas must be positive "
+                    "and finite"
+                )
             rows.append(
                 {
                     "hex_id": str(row.hex_id),
                     "source_group": SOLAR_LARGE_SCALE_LABEL,
                     "potential_score": float(getattr(row, "solar_score", 0.0) or 0.0),
-                    "potential_area_km2": min(float(hex_area_km2), potential_area_km2),
+                    "potential_area_km2": min(
+                        eligible_area_km2,
+                        potential_area_km2,
+                    ),
+                    "allocation_cell_area_km2": eligible_area_km2,
                     "outside_et": False,
                     "expansion_ring": 0,
                     "sort_group": 0,
@@ -7165,62 +7186,91 @@ def _solar_establishment_frame(
         candidates["landscape_priority_score"] = 0.0
         candidates["technical_priority_score"] = candidates["allocation_priority_score"]
         candidates["allocation_priority_reason"] = "Prioriteras efter solpotential."
-    if "allocation_priority_score" in candidates.columns:
-        candidates = candidates.sort_values(
-            ["allocation_priority_score", "potential_score", "potential_area_km2", "sort_group", "hex_id"],
-            ascending=[False, False, False, True, True],
-        )
-    else:
-        candidates = candidates.sort_values(["sort_group", "potential_score", "potential_area_km2", "hex_id"], ascending=[True, False, False, True])
+    allocation = allocate_technology_area(
+        TechnologyDemand(
+            technology="solar",
+            twh=float(solar_twh_need),
+            km2_per_twh=float(solar_km2_per_twh),
+            area_need_km2=float(solar_area_need_km2),
+        ),
+        tuple(
+            AllocationCandidate(
+                cell_id=str(row.hex_id),
+                eligible_area_km2=float(row.allocation_cell_area_km2),
+                potential_area_km2=float(row.potential_area_km2),
+                priority=(
+                    float(row.allocation_priority_score),
+                    float(row.potential_score),
+                    float(row.potential_area_km2),
+                    -float(row.sort_group),
+                ),
+            )
+            for row in candidates.itertuples(index=False)
+        ),
+    )
+    source_rows = {
+        str(row.hex_id): row._asdict()
+        for row in candidates.itertuples(index=False)
+    }
     remaining = float(solar_area_need_km2 or 0.0)
     selected_rows: list[dict[str, Any]] = []
-    for rank, row in enumerate(candidates.itertuples(index=False), start=1):
-        available_area = max(0.0, float(row.potential_area_km2 or 0.0))
-        allocated_area = min(available_area, remaining)
-        if allocated_area <= 0:
-            continue
-        if solar_km2_per_twh > 0 and math.isfinite(float(solar_km2_per_twh)):
-            allocated_twh = allocated_area / float(solar_km2_per_twh)
-        elif solar_area_need_km2 > 0:
-            allocated_twh = float(solar_twh_need or 0.0) * allocated_area / float(solar_area_need_km2)
-        else:
-            allocated_twh = 0.0
-        remaining = max(0.0, remaining - allocated_area)
+    for cell in allocation.cells:
+        record = dict(source_rows[cell.cell_id])
+        remaining = max(0.0, remaining - cell.allocated_area_km2)
         selected_rows.append(
             {
-                "hex_id": str(row.hex_id),
-                "selected_rank": int(rank),
-                "source_group": str(row.source_group),
-                "potential_score": float(row.potential_score or 0.0),
-                "potential_area_km2": available_area,
-                "allocated_area_km2": allocated_area,
-                "allocated_twh": allocated_twh,
-                "allocated_gwh": allocated_twh * 1000.0,
-                "allocated_hex_share_pct": (allocated_area / max(float(hex_area_km2), 1e-9)) * 100.0,
-                "remaining_area_after_km2": remaining,
-                "outside_et": bool(getattr(row, "outside_et", False)),
-                "expansion_ring": int(getattr(row, "expansion_ring", 0) or 0),
-                "allocation_phase": "Inom LP",
-                "landscape_priority_score": float(getattr(row, "landscape_priority_score", 0.0) or 0.0),
-                "allocation_priority_score": float(getattr(row, "allocation_priority_score", 0.0) or 0.0),
-                "allocation_priority_reason": str(getattr(row, "allocation_priority_reason", "") or ""),
-                "social_acceptance_value": float(getattr(row, "social_acceptance_value", 1.0) or 1.0),
-                "social_acceptance_allocation_priority_pct": float(
-                    getattr(row, "social_acceptance_allocation_priority_pct", 0.0) or 0.0
+                "hex_id": cell.cell_id,
+                "selected_rank": cell.selected_rank,
+                "source_group": str(record.get("source_group") or ""),
+                "potential_score": float(
+                    record.get("potential_score", 0.0) or 0.0
                 ),
-                "social_acceptance_priority_score": float(getattr(row, "social_acceptance_priority_score", 0.0) or 0.0),
+                "potential_area_km2": cell.potential_area_km2,
+                "allocated_area_km2": cell.allocated_area_km2,
+                "allocated_twh": cell.allocated_twh,
+                "allocated_gwh": cell.allocated_twh * 1000.0,
+                "allocated_hex_share_pct": (
+                    cell.allocated_area_km2
+                    / cell.eligible_area_km2
+                    * 100.0
+                ),
+                "remaining_area_after_km2": remaining,
+                "outside_et": bool(record.get("outside_et", False)),
+                "expansion_ring": int(record.get("expansion_ring", 0) or 0),
+                "allocation_phase": "Inom LP",
+                "landscape_priority_score": float(
+                    record.get("landscape_priority_score", 0.0) or 0.0
+                ),
+                "allocation_priority_score": float(
+                    record.get("allocation_priority_score", 0.0) or 0.0
+                ),
+                "allocation_priority_reason": str(
+                    record.get("allocation_priority_reason", "") or ""
+                ),
+                "social_acceptance_value": float(
+                    record.get("social_acceptance_value", 1.0) or 1.0
+                ),
+                "social_acceptance_allocation_priority_pct": float(
+                    record.get(
+                        "social_acceptance_allocation_priority_pct",
+                        0.0,
+                    )
+                    or 0.0
+                ),
+                "social_acceptance_priority_score": float(
+                    record.get("social_acceptance_priority_score", 0.0)
+                    or 0.0
+                ),
             }
         )
-        if remaining <= 1e-9:
-            break
     selected = pd.DataFrame(selected_rows)
     stats = {
         "selected_area_km2": float(selected["allocated_area_km2"].sum()) if not selected.empty else 0.0,
-        "unmet_area_km2": remaining,
+        "unmet_area_km2": allocation.unmet_area_km2,
         "selected_hex_count": int(len(selected)),
         "selected_twh": float(selected["allocated_twh"].sum()) if not selected.empty else 0.0,
         "available_candidate_hex": int(len(candidates)),
-        "available_candidate_area_km2": float(candidates["potential_area_km2"].sum()),
+        "available_candidate_area_km2": allocation.available_potential_area_km2,
     }
     return selected, stats
 

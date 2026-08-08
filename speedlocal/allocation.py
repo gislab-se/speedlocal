@@ -329,7 +329,7 @@ def allocate_technology_area(
             else candidate.potential_area_km2
         )
         allocated_area = min(capacity, remaining)
-        if allocated_area <= FLOAT_TOLERANCE:
+        if allocated_area <= 0.0:
             continue
         selected.append(
             AllocatedCell(
@@ -346,8 +346,7 @@ def allocate_technology_area(
             )
         )
         remaining = max(0.0, remaining - allocated_area)
-        if remaining <= FLOAT_TOLERANCE:
-            remaining = 0.0
+        if remaining <= 0.0:
             break
 
     selected_area = math.fsum(item.allocated_area_km2 for item in selected)

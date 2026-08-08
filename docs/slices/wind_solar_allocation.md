@@ -1,6 +1,6 @@
 # Continuous wind/solar allocation slice
 
-Status: characterized; implementation is the next planned slice
+Status: inside-potential adapter candidate ready for localhost review
 Behavior reference: accepted Trøndelag V2 Final mix and allocation behavior,
 plus the locally promoted exact-area and `onshore_land` contracts
 Integration target: the existing V2 Final energy-mix, result-table, and map
@@ -142,3 +142,29 @@ PASS; accepted baseline PASS; real Streamlit app PASS with no blockers,
 including all continuous-mix and cross-control reruns; delivery repository
 84/84. No standard-group metric, source/buffer preview, manifest, runtime
 transport, or eligible-surface geometry changed.
+
+## Inside-potential adapter candidate — 2026-08-07
+
+`allocate_wind_area_from_core_hexes` and `_solar_establishment_frame` now adapt
+their accepted candidate frames to `speedlocal.allocation`. The duplicated
+inside-potential selection loops are removed. Technology-specific ranking and
+presentation remain in the existing V2 Final adapters; the generic engine
+receives only typed capacity, priority, overlap, and demand values.
+
+Wind preserves its accepted ordering and last-resort co-use behavior. Ground
+solar now caps and reports selection against each R7 cell's declared eligible
+land area. The latter is an intentional correction from the obsolete global
+theoretical-H3 percentage denominator for partial coastal and regional-boundary
+cells. Both outside-potential shortage expansion functions remain unchanged.
+
+Candidate evidence: allocation engine 13/13; focused wind/solar adapters 7/7;
+eligible-surface gate PASS; accepted baseline 143/143; generic engine
+6691/6691; V2 port guardrails 17/17; delivery repository 85/85; and the real
+Streamlit app 85/85 with no blockers, including its 0/100, 50/50, and 100/0
+continuous-mix scenarios. The deterministic 53-file release archive matches
+the tracked checksum and passes the runtime/bootstrap gate 25/25, including
+the real root entrypoint. Python compilation and `git diff --check` pass. A
+clean localhost process now uses the single verified package root; visual
+review is the remaining gate for this candidate. Complete allocation-slice
+promotion still requires replacing and reviewing the two outside-potential
+shortage paths and downstream generic rollup consumption.

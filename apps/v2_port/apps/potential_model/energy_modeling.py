@@ -10,7 +10,10 @@ from typing import Any
 import pandas as pd
 
 from speedlocal.allocation import (
+    AllocationCandidate,
+    TechnologyDemand,
     TechnologyEnergy,
+    allocate_technology_area,
     calculate_technology_demands,
     rebalance_energy_mix,
 )
@@ -1093,41 +1096,54 @@ def allocate_wind_area_from_core_hexes(
             "primary_candidate_hex": 0,
             "extension_candidate_hex": 0,
         }
-    candidates = candidates.sort_values(
-        [
-            "allocation_priority_score",
-            "core_score",
-            "potential_area_share_pct",
-            "priority_group",
-            "zone_size",
-            "potential_area_km2",
-            "reserved_by_other_technology",
-            "hex_id",
-        ],
-        ascending=[False, False, False, True, False, False, True, True],
-    ).reset_index(drop=True)
-
+    allocation = allocate_technology_area(
+        TechnologyDemand(
+            technology="wind",
+            twh=float(area_need_km2),
+            km2_per_twh=1.0,
+            area_need_km2=float(area_need_km2),
+        ),
+        tuple(
+            AllocationCandidate(
+                cell_id=str(row.hex_id),
+                eligible_area_km2=float(row.allocation_cell_area_km2),
+                potential_area_km2=float(row.potential_area_km2),
+                priority=(
+                    float(row.allocation_priority_score),
+                    float(row.core_score),
+                    float(row.potential_area_share_pct),
+                    -float(row.priority_group),
+                    float(row.zone_size),
+                    float(row.potential_area_km2),
+                ),
+                reserved_by_other_technology=bool(
+                    row.reserved_by_other_technology
+                ),
+            )
+            for row in candidates.itertuples(index=False)
+        ),
+    )
+    source_rows = {
+        str(row.hex_id): row._asdict()
+        for row in candidates.itertuples(index=False)
+    }
     remaining_area = float(area_need_km2)
     selected_rows: list[dict[str, object]] = []
-    for rank, row in enumerate(candidates.itertuples(index=False), start=1):
-        potential_area = float(getattr(row, "potential_area_km2", 0.0) or 0.0)
-        allocated_area = min(potential_area, max(0.0, remaining_area))
-        if allocated_area <= 0:
-            break
-        record = row._asdict()
-        record["selected_rank"] = rank
-        record["reserved_by_other_technology"] = bool(getattr(row, "reserved_by_other_technology", False))
-        record["allocated_area_km2"] = allocated_area
+    for cell in allocation.cells:
+        record = dict(source_rows[cell.cell_id])
+        record["selected_rank"] = cell.selected_rank
+        record["reserved_by_other_technology"] = (
+            cell.reserved_by_other_technology
+        )
+        record["allocated_area_km2"] = cell.allocated_area_km2
         record["allocated_hex_share_pct"] = (
-            allocated_area
-            / float(getattr(row, "allocation_cell_area_km2"))
+            cell.allocated_area_km2
+            / cell.eligible_area_km2
             * 100.0
         )
-        remaining_area = max(0.0, remaining_area - allocated_area)
+        remaining_area = max(0.0, remaining_area - cell.allocated_area_km2)
         record["remaining_area_after_km2"] = remaining_area
         selected_rows.append(record)
-        if remaining_area <= 1e-9:
-            break
 
     selected = pd.DataFrame(selected_rows) if selected_rows else empty.copy()
     selected_area = float(selected["allocated_area_km2"].sum()) if not selected.empty else 0.0
@@ -1148,12 +1164,12 @@ def allocate_wind_area_from_core_hexes(
         "selected_area_km2": selected_area,
         "selected_potential_area_km2": selected_potential_area,
         "selected_hex_footprint_km2": selected_hex_footprint,
-        "unmet_area_km2": max(0.0, float(area_need_km2) - selected_area),
+        "unmet_area_km2": allocation.unmet_area_km2,
         "needed_hex": needed_hex,
         "selected_hex_count": int(len(selected)),
         "mean_selected_share_pct": float(selected["potential_area_share_pct"].mean()) if not selected.empty else 0.0,
         "available_candidate_hex": int(len(candidates)),
-        "available_candidate_area_km2": float(candidates["potential_area_km2"].sum()),
+        "available_candidate_area_km2": allocation.available_potential_area_km2,
         "primary_candidate_hex": int(candidates["allocation_phase"].eq("Karn-LP").sum()),
         "extension_candidate_hex": int(candidates["allocation_phase"].eq("Kompletterande LP").sum()),
         "selected_primary_hex": int(phase_counts.get("Karn-LP", 0)),

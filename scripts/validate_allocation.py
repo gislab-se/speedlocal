@@ -238,6 +238,18 @@ def main() -> int:
         f"Zero demand produced allocation state: {zero}.",
     )
 
+    tiny = allocate_technology_area(
+        TechnologyDemand("wind", 1e-13, 10.0, 1e-12),
+        (AllocationCandidate("tiny", 1e-12, 1e-12),),
+    )
+    report.check(
+        len(tiny.cells) == 1
+        and tiny.cells[0].allocated_area_km2 == 1e-12
+        and tiny.unmet_area_km2 == 0.0,
+        "A positive sub-nanometre-scale area is not rounded to zero.",
+        f"Tiny positive allocation was discarded: {tiny}.",
+    )
+
     rollup = rollup_allocation(
         shortage,
         {"inside": "parent", "outside": "parent"},
